@@ -20,9 +20,28 @@ public sealed class PaymentsService(
         var order = await db.Orders.Include(x => x.Payments).SingleOrDefaultAsync(x => x.Id == dto.OrderId, cancellationToken)
             ?? throw new ApiException("Order not found.", StatusCodes.Status404NotFound);
 
+        if (dto.Amount <= 0)
+        {
+            throw new ApiException("Payment amount must be greater than zero.");
+        }
+
+        var totalPaidBeforePayment = order.Payments.Sum(x => x.Amount);
+        var remainingBalance = order.TotalPrice - totalPaidBeforePayment;
+        if (remainingBalance <= 0)
+        {
+            order.PaymentStatus = PaymentStatus.Paid;
+            await db.SaveChangesAsync(cancellationToken);
+            throw new ApiException("Order is already fully paid.", StatusCodes.Status409Conflict);
+        }
+
+        if (dto.Amount > remainingBalance)
+        {
+            throw new ApiException($"Payment amount exceeds the remaining balance of {remainingBalance:0.00}.", StatusCodes.Status409Conflict);
+        }
+
         var payment = new Payment { OrderId = dto.OrderId, Amount = dto.Amount, Method = dto.Method, PaidAt = DateTime.UtcNow };
         order.Payments.Add(payment);
-        var totalPaid = order.Payments.Sum(x => x.Amount);
+        var totalPaid = totalPaidBeforePayment + dto.Amount;
         order.PaymentStatus = totalPaid >= order.TotalPrice ? PaymentStatus.Paid : PaymentStatus.Unpaid;
         await db.SaveChangesAsync(cancellationToken);
 

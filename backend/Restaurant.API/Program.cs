@@ -1,4 +1,5 @@
 using Restaurant.API.Extensions;
+using Restaurant.API.Helpers;
 using Restaurant.API.Hubs;
 using Restaurant.API.Middleware;
 using Restaurant.API.Seed;
@@ -17,6 +18,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseMiddleware<GlobalExceptionMiddleware>();
 app.UseHttpsRedirection();
+app.UseCors(AppCorsPolicies.DefaultCors);
 app.UseAuthentication();
 app.UseAuthorization();
 

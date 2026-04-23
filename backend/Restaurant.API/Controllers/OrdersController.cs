@@ -23,11 +23,11 @@ public sealed class OrdersController(IOrdersService ordersService) : ControllerB
         [FromQuery] PaymentStatus? paymentStatus,
         [FromQuery] OrderType? orderType,
         CancellationToken cancellationToken) =>
-        Ok(await ordersService.GetAllAsync(status, date, paymentStatus, orderType, cancellationToken));
+        Ok(await ordersService.GetAllAsync(status, date, paymentStatus, orderType, IsWaiterOnly(), cancellationToken));
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<OrderResponseDto>> GetById(int id, CancellationToken cancellationToken) =>
-        Ok(await ordersService.GetByIdAsync(id, cancellationToken));
+        Ok(await ordersService.GetByIdAsync(id, IsWaiterOnly(), cancellationToken));
 
     [HttpPut("{id:int}")]
     public async Task<ActionResult<OrderResponseDto>> Update(int id, UpdateOrderDto dto, CancellationToken cancellationToken) =>
@@ -52,4 +52,7 @@ public sealed class OrdersController(IOrdersService ordersService) : ControllerB
     [HttpPut("{id:int}/tables")]
     public async Task<ActionResult<OrderResponseDto>> UpdateTables(int id, UpdateOrderTablesDto dto, CancellationToken cancellationToken) =>
         Ok(await ordersService.UpdateTablesAsync(id, dto, cancellationToken));
+
+    private bool IsWaiterOnly() =>
+        User.IsInRole(AppRoles.Waiter) && !User.IsInRole(AppRoles.Admin);
 }

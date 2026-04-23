@@ -32,7 +32,10 @@ public sealed class ReservationsService(
 
         db.Reservations.Add(reservation);
         await db.SaveChangesAsync(cancellationToken);
-        return reservation.ToReservationResponse();
+        logger.LogInformation("Reservation {ReservationId} created for {ReservationDate} at {ReservationTime}", reservation.Id, reservation.ReservationDate, reservation.ReservationTime);
+        var response = reservation.ToReservationResponse();
+        await hub.Clients.All.SendAsync("reservationCreated", response, cancellationToken);
+        return response;
     }
 
     public async Task<IReadOnlyCollection<ReservationResponseDto>> GetAllAsync(DateOnly? date, ReservationStatus? status, string? phoneNumber, CancellationToken cancellationToken)
@@ -84,7 +87,12 @@ public sealed class ReservationsService(
     {
         var reservation = await db.Reservations.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new ApiException("Reservation not found.", StatusCodes.Status404NotFound);
-        db.Reservations.Remove(reservation);
+        reservation.Status = ReservationStatus.Cancelled;
+        reservation.RestaurantNotes = string.IsNullOrWhiteSpace(reservation.RestaurantNotes)
+            ? "Reservation cancelled by restaurant."
+            : reservation.RestaurantNotes;
         await db.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Reservation {ReservationId} cancelled", reservation.Id);
+        await hub.Clients.All.SendAsync("reservationStatusUpdated", reservation.ToReservationResponse(), cancellationToken);
     }
 }

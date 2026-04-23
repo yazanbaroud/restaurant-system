@@ -1,8 +1,9 @@
 import { Component, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { finalize } from 'rxjs';
 
-import { UserRole } from '../../core/models';
+import { User, UserRole } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
 import { roleLabels } from '../../shared/ui-labels';
 
@@ -15,62 +16,97 @@ import { roleLabels } from '../../shared/ui-labels';
       <div class="auth-card">
         <p class="eyebrow">כניסה למערכת</p>
         <h1>ברוכים הבאים למסעדת הכבש</h1>
-        <p class="muted">אב טיפוס בלבד: בחירת משתמש משנה role במצב mock.</p>
+        <p class="muted">
+          התחברות מתבצעת מול שרת המסעדה ושומרת JWT בדפדפן לצורך גישה לממשקי צוות.
+        </p>
+
+        @if (requestedRoleLabel) {
+          <div class="note">נדרשת התחברות עם הרשאת {{ requestedRoleLabel }}.</div>
+        }
+        @if (forbidden) {
+          <div class="validation-note">למשתמש המחובר אין הרשאה למסך המבוקש.</div>
+        }
+        @if (errorMessage) {
+          <div class="validation-note">{{ errorMessage }}</div>
+        }
+
         <form [formGroup]="form" (ngSubmit)="submit()" class="form-grid">
           <label class="full">
             אימייל
-            <input type="email" formControlName="email" />
+            <input type="email" formControlName="email" autocomplete="email" />
           </label>
-          <button class="btn btn-gold full" type="submit">כניסה</button>
+          <label class="full">
+            סיסמה
+            <input type="password" formControlName="password" autocomplete="current-password" />
+          </label>
+          <button class="btn btn-gold full" type="submit" [disabled]="form.invalid || isSubmitting">
+            {{ isSubmitting ? 'מתחברים...' : 'כניסה' }}
+          </button>
         </form>
-        <div class="demo-users">
-          @for (user of auth.users; track user.id) {
-            <button type="button" class="btn btn-ghost" (click)="loginAs(user.email)">
-              {{ roleLabels[user.role] }} · {{ user.firstName }}
-            </button>
-          }
-        </div>
+
         <a class="text-link" routerLink="/register">פתיחת חשבון לקוח</a>
       </div>
     </section>
   `
 })
 export class LoginPageComponent {
-  readonly auth = inject(AuthService);
-  readonly roleLabels = roleLabels;
+  private readonly auth = inject(AuthService);
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
 
+  readonly roleLabels = roleLabels;
   readonly form = this.fb.nonNullable.group({
-    email: ['customer@hakeves.test', [Validators.required, Validators.email]]
+    email: ['', [Validators.required, Validators.email]],
+    password: ['', Validators.required]
   });
+
+  isSubmitting = false;
+  errorMessage = '';
+
+  get requestedRoleLabel(): string {
+    const role = Number(this.route.snapshot.queryParamMap.get('role')) as UserRole;
+    return roleLabels[role] ?? '';
+  }
+
+  get forbidden(): boolean {
+    return this.route.snapshot.queryParamMap.get('forbidden') === 'true';
+  }
 
   submit(): void {
     if (this.form.invalid) {
+      this.form.markAllAsTouched();
       return;
     }
 
-    this.loginAs(this.form.controls.email.value);
+    this.isSubmitting = true;
+    this.errorMessage = '';
+
+    this.auth.login(this.form.getRawValue()).pipe(
+      finalize(() => {
+        this.isSubmitting = false;
+      })
+    ).subscribe({
+      next: (user) => this.navigateAfterLogin(user),
+      error: () => {
+        this.errorMessage = 'ההתחברות נכשלה. בדקו אימייל וסיסמה ונסו שוב.';
+      }
+    });
   }
 
-  loginAs(email: string): void {
-    const requestedRole = Number(this.route.snapshot.queryParamMap.get('role')) as UserRole;
-
-    if (requestedRole === UserRole.Admin || requestedRole === UserRole.Waiter) {
-      this.auth.switchRole(requestedRole);
-    } else {
-      this.auth.loginAs(email);
+  private navigateAfterLogin(user: User): void {
+    const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
+    if (returnUrl) {
+      void this.router.navigateByUrl(returnUrl);
+      return;
     }
 
-    const role = this.auth.currentUser.role;
-
-    if (role === UserRole.Admin) {
+    if (user.role === UserRole.Admin) {
       void this.router.navigateByUrl('/admin');
       return;
     }
 
-    if (role === UserRole.Waiter) {
+    if (user.role === UserRole.Waiter) {
       void this.router.navigateByUrl('/waiter');
       return;
     }

@@ -194,7 +194,7 @@ export class CreateOrderPageComponent {
     }
 
     const order = this.data.createOrder({
-      userId: this.auth.currentUser.id,
+      userId: this.auth.currentUser?.id ?? null,
       customerFirstName: this.form.controls.customerFirstName.value,
       customerLastName: this.form.controls.customerLastName.value,
       notes: this.form.controls.notes.value,

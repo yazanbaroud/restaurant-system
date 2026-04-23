@@ -47,7 +47,8 @@ export class PublicShellComponent {
   readonly UserRole = UserRole;
 
   goToStaff(role: UserRole, path: string): void {
-    this.auth.switchRole(role);
-    void this.router.navigateByUrl(path);
+    void this.router.navigate(['/login'], {
+      queryParams: { role, returnUrl: path }
+    });
   }
 }

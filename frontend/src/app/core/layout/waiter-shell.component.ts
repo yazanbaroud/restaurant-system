@@ -2,7 +2,6 @@ import { AsyncPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
-import { UserRole } from '../models';
 import { AuthService } from '../services/auth.service';
 
 @Component({
@@ -24,7 +23,7 @@ import { AuthService } from '../services/auth.service';
           <a routerLink="/waiter/create-order" routerLinkActive="active">הזמנה חדשה</a>
           <a routerLink="/waiter/reservations" routerLinkActive="active">הזמנות מקום</a>
         </nav>
-        <button type="button" class="btn btn-ghost" routerLink="/admin" (click)="auth.switchRole(UserRole.Admin)">
+        <button type="button" class="btn btn-ghost" routerLink="/admin">
           תצוגת מנהל
         </button>
       </aside>
@@ -45,5 +44,4 @@ import { AuthService } from '../services/auth.service';
 })
 export class WaiterShellComponent {
   readonly auth = inject(AuthService);
-  readonly UserRole = UserRole;
 }

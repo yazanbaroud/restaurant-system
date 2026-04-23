@@ -13,13 +13,16 @@ public sealed class MenuController(IMenuService menuService) : ControllerBase
 {
     [HttpGet]
     [AllowAnonymous]
-    public async Task<ActionResult<IReadOnlyCollection<MenuItemResponseDto>>> GetAll([FromQuery] MenuCategory? category, [FromQuery] bool? isAvailable, CancellationToken cancellationToken) =>
-        Ok(await menuService.GetAllAsync(category, isAvailable, cancellationToken));
+    public async Task<ActionResult<IReadOnlyCollection<MenuItemResponseDto>>> GetAll([FromQuery] MenuCategory? category, [FromQuery] bool? isAvailable, CancellationToken cancellationToken)
+    {
+        var effectiveAvailability = CanReadUnavailableMenuItems() ? isAvailable : true;
+        return Ok(await menuService.GetAllAsync(category, effectiveAvailability, cancellationToken));
+    }
 
     [HttpGet("{id:int}")]
     [AllowAnonymous]
     public async Task<ActionResult<MenuItemResponseDto>> GetById(int id, CancellationToken cancellationToken) =>
-        Ok(await menuService.GetByIdAsync(id, cancellationToken));
+        Ok(await menuService.GetByIdAsync(id, CanReadUnavailableMenuItems(), cancellationToken));
 
     [HttpPost]
     [Authorize(Roles = AppRoles.Admin)]
@@ -54,4 +57,7 @@ public sealed class MenuController(IMenuService menuService) : ControllerBase
         await menuService.DeleteImageAsync(id, imageId, cancellationToken);
         return NoContent();
     }
+
+    private bool CanReadUnavailableMenuItems() =>
+        User.Identity?.IsAuthenticated == true && User.IsInRole(AppRoles.Admin);
 }

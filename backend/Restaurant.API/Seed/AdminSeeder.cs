@@ -26,7 +26,8 @@ public static class AdminSeeder
         var options = scope.ServiceProvider.GetRequiredService<IOptions<SeedAdminOptions>>().Value;
         var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AdminSeeder");
 
-        if ((await db.Database.GetPendingMigrationsAsync()).Any())
+        var migrations = db.Database.GetMigrations();
+        if (migrations.Any())
         {
             await db.Database.MigrateAsync();
         }

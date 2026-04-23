@@ -29,8 +29,6 @@ public sealed class PaymentsService(
         var remainingBalance = order.TotalPrice - totalPaidBeforePayment;
         if (remainingBalance <= 0)
         {
-            order.PaymentStatus = PaymentStatus.Paid;
-            await db.SaveChangesAsync(cancellationToken);
             throw new ApiException("Order is already fully paid.", StatusCodes.Status409Conflict);
         }
 

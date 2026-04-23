@@ -8,7 +8,7 @@ using Restaurant.API.Models;
 
 namespace Restaurant.API.Services;
 
-public sealed class MenuService(AppDbContext db) : IMenuService
+public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : IMenuService
 {
     public async Task<IReadOnlyCollection<MenuItemResponseDto>> GetAllAsync(MenuCategory? category, bool? isAvailable, CancellationToken cancellationToken)
     {
@@ -19,18 +19,30 @@ public sealed class MenuService(AppDbContext db) : IMenuService
         return items.Select(x => x.ToMenuItemResponse()).ToArray();
     }
 
-    public async Task<MenuItemResponseDto> GetByIdAsync(int id, CancellationToken cancellationToken)
+    public async Task<MenuItemResponseDto> GetByIdAsync(int id, bool includeUnavailable, CancellationToken cancellationToken)
     {
-        var item = await db.MenuItems.AsNoTracking().Include(x => x.Images).SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
+        var query = db.MenuItems.AsNoTracking().Include(x => x.Images).AsQueryable();
+        if (!includeUnavailable)
+        {
+            query = query.Where(x => x.IsAvailable);
+        }
+
+        var item = await query.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new ApiException("Menu item not found.", StatusCodes.Status404NotFound);
         return item.ToMenuItemResponse();
     }
 
     public async Task<MenuItemResponseDto> CreateAsync(CreateMenuItemDto dto, CancellationToken cancellationToken)
     {
+        var name = dto.Name.Trim();
+        if (await db.MenuItems.AnyAsync(x => x.Name == name, cancellationToken))
+        {
+            throw new ApiException("A menu item with this name already exists.", StatusCodes.Status409Conflict);
+        }
+
         var item = new MenuItem
         {
-            Name = dto.Name.Trim(),
+            Name = name,
             Description = dto.Description.Trim(),
             Price = dto.Price,
             Category = dto.Category,
@@ -47,7 +59,13 @@ public sealed class MenuService(AppDbContext db) : IMenuService
         var item = await db.MenuItems.Include(x => x.Images).SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new ApiException("Menu item not found.", StatusCodes.Status404NotFound);
 
-        item.Name = dto.Name.Trim();
+        var name = dto.Name.Trim();
+        if (await db.MenuItems.AnyAsync(x => x.Id != id && x.Name == name, cancellationToken))
+        {
+            throw new ApiException("A menu item with this name already exists.", StatusCodes.Status409Conflict);
+        }
+
+        item.Name = name;
         item.Description = dto.Description.Trim();
         item.Price = dto.Price;
         item.Category = dto.Category;
@@ -62,6 +80,7 @@ public sealed class MenuService(AppDbContext db) : IMenuService
             ?? throw new ApiException("Menu item not found.", StatusCodes.Status404NotFound);
         item.IsAvailable = false;
         await db.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Menu item {MenuItemId} marked unavailable", item.Id);
     }
 
     public async Task<MenuItemImageResponseDto> AddImageAsync(int id, AddMenuItemImageDto dto, CancellationToken cancellationToken)

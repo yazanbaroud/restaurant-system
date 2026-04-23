@@ -9,7 +9,6 @@ public sealed class CreateTableDtoValidator : AbstractValidator<CreateTableDto>
     {
         RuleFor(x => x.Name).NotEmpty().MaximumLength(50);
         RuleFor(x => x.Capacity).GreaterThan(0);
-        RuleFor(x => x.Status).IsInEnum();
     }
 }
 

@@ -8,10 +8,10 @@ namespace Restaurant.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize(Roles = AppRoles.Admin)]
 public sealed class DashboardController(IDashboardService dashboardService) : ControllerBase
 {
     [HttpGet("admin")]
-    [Authorize(Roles = AppRoles.Admin)]
     public async Task<ActionResult<AdminDashboardDto>> Admin(CancellationToken cancellationToken) =>
         Ok(await dashboardService.GetAdminDashboardAsync(cancellationToken));
 }

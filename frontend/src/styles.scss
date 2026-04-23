@@ -1023,6 +1023,89 @@ textarea:focus {
   font-size: 1.2rem;
 }
 
+.payment-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.payment-metric {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 248, 237, 0.84);
+  box-shadow: 0 10px 26px rgba(31, 21, 17, 0.08);
+}
+
+.payment-metric span,
+.previous-payment-row span,
+.previous-payment-row time {
+  display: block;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.payment-metric strong {
+  display: block;
+  margin-top: 6px;
+  color: var(--brown-950);
+  font-size: 1.45rem;
+}
+
+.payment-metric--due {
+  border-color: rgba(199, 154, 59, 0.42);
+  background: rgba(199, 154, 59, 0.13);
+}
+
+.payment-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  align-items: start;
+}
+
+.payment-form fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.payment-form legend {
+  grid-column: 1 / -1;
+  color: var(--brown-950);
+  font-size: 1.35rem;
+  font-weight: 900;
+}
+
+.validation-note {
+  margin: -4px 0 0;
+  color: var(--burgundy);
+  font-weight: 850;
+}
+
+.paid-state {
+  display: block;
+}
+
+.previous-payments {
+  display: grid;
+  gap: 12px;
+}
+
+.previous-payment-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-block: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.previous-payment-row strong {
+  color: var(--brown-950);
+}
+
 @media (max-width: 1120px) {
   .topbar {
     grid-template-columns: 1fr;
@@ -1056,6 +1139,7 @@ textarea:focus {
   }
 
   .order-builder,
+  .payment-layout,
   .split-layout,
   .management-layout,
   .details-layout,
@@ -1092,6 +1176,7 @@ textarea:focus {
   }
 
   .experience-strip,
+  .payment-summary-grid,
   .menu-grid,
   .menu-grid--compact,
   .resource-grid,

@@ -137,9 +137,14 @@ export class RestaurantDataService {
   }
 
   updateOrderStatus(id: number, status: OrderStatus): void {
+    const order = this.ordersSubject.value.find((candidate) => candidate.id === id);
     this.ordersSubject.next(
       this.ordersSubject.value.map((order) => (order.id === id ? { ...order, status } : order))
     );
+
+    if (order && this.shouldReleaseTables(status)) {
+      this.releaseOrderTables(order);
+    }
   }
 
   addPayment(orderId: number, amount: number, method: PaymentMethod): Payment {
@@ -159,9 +164,7 @@ export class RestaurantDataService {
           return order;
         }
 
-        const totalPaid = payments
-          .filter((existingPayment) => existingPayment.orderId === orderId)
-          .reduce((sum, existingPayment) => sum + existingPayment.amount, 0);
+        const totalPaid = this.getTotalPaidForOrder(payments, orderId);
 
         return {
           ...order,
@@ -211,6 +214,16 @@ export class RestaurantDataService {
     return this.payments$;
   }
 
+  getPaymentsForOrder(orderId: number): Observable<Payment[]> {
+    return this.payments$.pipe(
+      map((payments) =>
+        [...payments]
+          .filter((payment) => payment.orderId === orderId)
+          .sort((a, b) => b.paidAt.localeCompare(a.paidAt))
+      )
+    );
+  }
+
   getDashboardSummary(): Observable<DashboardSummary> {
     return of(this.calculateDashboard());
   }
@@ -244,6 +257,26 @@ export class RestaurantDataService {
 
   private nextId<T extends { id: number }>(items: T[]): number {
     return Math.max(0, ...items.map((item) => item.id)) + 1;
+  }
+
+  private getTotalPaidForOrder(payments: Payment[], orderId: number): number {
+    return payments
+      .filter((payment) => payment.orderId === orderId)
+      .reduce((sum, payment) => sum + payment.amount, 0);
+  }
+
+  private shouldReleaseTables(status: OrderStatus): boolean {
+    return status === OrderStatus.Completed || status === OrderStatus.Cancelled;
+  }
+
+  private releaseOrderTables(order: Order): void {
+    const tableIds = new Set(order.tables.map((table) => table.id));
+
+    this.tablesSubject.next(
+      this.tablesSubject.value.map((table) =>
+        tableIds.has(table.id) ? { ...table, status: TableStatus.Available } : table
+      )
+    );
   }
 
   private createOrderNumber(date: Date): string {

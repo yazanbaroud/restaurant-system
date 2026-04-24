@@ -18,4 +18,19 @@ public sealed class UsersController(IUsersService usersService) : ControllerBase
     [HttpGet("{id:int}")]
     public async Task<ActionResult<UserResponseDto>> GetById(int id, CancellationToken cancellationToken) =>
         Ok(await usersService.GetByIdAsync(id, cancellationToken));
+
+    [HttpPost]
+    public async Task<ActionResult<UserResponseDto>> Create(CreateUserDto dto, CancellationToken cancellationToken)
+    {
+        var user = await usersService.CreateAsync(dto, cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = user.Id }, user);
+    }
+
+    [HttpPut("{id:int}")]
+    public async Task<ActionResult<UserResponseDto>> Update(int id, UpdateUserDto dto, CancellationToken cancellationToken) =>
+        Ok(await usersService.UpdateAsync(id, dto, cancellationToken));
+
+    [HttpPut("{id:int}/role")]
+    public async Task<ActionResult<UserResponseDto>> UpdateRole(int id, UpdateUserRoleDto dto, CancellationToken cancellationToken) =>
+        Ok(await usersService.UpdateRoleAsync(User.GetUserId(), id, dto, cancellationToken));
 }

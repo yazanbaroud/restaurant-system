@@ -18,6 +18,7 @@ import {
   CreateMenuItemInput,
   CreateReservationInput,
   CreateTableInput,
+  CreateUserInput,
   DashboardSummary,
   MenuCategory,
   MenuItem,
@@ -43,6 +44,7 @@ import {
   TopDish,
   UpdateMenuItemInput,
   UpdateTableInput,
+  UpdateUserInput,
   User,
   UserRole,
   WaiterPerformanceReport
@@ -582,6 +584,36 @@ export class RestaurantDataService {
     );
   }
 
+  createUser(input: CreateUserInput): Observable<User> {
+    return this.http.post<unknown>(`${this.apiBaseUrl}/api/Users`, this.createUserPayload(input)).pipe(
+      map((response) => this.normalizeUser(response, input)),
+      catchError(() => of(this.createMockUser(input))),
+      tap((user) => this.upsertUser(user))
+    );
+  }
+
+  updateUser(id: number, input: UpdateUserInput): Observable<User> {
+    const existingUser = this.usersSubject.value.find((user) => user.id === id);
+    const fallbackUser: Partial<User> = { ...existingUser, ...input, id };
+
+    return this.http.put<unknown>(`${this.apiBaseUrl}/api/Users/${id}`, input).pipe(
+      map((response) => this.normalizeUser(response, fallbackUser)),
+      catchError(() => of(this.updateMockUser(id, input))),
+      tap((user) => this.upsertUser(user))
+    );
+  }
+
+  updateUserRole(id: number, role: UserRole): Observable<User> {
+    const existingUser = this.usersSubject.value.find((user) => user.id === id);
+    const fallbackUser: Partial<User> = { ...existingUser, id, role };
+
+    return this.http.put<unknown>(`${this.apiBaseUrl}/api/Users/${id}/role`, { role }).pipe(
+      map((response) => this.normalizeUser(response, fallbackUser)),
+      catchError(() => of(this.updateMockUserRole(id, role))),
+      tap((user) => this.upsertUser(user))
+    );
+  }
+
   private fetchUsersFromApi(): Observable<User[]> {
     return this.http.get<unknown>(`${this.apiBaseUrl}/api/Users`).pipe(
       map((response) => this.normalizeUsers(response)),
@@ -594,6 +626,54 @@ export class RestaurantDataService {
     return this.http.get<unknown>(`${this.apiBaseUrl}/api/Users/${id}`).pipe(
       map((response) => this.normalizeUser(response, { id }))
     );
+  }
+
+  private createUserPayload(input: CreateUserInput): Record<string, unknown> {
+    return {
+      firstName: input.firstName,
+      lastName: input.lastName,
+      email: input.email,
+      phoneNumber: input.phoneNumber,
+      password: input.password,
+      role: input.role
+    };
+  }
+
+  private createMockUser(input: CreateUserInput): User {
+    return {
+      id: this.nextId(this.usersSubject.value),
+      firstName: input.firstName,
+      lastName: input.lastName,
+      email: input.email,
+      phoneNumber: input.phoneNumber,
+      role: input.role
+    };
+  }
+
+  private updateMockUser(id: number, input: UpdateUserInput): User {
+    const user = this.usersSubject.value.find((candidate) => candidate.id === id);
+
+    return {
+      id,
+      firstName: input.firstName ?? user?.firstName ?? '',
+      lastName: input.lastName ?? user?.lastName ?? '',
+      email: input.email ?? user?.email ?? '',
+      phoneNumber: input.phoneNumber ?? user?.phoneNumber ?? '',
+      role: user?.role ?? UserRole.Customer
+    };
+  }
+
+  private updateMockUserRole(id: number, role: UserRole): User {
+    const user = this.usersSubject.value.find((candidate) => candidate.id === id);
+
+    return {
+      id,
+      firstName: user?.firstName ?? '',
+      lastName: user?.lastName ?? '',
+      email: user?.email ?? '',
+      phoneNumber: user?.phoneNumber ?? '',
+      role
+    };
   }
 
   private normalizeUsers(response: unknown): User[] {

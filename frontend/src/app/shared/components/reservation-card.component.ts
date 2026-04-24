@@ -13,7 +13,7 @@ import { StatusBadgeComponent } from './status-badge.component';
       <div class="inline-between">
         <div>
           <p class="eyebrow">{{ reservation.reservationDate }} · {{ reservation.reservationTime }}</p>
-          <h3>{{ reservation.firstName }} {{ reservation.lastName }}</h3>
+          <h3>{{ reservation.customerFirstName }} {{ reservation.customerLastName }}</h3>
         </div>
         <app-status-badge
           [label]="reservationStatusLabels[reservation.status]"
@@ -21,11 +21,11 @@ import { StatusBadgeComponent } from './status-badge.component';
         />
       </div>
       <div class="reservation-card__meta">
-        <span>{{ reservation.guestsCount }} סועדים</span>
+        <span>{{ reservation.guestCount }} סועדים</span>
         <span>{{ reservation.phoneNumber }}</span>
       </div>
-      @if (reservation.customerNotes) {
-        <p class="muted">{{ reservation.customerNotes }}</p>
+      @if (reservation.notes) {
+        <p class="muted">{{ reservation.notes }}</p>
       }
       @if (reservation.restaurantNotes) {
         <p class="note">הערת מסעדה: {{ reservation.restaurantNotes }}</p>

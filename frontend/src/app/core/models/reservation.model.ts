@@ -2,16 +2,27 @@ import { ReservationStatus } from './enums';
 
 export interface Reservation {
   id: number;
-  firstName: string;
-  lastName: string;
+  customerFirstName: string;
+  customerLastName: string;
   phoneNumber: string;
   reservationDate: string;
   reservationTime: string;
-  guestsCount: number;
-  customerNotes: string;
+  guestCount: number;
+  notes: string;
+  tableId?: number | null;
+  tableName?: string;
   restaurantNotes: string;
   status: ReservationStatus;
   createdAt: string;
 }
 
-export type CreateReservationInput = Omit<Reservation, 'id' | 'status' | 'createdAt' | 'restaurantNotes'>;
+export interface CreateReservationInput {
+  customerFirstName: string;
+  customerLastName: string;
+  phoneNumber: string;
+  reservationDate: string;
+  reservationTime: string;
+  guestCount: number;
+  notes: string;
+  tableId?: number | null;
+}

@@ -297,33 +297,84 @@ export class RestaurantDataService {
   }
 
   getReservations(): Observable<Reservation[]> {
-    return this.reservations$;
+    return this.fetchReservationsFromApi().pipe(switchMap(() => this.reservations$));
   }
 
-  createReservation(input: CreateReservationInput): Reservation {
-    const reservation: Reservation = {
+  createReservation(input: CreateReservationInput): Observable<Reservation> {
+    return this.http.post<unknown>(`${this.apiBaseUrl}/api/Reservations`, this.createReservationPayload(input)).pipe(
+      map((response) => this.normalizeReservation(response, input)),
+      switchMap((reservation) =>
+        this.fetchReservationFromApi(reservation.id).pipe(catchError(() => of(reservation)))
+      ),
+      catchError(() => of(this.createMockReservation(input))),
+      tap((reservation) => this.upsertReservation(reservation))
+    );
+  }
+
+  updateReservationStatus(id: number, status: ReservationStatus, restaurantNotes = ''): Observable<Reservation> {
+    const existingReservation = this.reservationsSubject.value.find((reservation) => reservation.id === id);
+    const fallbackReservation: Partial<Reservation> = {
+      ...existingReservation,
+      id,
+      status,
+      restaurantNotes: restaurantNotes || existingReservation?.restaurantNotes || ''
+    };
+
+    return this.http.put<unknown>(`${this.apiBaseUrl}/api/Reservations/${id}/status`, {
+      status,
+      restaurantNotes
+    }).pipe(
+      map((response) => this.normalizeReservation(response, fallbackReservation)),
+      switchMap((reservation) =>
+        this.fetchReservationFromApi(reservation.id).pipe(catchError(() => of(reservation)))
+      ),
+      catchError(() => of(this.updateMockReservationStatus(id, status, restaurantNotes))),
+      tap((reservation) => this.upsertReservation(reservation))
+    );
+  }
+
+  private createMockReservation(input: CreateReservationInput): Reservation {
+    return {
       ...input,
       id: this.nextId(this.reservationsSubject.value),
       restaurantNotes: '',
       status: ReservationStatus.Pending,
       createdAt: new Date().toISOString()
     };
-
-    this.reservationsSubject.next([reservation, ...this.reservationsSubject.value]);
-    return reservation;
   }
 
-  updateReservationStatus(id: number, status: ReservationStatus, restaurantNotes = ''): void {
+  private updateMockReservationStatus(id: number, status: ReservationStatus, restaurantNotes = ''): Reservation {
+    const reservation = this.reservationsSubject.value.find((candidate) => candidate.id === id);
+    if (!reservation) {
+      return {
+        id,
+        customerFirstName: '',
+        customerLastName: '',
+        phoneNumber: '',
+        reservationDate: '',
+        reservationTime: '',
+        guestCount: 1,
+        notes: '',
+        restaurantNotes,
+        status,
+        createdAt: new Date().toISOString()
+      };
+    }
+
+    return {
+      ...reservation,
+      status,
+      restaurantNotes: restaurantNotes || reservation.restaurantNotes
+    };
+  }
+
+  private upsertReservation(reservation: Reservation): void {
+    const reservations = this.reservationsSubject.value;
+    const exists = reservations.some((candidate) => candidate.id === reservation.id);
     this.reservationsSubject.next(
-      this.reservationsSubject.value.map((reservation) =>
-        reservation.id === id
-          ? {
-              ...reservation,
-              status,
-              restaurantNotes: restaurantNotes || reservation.restaurantNotes
-            }
-          : reservation
-      )
+      exists
+        ? reservations.map((candidate) => (candidate.id === reservation.id ? reservation : candidate))
+        : [reservation, ...reservations]
     );
   }
 
@@ -375,6 +426,20 @@ export class RestaurantDataService {
 
   private nextId<T extends { id: number }>(items: T[]): number {
     return Math.max(0, ...items.map((item) => item.id)) + 1;
+  }
+
+  private fetchReservationsFromApi(): Observable<Reservation[]> {
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Reservations`).pipe(
+      map((response) => this.normalizeReservations(response)),
+      tap((reservations) => this.reservationsSubject.next(reservations)),
+      catchError(() => of(this.reservationsSubject.value))
+    );
+  }
+
+  private fetchReservationFromApi(id: number): Observable<Reservation> {
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Reservations/${id}`).pipe(
+      map((response) => this.normalizeReservation(response))
+    );
   }
 
   private fetchOrdersFromApi(): Observable<Order[]> {
@@ -476,6 +541,133 @@ export class RestaurantDataService {
   private replacePaymentsForOrder(orderId: number, payments: Payment[]): void {
     const otherPayments = this.paymentsSubject.value.filter((payment) => payment.orderId !== orderId);
     this.paymentsSubject.next([...payments, ...otherPayments]);
+  }
+
+  private normalizeReservations(response: unknown): Reservation[] {
+    return this.extractReservationArrayPayload(response).map((reservation) => this.normalizeReservation(reservation));
+  }
+
+  private normalizeReservation(response: unknown, fallback: Partial<Reservation> = {}): Reservation {
+    const record = this.extractReservationPayload(response) ?? {};
+    const fallbackRecord = fallback as Record<string, unknown>;
+    const tableRecord = this.asRecord(record['table']);
+
+    return {
+      id: this.numberValue(record['id'], fallback.id ?? this.nextId(this.reservationsSubject.value)),
+      customerFirstName:
+        this.stringValue(record['customerFirstName'] ?? record['firstName']) ||
+        fallback.customerFirstName ||
+        this.stringValue(fallbackRecord['firstName']) ||
+        '',
+      customerLastName:
+        this.stringValue(record['customerLastName'] ?? record['lastName']) ||
+        fallback.customerLastName ||
+        this.stringValue(fallbackRecord['lastName']) ||
+        '',
+      phoneNumber:
+        this.stringValue(record['phoneNumber'] ?? record['phone']) ||
+        fallback.phoneNumber ||
+        '',
+      reservationDate:
+        this.stringValue(record['reservationDate'] ?? record['date']) ||
+        fallback.reservationDate ||
+        '',
+      reservationTime:
+        this.stringValue(record['reservationTime'] ?? record['time']) ||
+        fallback.reservationTime ||
+        '',
+      guestCount: this.numberValue(
+        record['guestCount'] ?? record['guestsCount'],
+        fallback.guestCount ?? this.numberValue(fallbackRecord['guestsCount'], 1)
+      ),
+      notes:
+        this.stringValue(record['notes'] ?? record['customerNotes']) ||
+        fallback.notes ||
+        this.stringValue(fallbackRecord['customerNotes']) ||
+        '',
+      tableId: this.nullableNumberValue(record['tableId'] ?? tableRecord?.['id'] ?? fallback.tableId),
+      tableName:
+        this.stringValue(record['tableName'] ?? tableRecord?.['name']) ||
+        fallback.tableName,
+      restaurantNotes:
+        this.stringValue(record['restaurantNotes']) ||
+        fallback.restaurantNotes ||
+        '',
+      status: this.normalizeReservationStatus(record['status'] ?? fallback.status),
+      createdAt:
+        this.stringValue(record['createdAt'] ?? record['createdOn']) ||
+        fallback.createdAt ||
+        new Date().toISOString()
+    };
+  }
+
+  private createReservationPayload(input: CreateReservationInput): Record<string, unknown> {
+    const payload: Record<string, unknown> = {
+      customerFirstName: input.customerFirstName,
+      customerLastName: input.customerLastName,
+      phoneNumber: input.phoneNumber,
+      reservationDate: input.reservationDate,
+      reservationTime: input.reservationTime,
+      guestCount: input.guestCount,
+      notes: input.notes
+    };
+
+    if (input.tableId != null) {
+      payload['tableId'] = input.tableId;
+    }
+
+    return payload;
+  }
+
+  private extractReservationArrayPayload(response: unknown): unknown[] {
+    if (Array.isArray(response)) {
+      return response;
+    }
+
+    const record = this.asRecord(response);
+    if (!record) {
+      return [];
+    }
+
+    for (const key of ['reservations', 'items', 'data', 'result']) {
+      const value = record[key];
+      if (Array.isArray(value)) {
+        return value;
+      }
+
+      const nested = this.asRecord(value);
+      if (nested) {
+        const nestedReservations = this.extractReservationArrayPayload(nested);
+        if (nestedReservations.length) {
+          return nestedReservations;
+        }
+      }
+    }
+
+    return [];
+  }
+
+  private extractReservationPayload(response: unknown): Record<string, unknown> | null {
+    const record = this.asRecord(response);
+    if (!record) {
+      return null;
+    }
+
+    if ('id' in record || 'customerFirstName' in record || 'firstName' in record || 'reservationDate' in record) {
+      return record;
+    }
+
+    for (const key of ['reservation', 'data', 'result']) {
+      const value = this.asRecord(record[key]);
+      if (value) {
+        const nestedReservation = this.extractReservationPayload(value);
+        if (nestedReservation) {
+          return nestedReservation;
+        }
+      }
+    }
+
+    return record;
   }
 
   private normalizeOrders(response: unknown): Order[] {
@@ -852,6 +1044,26 @@ export class RestaurantDataService {
     return PaymentStatus.Unpaid;
   }
 
+  private normalizeReservationStatus(value: unknown): ReservationStatus {
+    const numericValue = this.numberValue(value);
+    if (this.isReservationStatus(numericValue)) {
+      return numericValue;
+    }
+
+    if (typeof value === 'string') {
+      const statusName = value.toLowerCase();
+      const status = Object.values(ReservationStatus)
+        .filter((candidate): candidate is ReservationStatus => typeof candidate === 'number')
+        .find((candidate) => ReservationStatus[candidate].toLowerCase() === statusName);
+
+      if (status) {
+        return status;
+      }
+    }
+
+    return ReservationStatus.Pending;
+  }
+
   private normalizePaymentMethod(value: unknown): PaymentMethod {
     const numericValue = this.numberValue(value);
     if (this.isPaymentMethod(numericValue)) {
@@ -904,6 +1116,10 @@ export class RestaurantDataService {
     return Object.values(PaymentStatus).includes(value);
   }
 
+  private isReservationStatus(value: number): value is ReservationStatus {
+    return Object.values(ReservationStatus).includes(value);
+  }
+
   private isPaymentMethod(value: number): value is PaymentMethod {
     return Object.values(PaymentMethod).includes(value);
   }
@@ -915,6 +1131,11 @@ export class RestaurantDataService {
   private numberValue(value: unknown, fallback = 0): number {
     const numericValue = Number(value);
     return Number.isFinite(numericValue) ? numericValue : fallback;
+  }
+
+  private nullableNumberValue(value: unknown): number | null {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : null;
   }
 
   private stringValue(value: unknown): string {

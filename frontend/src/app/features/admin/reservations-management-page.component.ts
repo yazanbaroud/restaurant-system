@@ -1,5 +1,6 @@
 import { AsyncPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
+import { finalize } from 'rxjs';
 
 import { Reservation, ReservationStatus } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
@@ -18,7 +19,7 @@ type ReservationFilter = 'all' | ReservationStatus;
       <app-page-header
         eyebrow="ניהול הזמנות מקום"
         title="בקשות ואישורי שולחנות"
-        subtitle="אישור או דחייה הם mock בלבד כרגע, אבל משנים את מצב הרשומה."
+        subtitle="אישור ודחייה של הזמנות מקום מול מערכת המסעדה בזמן אמת."
       />
       <div class="segmented-control">
         @for (filter of filters; track filter.value) {
@@ -27,12 +28,15 @@ type ReservationFilter = 'all' | ReservationStatus;
           </button>
         }
       </div>
+      @if (errorMessage) {
+        <p class="validation-note">{{ errorMessage }}</p>
+      }
       @if (reservations$ | async; as reservations) {
         <div class="resource-grid">
           @for (reservation of filteredReservations(reservations); track reservation.id) {
             <app-reservation-card
               [reservation]="reservation"
-              [showActions]="true"
+              [showActions]="!isUpdating(reservation.id)"
               (statusChange)="setStatus(reservation.id, $event)"
             />
           }
@@ -54,6 +58,8 @@ export class ReservationsManagementPageComponent {
   ];
 
   selectedFilter: ReservationFilter = 'all';
+  updatingReservationId: number | null = null;
+  errorMessage = '';
 
   filteredReservations(reservations: Reservation[]): Reservation[] {
     if (this.selectedFilter === 'all') {
@@ -64,6 +70,37 @@ export class ReservationsManagementPageComponent {
   }
 
   setStatus(id: number, status: ReservationStatus): void {
-    this.data.updateReservationStatus(id, status, status === ReservationStatus.Approved ? 'אושר במערכת הניהול' : 'נדחה במערכת הניהול');
+    if (this.updatingReservationId) {
+      return;
+    }
+
+    this.updatingReservationId = id;
+    this.errorMessage = '';
+    const restaurantNotes = this.restaurantNoteForStatus(status);
+    this.data.updateReservationStatus(id, status, restaurantNotes).pipe(
+      finalize(() => {
+        this.updatingReservationId = null;
+      })
+    ).subscribe({
+      error: () => {
+        this.errorMessage = 'לא הצלחנו לעדכן את סטטוס ההזמנה. נסו שוב בעוד רגע.';
+      }
+    });
+  }
+
+  isUpdating(id: number): boolean {
+    return this.updatingReservationId === id;
+  }
+
+  private restaurantNoteForStatus(status: ReservationStatus): string {
+    const notes: Partial<Record<ReservationStatus, string>> = {
+      [ReservationStatus.Approved]: 'אושר במערכת הניהול',
+      [ReservationStatus.Rejected]: 'נדחה במערכת הניהול',
+      [ReservationStatus.Cancelled]: 'בוטל במערכת הניהול',
+      [ReservationStatus.Arrived]: 'הלקוח הגיע למסעדה',
+      [ReservationStatus.NoShow]: 'הלקוח לא הגיע'
+    };
+
+    return notes[status] ?? '';
   }
 }

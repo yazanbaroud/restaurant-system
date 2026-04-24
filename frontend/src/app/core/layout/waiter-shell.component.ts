@@ -1,6 +1,6 @@
 import { AsyncPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { AuthService } from '../services/auth.service';
 
@@ -34,7 +34,10 @@ import { AuthService } from '../services/auth.service';
             <strong>ממשק מלצר</strong>
           </div>
           @if (auth.currentUser$ | async; as user) {
-            <div class="user-chip">{{ user.firstName }} {{ user.lastName }}</div>
+            <div class="actions-inline">
+              <div class="user-chip">{{ user.firstName }} {{ user.lastName }}</div>
+              <button type="button" class="btn btn-small btn-ghost" (click)="logout()">יציאה</button>
+            </div>
           }
         </header>
         <router-outlet />
@@ -44,4 +47,10 @@ import { AuthService } from '../services/auth.service';
 })
 export class WaiterShellComponent {
   readonly auth = inject(AuthService);
+  private readonly router = inject(Router);
+
+  logout(): void {
+    this.auth.logout();
+    void this.router.navigateByUrl('/login');
+  }
 }

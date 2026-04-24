@@ -2,7 +2,7 @@ import { AsyncPipe, CurrencyPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { map } from 'rxjs';
 
-import { OrderStatus, ReservationStatus } from '../../core/models';
+import { OrderStatus, PaymentBreakdown, ReservationStatus } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { OrderCardComponent } from '../../shared/components/order-card.component';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
@@ -56,7 +56,7 @@ import { paymentMethodLabels } from '../../shared/ui-labels';
                 <div>
                   <span>{{ paymentMethodLabels[payment.method] }}</span>
                   <strong>{{ payment.amount | currency: 'ILS' : 'symbol' : '1.0-0' }}</strong>
-                  <i [style.width.%]="payment.amount / 125"></i>
+                  <i [style.width.%]="paymentBarWidth(payment.amount, dashboard.paymentBreakdown)"></i>
                 </div>
               }
             </div>
@@ -105,4 +105,13 @@ export class AdminDashboardPageComponent {
     .getReservations()
     .pipe(map((reservations) => reservations.filter((reservation) => reservation.status === ReservationStatus.Pending)));
   readonly paymentMethodLabels = paymentMethodLabels;
+
+  paymentBarWidth(amount: number, payments: PaymentBreakdown[]): number {
+    const maxAmount = Math.max(0, ...payments.map((payment) => payment.amount));
+    if (!maxAmount || amount <= 0) {
+      return 0;
+    }
+
+    return Math.min(100, Math.max(4, (amount / maxAmount) * 100));
+  }
 }

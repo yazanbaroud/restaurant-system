@@ -29,6 +29,7 @@ import { roleLabels } from '../../shared/ui-labels';
         <div class="role-switch">
           @if (auth.currentUser$ | async; as user) {
             <span>{{ roleLabels[user.role] }}</span>
+            <button type="button" class="btn btn-small btn-ghost" (click)="logout()">יציאה</button>
           }
           <button type="button" class="btn btn-small btn-ghost" (click)="goToStaff(UserRole.Waiter, '/waiter')">מלצר</button>
           <button type="button" class="btn btn-small btn-dark" (click)="goToStaff(UserRole.Admin, '/admin')">מנהל</button>
@@ -50,5 +51,10 @@ export class PublicShellComponent {
     void this.router.navigate(['/login'], {
       queryParams: { role, returnUrl: path }
     });
+  }
+
+  logout(): void {
+    this.auth.logout();
+    void this.router.navigateByUrl('/');
   }
 }

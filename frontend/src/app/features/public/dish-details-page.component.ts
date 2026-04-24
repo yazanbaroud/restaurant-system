@@ -1,9 +1,8 @@
 import { AsyncPipe, CurrencyPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { map } from 'rxjs';
+import { combineLatest, map, shareReplay } from 'rxjs';
 
-import { MenuCategory } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { MenuItemCardComponent } from '../../shared/components/menu-item-card.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
@@ -37,7 +36,7 @@ import { categoryLabels } from '../../shared/ui-labels';
           <h2>{{ categoryLabels[item.category] }}</h2>
         </div>
         <div class="menu-grid">
-          @for (related of relatedItems(item.category, item.id) | async; track related.id) {
+          @for (related of relatedItems$ | async; track related.id) {
             <app-menu-item-card [item]="related" />
           }
         </div>
@@ -55,12 +54,11 @@ export class DishDetailsPageComponent {
   private readonly data = inject(RestaurantDataService);
   private readonly id = Number(this.route.snapshot.paramMap.get('id'));
 
-  readonly item$ = this.data.getMenuItem(this.id);
+  readonly item$ = this.data.getMenuItem(this.id).pipe(shareReplay({ bufferSize: 1, refCount: true }));
+  readonly relatedItems$ = combineLatest([this.item$, this.data.getAvailableMenuItems()]).pipe(
+    map(([item, items]) =>
+      item ? items.filter((related) => related.category === item.category && related.id !== item.id).slice(0, 3) : []
+    )
+  );
   readonly categoryLabels = categoryLabels;
-
-  relatedItems(category: MenuCategory, currentId: number) {
-    return this.data.getAvailableMenuItems().pipe(
-      map((items) => items.filter((item) => item.category === category && item.id !== currentId).slice(0, 3))
-    );
-  }
 }

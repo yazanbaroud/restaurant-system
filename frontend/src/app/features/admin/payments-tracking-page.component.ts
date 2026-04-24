@@ -21,7 +21,7 @@ interface PaymentRow {
       <app-page-header
         eyebrow="תשלומים"
         title="מעקב תשלומים"
-        subtitle="רשימת תשלומים mock עם שיוך להזמנה ואמצעי תשלום."
+        subtitle="מעקב תשלומים ממערכת המסעדה, עם שיוך להזמנות ואמצעי תשלום."
       />
       <div class="table-like">
         <div class="table-like__head">

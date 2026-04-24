@@ -1,6 +1,6 @@
 import { AsyncPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
-import { Observable, catchError, finalize, of } from 'rxjs';
+import { Observable, catchError, of, tap } from 'rxjs';
 
 import { User } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
@@ -65,12 +65,13 @@ export class UsersManagementPageComponent {
 
   constructor() {
     this.users$ = this.data.getUsers().pipe(
+      tap(() => {
+        this.isLoading = false;
+      }),
       catchError(() => {
         this.errorMessage = 'לא הצלחנו לטעון את רשימת המשתמשים. מוצגת רשימה חלופית אם קיימת.';
-        return of([]);
-      }),
-      finalize(() => {
         this.isLoading = false;
+        return of([]);
       })
     );
   }

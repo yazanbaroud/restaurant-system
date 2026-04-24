@@ -2,6 +2,7 @@ import { AsyncPipe, CurrencyPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
+import { finalize } from 'rxjs';
 
 import { MenuItem, OrderType, Table, TableStatus } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
@@ -118,7 +119,12 @@ interface CartLine {
               <p class="muted">עוד לא נוספו מנות.</p>
             }
           </div>
-          <button class="btn btn-gold full" type="submit" [disabled]="!canSubmit">שליחת הזמנה למטבח</button>
+          @if (errorMessage) {
+            <p class="validation-note full">{{ errorMessage }}</p>
+          }
+          <button class="btn btn-gold full" type="submit" [disabled]="!canSubmit">
+            {{ isSubmitting ? 'שולחים...' : 'שליחת הזמנה למטבח' }}
+          </button>
         </aside>
       </form>
     </section>
@@ -145,6 +151,8 @@ export class CreateOrderPageComponent {
 
   selectedTableIds = new Set<number>();
   cart: CartLine[] = [];
+  isSubmitting = false;
+  errorMessage = '';
 
   get total(): number {
     return this.cart.reduce((sum, line) => sum + line.item.price * line.quantity, 0);
@@ -152,7 +160,7 @@ export class CreateOrderPageComponent {
 
   get canSubmit(): boolean {
     const requiresTable = this.form.controls.orderType.value === OrderType.DineIn;
-    return this.form.valid && this.cart.length > 0 && (!requiresTable || this.selectedTableIds.size > 0);
+    return !this.isSubmitting && this.form.valid && this.cart.length > 0 && (!requiresTable || this.selectedTableIds.size > 0);
   }
 
   toggleTable(table: Table): void {
@@ -193,7 +201,10 @@ export class CreateOrderPageComponent {
       return;
     }
 
-    const order = this.data.createOrder({
+    this.isSubmitting = true;
+    this.errorMessage = '';
+
+    this.data.createOrder({
       userId: this.auth.currentUser?.id ?? null,
       customerFirstName: this.form.controls.customerFirstName.value,
       customerLastName: this.form.controls.customerLastName.value,
@@ -205,8 +216,15 @@ export class CreateOrderPageComponent {
         quantity: line.quantity,
         notes: line.notes
       }))
+    }).pipe(
+      finalize(() => {
+        this.isSubmitting = false;
+      })
+    ).subscribe({
+      next: (order) => void this.router.navigate(['/waiter/orders', order.id]),
+      error: () => {
+        this.errorMessage = 'לא הצלחנו לפתוח את ההזמנה. נסו שוב בעוד רגע.';
+      }
     });
-
-    void this.router.navigate(['/waiter/orders', order.id]);
   }
 }

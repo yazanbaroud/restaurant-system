@@ -14,12 +14,15 @@ import {
 } from '../mock/mock-data';
 import {
   CreateOrderInput,
+  CreateOrderItemInput,
   CreateReservationInput,
   DashboardSummary,
   MenuCategory,
   MenuItem,
   Order,
+  OrderItem,
   OrderStatus,
+  OrderType,
   Payment,
   PaymentMethod,
   PaymentStatus,
@@ -93,14 +96,29 @@ export class RestaurantDataService {
   }
 
   getOrders(): Observable<Order[]> {
-    return this.orders$;
+    return this.fetchOrdersFromApi().pipe(switchMap(() => this.orders$));
   }
 
   getOrder(id: number): Observable<Order | undefined> {
-    return this.orders$.pipe(map((orders) => orders.find((order) => order.id === id)));
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Orders/${id}`).pipe(
+      map((response) => this.normalizeOrder(response)),
+      tap((order) => this.upsertOrder(order)),
+      catchError(() => this.orders$.pipe(map((orders) => orders.find((order) => order.id === id))))
+    );
   }
 
-  createOrder(input: CreateOrderInput): Order {
+  createOrder(input: CreateOrderInput): Observable<Order> {
+    return this.http.post<unknown>(`${this.apiBaseUrl}/api/Orders`, this.createOrderPayload(input)).pipe(
+      map((response) => this.normalizeOrder(response, input)),
+      catchError(() => of(this.createMockOrder(input))),
+      tap((order) => {
+        this.upsertOrder(order);
+        this.markOrderTablesOccupied(order, input.tableIds);
+      })
+    );
+  }
+
+  private createMockOrder(input: CreateOrderInput): Order {
     const items = input.items
       .map((orderItem, index) => {
         const menuItem = this.menuSubject.value.find((candidate) => candidate.id === orderItem.menuItemId);
@@ -140,8 +158,6 @@ export class RestaurantDataService {
       tables: selectedTables
     };
 
-    this.ordersSubject.next([order, ...this.ordersSubject.value]);
-    selectedTables.forEach((table) => this.updateTableStatus(table.id, TableStatus.Occupied));
     return order;
   }
 
@@ -268,6 +284,144 @@ export class RestaurantDataService {
     return Math.max(0, ...items.map((item) => item.id)) + 1;
   }
 
+  private fetchOrdersFromApi(): Observable<Order[]> {
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Orders`).pipe(
+      map((response) => this.normalizeOrders(response)),
+      tap((orders) => this.ordersSubject.next(orders)),
+      catchError(() => of(this.ordersSubject.value))
+    );
+  }
+
+  private normalizeOrders(response: unknown): Order[] {
+    return this.extractArrayPayload(response).map((order) => this.normalizeOrder(order));
+  }
+
+  private normalizeOrder(response: unknown, fallbackInput?: CreateOrderInput): Order {
+    const record = this.extractObjectPayload(response) ?? {};
+    const items = this.normalizeOrderItems(this.extractArrayValue(record, ['items', 'orderItems']), fallbackInput);
+    const tables = this.normalizeOrderTables(this.extractArrayValue(record, ['tables', 'orderTables']), fallbackInput);
+    const totalPrice = this.numberValue(
+      record['totalPrice'] ?? record['total'],
+      items.reduce((sum, item) => sum + item.lineTotal, 0)
+    );
+    const createdAt = this.stringValue(record['createdAt'] ?? record['createdOn']) || new Date().toISOString();
+    const orderNumber = this.stringValue(record['orderNumber'] ?? record['uniqueIdentifier']) || this.createOrderNumber(new Date(createdAt));
+
+    return {
+      id: this.numberValue(record['id'], this.nextId(this.ordersSubject.value)),
+      uniqueIdentifier: this.stringValue(record['uniqueIdentifier']) || orderNumber,
+      orderNumber,
+      userId: record['userId'] == null ? fallbackInput?.userId ?? null : this.numberValue(record['userId']),
+      customerFirstName: this.stringValue(record['customerFirstName']) || fallbackInput?.customerFirstName || '',
+      customerLastName: this.stringValue(record['customerLastName']) || fallbackInput?.customerLastName || '',
+      createdAt,
+      status: this.normalizeOrderStatus(record['status']),
+      notes: this.stringValue(record['notes']) || fallbackInput?.notes || '',
+      totalPrice,
+      orderType: this.normalizeOrderType(record['orderType'] ?? fallbackInput?.orderType),
+      paymentStatus: this.normalizePaymentStatus(record['paymentStatus']),
+      items,
+      tables
+    };
+  }
+
+  private normalizeOrderItems(rawItems: unknown[], fallbackInput?: CreateOrderInput): OrderItem[] {
+    if (rawItems.length) {
+      return rawItems.map((item, index) => this.normalizeOrderItem(item, index));
+    }
+
+    return (fallbackInput?.items ?? []).map((item, index) => this.createOrderItemFromInput(item, index));
+  }
+
+  private normalizeOrderItem(value: unknown, index: number): OrderItem {
+    const record = this.asRecord(value) ?? {};
+    const nestedMenuItem = this.asRecord(record['menuItem']);
+    const quantity = this.numberValue(record['quantity'], 1);
+    const unitPrice = this.numberValue(record['unitPrice'] ?? record['price']);
+    const lineTotal = this.numberValue(record['lineTotal'] ?? record['totalPrice'], unitPrice * quantity);
+    const menuItemId = this.numberValue(record['menuItemId'] ?? nestedMenuItem?.['id']);
+
+    return {
+      id: this.numberValue(record['id'], Date.now() + index),
+      menuItemId,
+      menuItemName:
+        this.stringValue(record['menuItemName'] ?? record['name'] ?? nestedMenuItem?.['name']) ||
+        `מנה ${menuItemId}`,
+      quantity,
+      unitPrice,
+      lineTotal,
+      notes: this.stringValue(record['notes'])
+    };
+  }
+
+  private createOrderItemFromInput(item: CreateOrderItemInput, index: number): OrderItem {
+    const menuItem = this.menuSubject.value.find((candidate) => candidate.id === item.menuItemId);
+    const unitPrice = menuItem?.price ?? 0;
+
+    return {
+      id: Date.now() + index,
+      menuItemId: item.menuItemId,
+      menuItemName: menuItem?.name ?? `מנה ${item.menuItemId}`,
+      quantity: item.quantity,
+      unitPrice,
+      lineTotal: unitPrice * item.quantity,
+      notes: item.notes
+    };
+  }
+
+  private normalizeOrderTables(rawTables: unknown[], fallbackInput?: CreateOrderInput): Table[] {
+    if (rawTables.length) {
+      return rawTables.map((table) => this.normalizeOrderTable(table));
+    }
+
+    return this.tablesSubject.value.filter((table) => fallbackInput?.tableIds.includes(table.id) ?? false);
+  }
+
+  private normalizeOrderTable(value: unknown): Table {
+    const record = this.asRecord(value) ?? {};
+    const nestedTable = this.asRecord(record['table']);
+    const tableRecord = nestedTable ?? record;
+    const id = this.numberValue(tableRecord['id'] ?? record['tableId']);
+
+    return {
+      id,
+      name: this.stringValue(tableRecord['name'] ?? record['tableName']) || `שולחן ${id}`,
+      capacity: this.numberValue(tableRecord['capacity']),
+      status: this.normalizeTableStatus(tableRecord['status'])
+    };
+  }
+
+  private createOrderPayload(input: CreateOrderInput): CreateOrderInput {
+    return {
+      userId: input.userId ?? null,
+      customerFirstName: input.customerFirstName,
+      customerLastName: input.customerLastName,
+      notes: input.notes,
+      orderType: input.orderType,
+      tableIds: input.tableIds,
+      items: input.items.map((item) => ({
+        menuItemId: item.menuItemId,
+        quantity: item.quantity,
+        notes: item.notes
+      }))
+    };
+  }
+
+  private upsertOrder(order: Order): void {
+    const orders = this.ordersSubject.value;
+    const exists = orders.some((candidate) => candidate.id === order.id);
+    this.ordersSubject.next(exists ? orders.map((candidate) => (candidate.id === order.id ? order : candidate)) : [order, ...orders]);
+  }
+
+  private markOrderTablesOccupied(order: Order, fallbackTableIds: number[] = []): void {
+    const tableIds = new Set([...order.tables.map((table) => table.id), ...fallbackTableIds]);
+    this.tablesSubject.next(
+      this.tablesSubject.value.map((table) =>
+        tableIds.has(table.id) ? { ...table, status: TableStatus.Occupied } : table
+      )
+    );
+  }
+
   private fetchMenuItemsFromApi(): Observable<MenuItem[]> {
     return this.http.get<unknown>(`${this.apiBaseUrl}/api/Menu`).pipe(
       map((response) => this.normalizeMenuItems(response)),
@@ -303,6 +457,37 @@ export class RestaurantDataService {
     const record = this.asRecord(response);
     for (const key of ['items', 'data', 'result', 'menuItems']) {
       const value = record?.[key];
+      if (Array.isArray(value)) {
+        return value;
+      }
+    }
+
+    return [];
+  }
+
+  private extractObjectPayload(response: unknown): Record<string, unknown> | null {
+    const record = this.asRecord(response);
+    if (!record) {
+      return null;
+    }
+
+    if ('id' in record || 'orderNumber' in record || 'name' in record) {
+      return record;
+    }
+
+    for (const key of ['data', 'result', 'order']) {
+      const value = this.asRecord(record[key]);
+      if (value) {
+        return value;
+      }
+    }
+
+    return record;
+  }
+
+  private extractArrayValue(record: Record<string, unknown>, keys: string[]): unknown[] {
+    for (const key of keys) {
+      const value = record[key];
       if (Array.isArray(value)) {
         return value;
       }
@@ -377,9 +562,105 @@ export class RestaurantDataService {
     return Object.values(MenuCategory).includes(value);
   }
 
-  private numberValue(value: unknown): number {
+  private normalizeOrderStatus(value: unknown): OrderStatus {
+    const numericValue = this.numberValue(value);
+    if (this.isOrderStatus(numericValue)) {
+      return numericValue;
+    }
+
+    if (typeof value === 'string') {
+      const statusName = value.toLowerCase();
+      const status = Object.values(OrderStatus)
+        .filter((candidate): candidate is OrderStatus => typeof candidate === 'number')
+        .find((candidate) => OrderStatus[candidate].toLowerCase() === statusName);
+
+      if (status) {
+        return status;
+      }
+    }
+
+    return OrderStatus.InSalads;
+  }
+
+  private normalizeOrderType(value: unknown): OrderType {
+    const numericValue = this.numberValue(value);
+    if (this.isOrderType(numericValue)) {
+      return numericValue;
+    }
+
+    if (typeof value === 'string') {
+      const typeName = value.toLowerCase();
+      const orderType = Object.values(OrderType)
+        .filter((candidate): candidate is OrderType => typeof candidate === 'number')
+        .find((candidate) => OrderType[candidate].toLowerCase() === typeName);
+
+      if (orderType) {
+        return orderType;
+      }
+    }
+
+    return OrderType.DineIn;
+  }
+
+  private normalizePaymentStatus(value: unknown): PaymentStatus {
+    const numericValue = this.numberValue(value);
+    if (this.isPaymentStatus(numericValue)) {
+      return numericValue;
+    }
+
+    if (typeof value === 'string') {
+      const statusName = value.toLowerCase();
+      const status = Object.values(PaymentStatus)
+        .filter((candidate): candidate is PaymentStatus => typeof candidate === 'number')
+        .find((candidate) => PaymentStatus[candidate].toLowerCase() === statusName);
+
+      if (status) {
+        return status;
+      }
+    }
+
+    return PaymentStatus.Unpaid;
+  }
+
+  private normalizeTableStatus(value: unknown): TableStatus {
+    const numericValue = this.numberValue(value);
+    if (this.isTableStatus(numericValue)) {
+      return numericValue;
+    }
+
+    if (typeof value === 'string') {
+      const statusName = value.toLowerCase();
+      const status = Object.values(TableStatus)
+        .filter((candidate): candidate is TableStatus => typeof candidate === 'number')
+        .find((candidate) => TableStatus[candidate].toLowerCase() === statusName);
+
+      if (status) {
+        return status;
+      }
+    }
+
+    return TableStatus.Occupied;
+  }
+
+  private isOrderStatus(value: number): value is OrderStatus {
+    return Object.values(OrderStatus).includes(value);
+  }
+
+  private isOrderType(value: number): value is OrderType {
+    return Object.values(OrderType).includes(value);
+  }
+
+  private isPaymentStatus(value: number): value is PaymentStatus {
+    return Object.values(PaymentStatus).includes(value);
+  }
+
+  private isTableStatus(value: number): value is TableStatus {
+    return Object.values(TableStatus).includes(value);
+  }
+
+  private numberValue(value: unknown, fallback = 0): number {
     const numericValue = Number(value);
-    return Number.isFinite(numericValue) ? numericValue : 0;
+    return Number.isFinite(numericValue) ? numericValue : fallback;
   }
 
   private stringValue(value: unknown): string {

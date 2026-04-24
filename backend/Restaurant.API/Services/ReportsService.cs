@@ -10,6 +10,8 @@ namespace Restaurant.API.Services;
 
 public sealed class ReportsService(AppDbContext db) : IReportsService
 {
+    private static readonly DateTime HourEpoch = new(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
     public async Task<DailyReportDto> GetDailyAsync(DateOnly? date, CancellationToken cancellationToken)
     {
         var day = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
@@ -75,10 +77,16 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
     }
 
     public async Task<IReadOnlyCollection<TopDishDto>> GetTopDishesAsync(DateOnly? from, DateOnly? to, int take, CancellationToken cancellationToken) =>
-        await DishQuery(from, to).OrderByDescending(x => x.QuantitySold).Take(take).ToArrayAsync(cancellationToken);
+        await DishQuery(from, to)
+            .OrderByDescending(x => x.QuantitySold)
+            .Take(take)
+            .Select(x => new TopDishDto(x.MenuItemId, x.Name, x.QuantitySold, x.Revenue))
+            .ToArrayAsync(cancellationToken);
 
     public async Task<IReadOnlyCollection<LeastOrderedDishDto>> GetLeastOrderedAsync(DateOnly? from, DateOnly? to, int take, CancellationToken cancellationToken) =>
-        await DishQuery(from, to).OrderBy(x => x.QuantitySold).Take(take)
+        await DishQuery(from, to)
+            .OrderBy(x => x.QuantitySold)
+            .Take(take)
             .Select(x => new LeastOrderedDishDto(x.MenuItemId, x.Name, x.QuantitySold, x.Revenue))
             .ToArrayAsync(cancellationToken);
 
@@ -100,9 +108,20 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
     public async Task<IReadOnlyCollection<PeakHourDto>> GetPeakHoursAsync(DateOnly? from, DateOnly? to, CancellationToken cancellationToken) =>
         await QueryOrders(from ?? DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-30), to ?? DateOnly.FromDateTime(DateTime.UtcNow))
             .Where(x => x.Status != OrderStatus.Cancelled)
-            .GroupBy(x => x.CreatedAt.Hour)
-            .Select(x => new PeakHourDto(x.Key, x.Count(), x.Sum(o => o.TotalPrice)))
+            .Select(x => new
+            {
+                Hour = EF.Functions.DateDiffHour(HourEpoch, x.CreatedAt) % 24,
+                x.TotalPrice
+            })
+            .GroupBy(x => x.Hour)
+            .Select(x => new
+            {
+                Hour = x.Key,
+                OrdersCount = x.Count(),
+                Revenue = x.Sum(o => o.TotalPrice)
+            })
             .OrderByDescending(x => x.OrdersCount)
+            .Select(x => new PeakHourDto(x.Hour, x.OrdersCount, x.Revenue))
             .ToArrayAsync(cancellationToken);
 
     public async Task<IReadOnlyCollection<WaiterPerformanceDto>> GetWaiterPerformanceAsync(DateOnly? from, DateOnly? to, CancellationToken cancellationToken) =>
@@ -144,9 +163,9 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
         return db.Orders.AsNoTracking().Include(x => x.User).Where(x => x.CreatedAt >= start && x.CreatedAt < end);
     }
 
-    private IQueryable<TopDishDto> DishQuery(DateOnly? from, DateOnly? to)
+    private IQueryable<DishTotalRow> DishQuery(DateOnly? from, DateOnly? to)
     {
-        var query = db.OrderItems.AsNoTracking().Include(x => x.Order).Include(x => x.MenuItem).AsQueryable();
+        var query = db.OrderItems.AsNoTracking().AsQueryable();
         if (from.HasValue && to.HasValue)
         {
             ValidateDateRange(from.Value, to.Value);
@@ -156,8 +175,25 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
 
         query = query.Where(x => x.Order.Status != OrderStatus.Cancelled);
 
-        return query.GroupBy(x => new { x.MenuItemId, x.MenuItem.Name })
-            .Select(x => new TopDishDto(x.Key.MenuItemId, x.Key.Name, x.Sum(i => i.Quantity), x.Sum(i => i.Quantity * i.UnitPrice)));
+        var dishTotals = query.GroupBy(x => x.MenuItemId)
+            .Select(x => new
+            {
+                MenuItemId = x.Key,
+                QuantitySold = x.Sum(i => i.Quantity),
+                Revenue = x.Sum(i => i.Quantity * i.UnitPrice)
+            });
+
+        return from dish in dishTotals
+               join menuItem in db.MenuItems.AsNoTracking()
+                   on dish.MenuItemId equals menuItem.Id into menuItems
+               from menuItem in menuItems.DefaultIfEmpty()
+               select new DishTotalRow
+               {
+                   MenuItemId = dish.MenuItemId,
+                   Name = menuItem == null ? string.Empty : menuItem.Name,
+                   QuantitySold = dish.QuantitySold,
+                   Revenue = dish.Revenue
+               };
     }
 
     private static async Task<decimal> Revenue(IQueryable<Order> orders, CancellationToken cancellationToken) =>
@@ -180,5 +216,16 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
         {
             throw new ApiException("Year must be between 1 and 9999.");
         }
+    }
+
+    private sealed class DishTotalRow
+    {
+        public int MenuItemId { get; set; }
+
+        public string Name { get; set; } = string.Empty;
+
+        public int QuantitySold { get; set; }
+
+        public decimal Revenue { get; set; }
     }
 }

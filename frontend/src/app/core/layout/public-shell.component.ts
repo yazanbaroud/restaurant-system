@@ -2,9 +2,9 @@ import { AsyncPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
+import { roleLabels } from '../../shared/ui-labels';
 import { UserRole } from '../models';
 import { AuthService } from '../services/auth.service';
-import { roleLabels } from '../../shared/ui-labels';
 
 @Component({
   selector: 'app-public-shell',
@@ -24,15 +24,24 @@ import { roleLabels } from '../../shared/ui-labels';
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">בית</a>
           <a routerLink="/menu" routerLinkActive="active">תפריט</a>
           <a routerLink="/reservation" routerLinkActive="active">הזמנת מקום</a>
-          <a routerLink="/login" routerLinkActive="active">כניסה</a>
+          @if (!(auth.currentUser$ | async)) {
+            <a routerLink="/login" routerLinkActive="active">כניסה</a>
+          }
         </nav>
         <div class="role-switch">
           @if (auth.currentUser$ | async; as user) {
             <span>{{ roleLabels[user.role] }}</span>
+            @if (user.role === UserRole.Admin) {
+              <a class="btn btn-small btn-dark" routerLink="/admin">חזרה לממשק מנהל</a>
+            }
+            @if (user.role === UserRole.Waiter) {
+              <a class="btn btn-small btn-dark" routerLink="/waiter">חזרה לממשק מלצר</a>
+            }
             <button type="button" class="btn btn-small btn-ghost" (click)="logout()">יציאה</button>
+          } @else {
+            <button type="button" class="btn btn-small btn-ghost" (click)="goToStaff(UserRole.Waiter, '/waiter')">מלצר</button>
+            <button type="button" class="btn btn-small btn-dark" (click)="goToStaff(UserRole.Admin, '/admin')">מנהל</button>
           }
-          <button type="button" class="btn btn-small btn-ghost" (click)="goToStaff(UserRole.Waiter, '/waiter')">מלצר</button>
-          <button type="button" class="btn btn-small btn-dark" (click)="goToStaff(UserRole.Admin, '/admin')">מנהל</button>
         </div>
       </header>
       <main>

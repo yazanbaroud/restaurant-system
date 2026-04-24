@@ -15,11 +15,13 @@ import {
 import {
   CreateOrderInput,
   CreateOrderItemInput,
+  CreateMenuItemInput,
   CreateReservationInput,
   CreateTableInput,
   DashboardSummary,
   MenuCategory,
   MenuItem,
+  MenuItemImage,
   Order,
   OrderItem,
   OrderStatus,
@@ -39,6 +41,7 @@ import {
   TableOccupancyReport,
   TableStatus,
   TopDish,
+  UpdateMenuItemInput,
   UpdateTableInput,
   User,
   WaiterPerformanceReport
@@ -71,29 +74,145 @@ export class RestaurantDataService {
   }
 
   getMenuItem(id: number): Observable<MenuItem | undefined> {
-    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Menu/${id}`).pipe(
-      map((response) => this.normalizeMenuItem(response)),
+    return this.fetchMenuItemFromApi(id).pipe(
       tap((item) => this.upsertMenuItem(item)),
       catchError(() => this.menuItems$.pipe(map((items) => items.find((item) => item.id === id))))
     );
   }
 
-  toggleMenuAvailability(id: number): void {
-    this.menuSubject.next(
-      this.menuSubject.value.map((item) =>
-        item.id === id ? { ...item, isAvailable: !item.isAvailable } : item
-      )
+  toggleMenuAvailability(id: number): Observable<MenuItem> {
+    const item = this.menuSubject.value.find((candidate) => candidate.id === id);
+    return this.updateMenuItem(id, { isAvailable: !(item?.isAvailable ?? true) });
+  }
+
+  createMenuItem(input: CreateMenuItemInput): Observable<MenuItem> {
+    const imageUrl = input.images?.find((image) => Boolean(image.trim()));
+
+    return this.http.post<unknown>(`${this.apiBaseUrl}/api/Menu`, this.createMenuItemPayload(input)).pipe(
+      map((response) => ({
+        item: this.normalizeMenuItem(response, this.menuFallbackWithoutImages(input)),
+        backendAlreadyReturnedImage: imageUrl ? this.backendMenuResponseHasImage(response, imageUrl) : false
+      })),
+      switchMap(({ item, backendAlreadyReturnedImage }) =>
+        imageUrl && !backendAlreadyReturnedImage
+          ? this.postMenuItemImage(item.id, imageUrl, true).pipe(
+              switchMap(() => this.fetchMenuItemFromApi(item.id).pipe(catchError(() => of(this.withMenuImage(item, imageUrl))))),
+              catchError(() => of(item))
+            )
+          : of(item)
+      ),
+      catchError(() => of(this.createMockMenuItem(input))),
+      tap((item) => this.upsertMenuItem(item))
     );
   }
 
-  createMenuItem(item: Omit<MenuItem, 'id'>): MenuItem {
-    const next: MenuItem = {
-      ...item,
-      id: this.nextId(this.menuSubject.value)
-    };
+  updateMenuItem(id: number, input: UpdateMenuItemInput): Observable<MenuItem> {
+    const existingItem = this.menuSubject.value.find((item) => item.id === id);
+    const fallbackItem: Partial<MenuItem> = { ...existingItem, ...input, id };
+    const imageUrl = input.images?.find((image) => Boolean(image.trim()));
 
-    this.menuSubject.next([next, ...this.menuSubject.value]);
-    return next;
+    return this.http.put<unknown>(`${this.apiBaseUrl}/api/Menu/${id}`, this.updateMenuItemPayload(id, input)).pipe(
+      map((response) => ({
+        item: this.normalizeMenuItem(response, imageUrl ? this.menuFallbackWithoutImages(fallbackItem) : fallbackItem),
+        backendAlreadyReturnedImage: imageUrl ? this.backendMenuResponseHasImage(response, imageUrl) : false
+      })),
+      switchMap(({ item, backendAlreadyReturnedImage }) =>
+        imageUrl && !backendAlreadyReturnedImage
+          ? this.postMenuItemImage(item.id, imageUrl, !item.images.length).pipe(
+              switchMap(() => this.fetchMenuItemFromApi(item.id).pipe(catchError(() => of(this.withMenuImage(item, imageUrl))))),
+              catchError(() => of(item))
+            )
+          : of(item)
+      ),
+      catchError(() => of(this.updateMockMenuItem(id, input))),
+      tap((item) => this.upsertMenuItem(item))
+    );
+  }
+
+  deleteMenuItem(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiBaseUrl}/api/Menu/${id}`).pipe(
+      catchError(() => of(void 0)),
+      tap(() => this.removeMenuItem(id))
+    );
+  }
+
+  addMenuItemImage(id: number, imageUrl: string, isMainImage = false): Observable<MenuItem> {
+    const existingItem = this.menuSubject.value.find((item) => item.id === id);
+
+    return this.postMenuItemImage(id, imageUrl, isMainImage).pipe(
+      switchMap(() => this.fetchMenuItemFromApi(id).pipe(catchError(() => of(existingItem ? this.withMenuImage(existingItem, imageUrl) : this.createMissingMenuItem(id, imageUrl))))),
+      catchError(() => of(existingItem ? this.withMenuImage(existingItem, imageUrl) : this.createMissingMenuItem(id, imageUrl))),
+      tap((item) => this.upsertMenuItem(item))
+    );
+  }
+
+  deleteMenuItemImage(menuItemId: number, imageId: number): Observable<MenuItem> {
+    const existingItem = this.menuSubject.value.find((item) => item.id === menuItemId);
+
+    return this.http.delete<void>(`${this.apiBaseUrl}/api/Menu/${menuItemId}/images/${imageId}`).pipe(
+      switchMap(() => this.fetchMenuItemFromApi(menuItemId).pipe(catchError(() => of(existingItem ? this.withoutMenuImage(existingItem, imageId) : this.createMissingMenuItem(menuItemId))))),
+      catchError(() => of(existingItem ? this.withoutMenuImage(existingItem, imageId) : this.createMissingMenuItem(menuItemId))),
+      tap((item) => this.upsertMenuItem(item))
+    );
+  }
+
+  private createMockMenuItem(input: CreateMenuItemInput): MenuItem {
+    return {
+      id: this.nextId(this.menuSubject.value),
+      name: input.name,
+      description: input.description,
+      price: input.price,
+      category: input.category,
+      isAvailable: input.isAvailable,
+      images: input.images?.length ? input.images : this.defaultMenuImages()
+    };
+  }
+
+  private updateMockMenuItem(id: number, input: UpdateMenuItemInput): MenuItem {
+    const item = this.menuSubject.value.find((candidate) => candidate.id === id);
+
+    return {
+      id,
+      name: input.name ?? item?.name ?? '',
+      description: input.description ?? item?.description ?? '',
+      price: input.price ?? item?.price ?? 0,
+      category: input.category ?? item?.category ?? MenuCategory.MainCourses,
+      isAvailable: input.isAvailable ?? item?.isAvailable ?? true,
+      images: input.images?.length ? input.images : item?.images ?? this.defaultMenuImages(),
+      imageItems: item?.imageItems
+    };
+  }
+
+  private createMissingMenuItem(id: number, imageUrl?: string): MenuItem {
+    return {
+      id,
+      name: '',
+      description: '',
+      price: 0,
+      category: MenuCategory.MainCourses,
+      isAvailable: true,
+      images: imageUrl ? [imageUrl] : this.defaultMenuImages()
+    };
+  }
+
+  private withMenuImage(item: MenuItem, imageUrl: string): MenuItem {
+    const images = item.images.includes(imageUrl) ? item.images : [imageUrl, ...item.images];
+    return { ...item, images };
+  }
+
+  private withoutMenuImage(item: MenuItem, imageId: number): MenuItem {
+    const imageItems = item.imageItems?.filter((image) => image.id !== imageId);
+    const imageUrls = imageItems?.map((image) => image.imageUrl) ?? item.images;
+
+    return {
+      ...item,
+      imageItems,
+      images: imageUrls.length ? imageUrls : this.defaultMenuImages()
+    };
+  }
+
+  private removeMenuItem(id: number): void {
+    this.menuSubject.next(this.menuSubject.value.filter((item) => item.id !== id));
   }
 
   getTables(): Observable<Table[]> {
@@ -1428,23 +1547,113 @@ export class RestaurantDataService {
     );
   }
 
+  private fetchMenuItemFromApi(id: number): Observable<MenuItem> {
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Menu/${id}`).pipe(
+      map((response) => this.normalizeMenuItem(response))
+    );
+  }
+
   private normalizeMenuItems(response: unknown): MenuItem[] {
     const rawItems = this.extractArrayPayload(response);
     return rawItems.map((item) => this.normalizeMenuItem(item));
   }
 
-  private normalizeMenuItem(response: unknown): MenuItem {
-    const record = this.asRecord(response) ?? {};
+  private normalizeMenuItem(response: unknown, fallback: Partial<MenuItem> = {}): MenuItem {
+    const record = this.extractMenuPayload(response) ?? {};
+    const imageItems = this.normalizeMenuImageItems(record['images'] ?? record['imageUrls'] ?? record['imageUrl']);
+    const images = imageItems.length ? imageItems.map((image) => image.imageUrl) : this.normalizeImages(record['images'] ?? record['imageUrls'] ?? record['imageUrl'] ?? fallback.images);
 
     return {
-      id: this.numberValue(record['id']),
-      name: this.stringValue(record['name']),
-      description: this.stringValue(record['description']),
-      price: this.numberValue(record['price']),
-      category: this.normalizeMenuCategory(record['category']),
-      isAvailable: this.booleanValue(record['isAvailable'], true),
-      images: this.normalizeImages(record['images'] ?? record['imageUrls'] ?? record['imageUrl'])
+      id: this.numberValue(record['id'], fallback.id ?? this.nextId(this.menuSubject.value)),
+      name: this.stringValue(record['name']) || fallback.name || '',
+      description: this.stringValue(record['description']) || fallback.description || '',
+      price: this.numberValue(record['price'], fallback.price ?? 0),
+      category: this.normalizeMenuCategory(record['category'] ?? fallback.category),
+      isAvailable: this.booleanValue(record['isAvailable'], fallback.isAvailable ?? true),
+      images,
+      imageItems: imageItems.length ? imageItems : fallback.imageItems
     };
+  }
+
+  private createMenuItemPayload(input: CreateMenuItemInput): Record<string, unknown> {
+    return {
+      name: input.name,
+      description: input.description,
+      price: input.price,
+      category: input.category,
+      isAvailable: input.isAvailable
+    };
+  }
+
+  private updateMenuItemPayload(id: number, input: UpdateMenuItemInput): Record<string, unknown> {
+    const existingItem = this.menuSubject.value.find((item) => item.id === id);
+
+    return {
+      name: input.name ?? existingItem?.name ?? '',
+      description: input.description ?? existingItem?.description ?? '',
+      price: input.price ?? existingItem?.price ?? 0,
+      category: input.category ?? existingItem?.category ?? MenuCategory.MainCourses,
+      isAvailable: input.isAvailable ?? existingItem?.isAvailable ?? true
+    };
+  }
+
+  private menuFallbackWithoutImages(fallback: Partial<MenuItem>): Partial<MenuItem> {
+    const { images: _images, imageItems: _imageItems, ...itemFallback } = fallback;
+    return itemFallback;
+  }
+
+  private backendMenuResponseHasImage(response: unknown, imageUrl: string): boolean {
+    const expectedUrl = imageUrl.trim();
+    if (!expectedUrl) {
+      return false;
+    }
+
+    const record = this.extractMenuPayload(response);
+    if (!record) {
+      return false;
+    }
+
+    const backendImageUrls = this.extractBackendMenuImageUrls(record['images'] ?? record['imageUrls'] ?? record['imageUrl']);
+    return backendImageUrls.some((url) => url === expectedUrl);
+  }
+
+  private extractBackendMenuImageUrls(value: unknown): string[] {
+    if (Array.isArray(value)) {
+      return value.map((image) => this.extractImageUrl(image)).filter(Boolean);
+    }
+
+    const imageUrl = this.extractImageUrl(value);
+    return imageUrl ? [imageUrl] : [];
+  }
+
+  private postMenuItemImage(menuItemId: number, imageUrl: string, isMainImage = false): Observable<unknown> {
+    return this.http.post<unknown>(`${this.apiBaseUrl}/api/Menu/${menuItemId}/images`, {
+      imageUrl,
+      isMainImage
+    });
+  }
+
+  private extractMenuPayload(response: unknown): Record<string, unknown> | null {
+    const record = this.asRecord(response);
+    if (!record) {
+      return null;
+    }
+
+    if ('id' in record || 'name' in record || 'price' in record || 'category' in record) {
+      return record;
+    }
+
+    for (const key of ['menuItem', 'item', 'data', 'result']) {
+      const value = this.asRecord(record[key]);
+      if (value) {
+        const nestedMenuItem = this.extractMenuPayload(value);
+        if (nestedMenuItem) {
+          return nestedMenuItem;
+        }
+      }
+    }
+
+    return record;
   }
 
   private extractArrayPayload(response: unknown): unknown[] {
@@ -1519,6 +1728,39 @@ export class RestaurantDataService {
     const items = this.menuSubject.value;
     const exists = items.some((candidate) => candidate.id === item.id);
     this.menuSubject.next(exists ? items.map((candidate) => (candidate.id === item.id ? item : candidate)) : [item, ...items]);
+  }
+
+  private normalizeMenuImageItems(value: unknown): MenuItemImage[] {
+    if (!Array.isArray(value)) {
+      const record = this.asRecord(value);
+      const imageUrl = this.extractImageUrl(value);
+
+      return record && imageUrl
+        ? [{
+            id: this.numberValue(record['id']),
+            menuItemId: this.numberValue(record['menuItemId']),
+            imageUrl,
+            isMainImage: this.booleanValue(record['isMainImage'], false)
+          }]
+        : [];
+    }
+
+    return value
+      .map((image, index) => {
+        const record = this.asRecord(image);
+        const imageUrl = this.extractImageUrl(image);
+
+        return record && imageUrl
+          ? {
+              id: this.numberValue(record['id'], index + 1),
+              menuItemId: this.numberValue(record['menuItemId']),
+              imageUrl,
+              isMainImage: this.booleanValue(record['isMainImage'], false)
+            }
+          : null;
+      })
+      .filter((image): image is MenuItemImage => Boolean(image))
+      .sort((a, b) => Number(b.isMainImage) - Number(a.isMainImage));
   }
 
   private normalizeImages(value: unknown): string[] {

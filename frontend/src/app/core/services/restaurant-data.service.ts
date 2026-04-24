@@ -1,6 +1,8 @@
-import { Injectable } from '@angular/core';
-import { BehaviorSubject, map, Observable, of } from 'rxjs';
+import { HttpClient } from '@angular/common/http';
+import { Injectable, inject } from '@angular/core';
+import { BehaviorSubject, Observable, catchError, map, of, switchMap, tap } from 'rxjs';
 
+import { environment } from '../../../environments/environment';
 import {
   MOCK_DASHBOARD,
   MOCK_MENU_ITEMS,
@@ -14,6 +16,7 @@ import {
   CreateOrderInput,
   CreateReservationInput,
   DashboardSummary,
+  MenuCategory,
   MenuItem,
   Order,
   OrderStatus,
@@ -29,6 +32,8 @@ import {
 
 @Injectable({ providedIn: 'root' })
 export class RestaurantDataService {
+  private readonly http = inject(HttpClient);
+  private readonly apiBaseUrl = environment.apiBaseUrl;
   private readonly menuSubject = new BehaviorSubject<MenuItem[]>(structuredClone(MOCK_MENU_ITEMS));
   private readonly tablesSubject = new BehaviorSubject<Table[]>(structuredClone(MOCK_TABLES));
   private readonly ordersSubject = new BehaviorSubject<Order[]>(structuredClone(MOCK_ORDERS));
@@ -44,15 +49,19 @@ export class RestaurantDataService {
   readonly users$ = this.usersSubject.asObservable();
 
   getMenuItems(): Observable<MenuItem[]> {
-    return this.menuItems$;
+    return this.fetchMenuItemsFromApi().pipe(switchMap(() => this.menuItems$));
   }
 
   getAvailableMenuItems(): Observable<MenuItem[]> {
-    return this.menuItems$.pipe(map((items) => items.filter((item) => item.isAvailable)));
+    return this.getMenuItems().pipe(map((items) => items.filter((item) => item.isAvailable)));
   }
 
   getMenuItem(id: number): Observable<MenuItem | undefined> {
-    return this.menuItems$.pipe(map((items) => items.find((item) => item.id === id)));
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Menu/${id}`).pipe(
+      map((response) => this.normalizeMenuItem(response)),
+      tap((item) => this.upsertMenuItem(item)),
+      catchError(() => this.menuItems$.pipe(map((items) => items.find((item) => item.id === id))))
+    );
   }
 
   toggleMenuAvailability(id: number): void {
@@ -257,6 +266,128 @@ export class RestaurantDataService {
 
   private nextId<T extends { id: number }>(items: T[]): number {
     return Math.max(0, ...items.map((item) => item.id)) + 1;
+  }
+
+  private fetchMenuItemsFromApi(): Observable<MenuItem[]> {
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Menu`).pipe(
+      map((response) => this.normalizeMenuItems(response)),
+      tap((items) => this.menuSubject.next(items)),
+      catchError(() => of(this.menuSubject.value))
+    );
+  }
+
+  private normalizeMenuItems(response: unknown): MenuItem[] {
+    const rawItems = this.extractArrayPayload(response);
+    return rawItems.map((item) => this.normalizeMenuItem(item));
+  }
+
+  private normalizeMenuItem(response: unknown): MenuItem {
+    const record = this.asRecord(response) ?? {};
+
+    return {
+      id: this.numberValue(record['id']),
+      name: this.stringValue(record['name']),
+      description: this.stringValue(record['description']),
+      price: this.numberValue(record['price']),
+      category: this.normalizeMenuCategory(record['category']),
+      isAvailable: this.booleanValue(record['isAvailable'], true),
+      images: this.normalizeImages(record['images'] ?? record['imageUrls'] ?? record['imageUrl'])
+    };
+  }
+
+  private extractArrayPayload(response: unknown): unknown[] {
+    if (Array.isArray(response)) {
+      return response;
+    }
+
+    const record = this.asRecord(response);
+    for (const key of ['items', 'data', 'result', 'menuItems']) {
+      const value = record?.[key];
+      if (Array.isArray(value)) {
+        return value;
+      }
+    }
+
+    return [];
+  }
+
+  private upsertMenuItem(item: MenuItem): void {
+    const items = this.menuSubject.value;
+    const exists = items.some((candidate) => candidate.id === item.id);
+    this.menuSubject.next(exists ? items.map((candidate) => (candidate.id === item.id ? item : candidate)) : [item, ...items]);
+  }
+
+  private normalizeImages(value: unknown): string[] {
+    if (Array.isArray(value)) {
+      const imageUrls = value
+        .map((image, index) => ({
+          index,
+          isMainImage: this.booleanValue(this.asRecord(image)?.['isMainImage'], false),
+          imageUrl: this.extractImageUrl(image)
+        }))
+        .filter((image): image is { index: number; isMainImage: boolean; imageUrl: string } => Boolean(image.imageUrl))
+        .sort((a, b) => Number(b.isMainImage) - Number(a.isMainImage) || a.index - b.index)
+        .map((image) => image.imageUrl);
+
+      return imageUrls.length ? imageUrls : this.defaultMenuImages();
+    }
+
+    const imageUrl = this.extractImageUrl(value);
+    return imageUrl ? [imageUrl] : this.defaultMenuImages();
+  }
+
+  private extractImageUrl(value: unknown): string {
+    if (typeof value === 'string') {
+      return value.trim();
+    }
+
+    const record = this.asRecord(value);
+    return this.stringValue(record?.['imageUrl']).trim();
+  }
+
+  private defaultMenuImages(): string[] {
+    return ['https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=900&q=80'];
+  }
+
+  private booleanValue(value: unknown, fallback: boolean): boolean {
+    return typeof value === 'boolean' ? value : fallback;
+  }
+
+  private normalizeMenuCategory(value: unknown): MenuCategory {
+    const numericValue = this.numberValue(value);
+    if (this.isMenuCategory(numericValue)) {
+      return numericValue;
+    }
+
+    if (typeof value === 'string') {
+      const categoryName = value.toLowerCase();
+      const category = Object.values(MenuCategory)
+        .filter((candidate): candidate is MenuCategory => typeof candidate === 'number')
+        .find((candidate) => MenuCategory[candidate].toLowerCase() === categoryName);
+
+      if (category) {
+        return category;
+      }
+    }
+
+    return MenuCategory.MainCourses;
+  }
+
+  private isMenuCategory(value: number): value is MenuCategory {
+    return Object.values(MenuCategory).includes(value);
+  }
+
+  private numberValue(value: unknown): number {
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : 0;
+  }
+
+  private stringValue(value: unknown): string {
+    return typeof value === 'string' ? value : '';
+  }
+
+  private asRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' ? (value as Record<string, unknown>) : null;
   }
 
   private getTotalPaidForOrder(payments: Payment[], orderId: number): number {

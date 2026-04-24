@@ -16,6 +16,7 @@ import {
   CreateOrderInput,
   CreateOrderItemInput,
   CreateReservationInput,
+  CreateTableInput,
   DashboardSummary,
   MenuCategory,
   MenuItem,
@@ -38,6 +39,7 @@ import {
   TableOccupancyReport,
   TableStatus,
   TopDish,
+  UpdateTableInput,
   User,
   WaiterPerformanceReport
 } from '../models';
@@ -95,12 +97,74 @@ export class RestaurantDataService {
   }
 
   getTables(): Observable<Table[]> {
-    return this.tables$;
+    return this.fetchTablesFromApi().pipe(switchMap(() => this.tables$));
   }
 
-  updateTableStatus(id: number, status: TableStatus): void {
+  createTable(input: CreateTableInput): Observable<Table> {
+    return this.http.post<unknown>(`${this.apiBaseUrl}/api/Tables`, this.createTablePayload(input)).pipe(
+      map((response) => this.normalizeTable(response, input)),
+      catchError(() => of(this.createMockTable(input))),
+      tap((table) => this.upsertTable(table))
+    );
+  }
+
+  updateTable(id: number, input: UpdateTableInput): Observable<Table> {
+    const existingTable = this.tablesSubject.value.find((table) => table.id === id);
+    const fallbackTable: Partial<Table> = { ...existingTable, ...input, id };
+
+    return this.http.put<unknown>(`${this.apiBaseUrl}/api/Tables/${id}`, this.updateTablePayload(input)).pipe(
+      map((response) => this.normalizeTable(response, fallbackTable)),
+      catchError(() => of(this.updateMockTable(id, input))),
+      tap((table) => this.upsertTable(table))
+    );
+  }
+
+  updateTableStatus(id: number, status: TableStatus): Observable<Table> {
+    const existingTable = this.tablesSubject.value.find((table) => table.id === id);
+    const fallbackTable: Partial<Table> = { ...existingTable, id, status };
+
+    return this.http.put<unknown>(`${this.apiBaseUrl}/api/Tables/${id}/status`, { status }).pipe(
+      map((response) => this.normalizeTable(response, fallbackTable)),
+      catchError(() => of(this.updateMockTableStatus(id, status))),
+      tap((table) => this.upsertTable(table))
+    );
+  }
+
+  private createMockTable(input: CreateTableInput): Table {
+    return {
+      id: this.nextId(this.tablesSubject.value),
+      name: input.name,
+      capacity: input.capacity,
+      status: input.status ?? TableStatus.Available,
+      location: input.location,
+      notes: input.notes
+    };
+  }
+
+  private updateMockTable(id: number, input: UpdateTableInput): Table {
+    const table = this.tablesSubject.value.find((candidate) => candidate.id === id);
+
+    return {
+      id,
+      name: input.name ?? table?.name ?? '',
+      capacity: input.capacity ?? table?.capacity ?? 0,
+      status: input.status ?? table?.status ?? TableStatus.Available,
+      location: input.location ?? table?.location,
+      notes: input.notes ?? table?.notes
+    };
+  }
+
+  private updateMockTableStatus(id: number, status: TableStatus): Table {
+    return this.updateMockTable(id, { status });
+  }
+
+  private upsertTable(table: Table): void {
+    const tables = this.tablesSubject.value;
+    const exists = tables.some((candidate) => candidate.id === table.id);
     this.tablesSubject.next(
-      this.tablesSubject.value.map((table) => (table.id === id ? { ...table, status } : table))
+      exists
+        ? tables.map((candidate) => (candidate.id === table.id ? table : candidate))
+        : [table, ...tables]
     );
   }
 
@@ -829,6 +893,136 @@ export class RestaurantDataService {
     return Math.max(0, ...items.map((item) => item.id)) + 1;
   }
 
+  private fetchTablesFromApi(): Observable<Table[]> {
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Tables`).pipe(
+      map((response) => this.normalizeTables(response)),
+      tap((tables) => this.tablesSubject.next(tables)),
+      catchError(() => of(this.tablesSubject.value))
+    );
+  }
+
+  private normalizeTables(response: unknown): Table[] {
+    return this.extractTableArrayPayload(response).map((table) => this.normalizeTable(table));
+  }
+
+  private normalizeTable(response: unknown, fallback: Partial<Table> = {}): Table {
+    const record = this.extractTablePayload(response) ?? {};
+
+    return {
+      id: this.numberValue(record['id'] ?? record['tableId'], fallback.id ?? this.nextId(this.tablesSubject.value)),
+      name:
+        this.stringValue(record['name'] ?? record['tableName']) ||
+        fallback.name ||
+        '',
+      capacity: this.numberValue(record['capacity'] ?? record['seats'] ?? record['guestCapacity'], fallback.capacity ?? 0),
+      status: this.normalizeTableStatus(record['status'] ?? fallback.status, fallback.status ?? TableStatus.Available),
+      location:
+        this.stringValue(record['location'] ?? record['area'] ?? record['section']) ||
+        fallback.location,
+      notes:
+        this.stringValue(record['notes'] ?? record['description']) ||
+        fallback.notes
+    };
+  }
+
+  private createTablePayload(input: CreateTableInput): Record<string, unknown> {
+    const payload: Record<string, unknown> = {
+      name: input.name,
+      capacity: input.capacity
+    };
+
+    if (input.status != null) {
+      payload['status'] = input.status;
+    }
+
+    if (input.location) {
+      payload['location'] = input.location;
+    }
+
+    if (input.notes) {
+      payload['notes'] = input.notes;
+    }
+
+    return payload;
+  }
+
+  private updateTablePayload(input: UpdateTableInput): Record<string, unknown> {
+    const payload: Record<string, unknown> = {};
+
+    if (input.name != null) {
+      payload['name'] = input.name;
+    }
+
+    if (input.capacity != null) {
+      payload['capacity'] = input.capacity;
+    }
+
+    if (input.status != null) {
+      payload['status'] = input.status;
+    }
+
+    if (input.location != null) {
+      payload['location'] = input.location;
+    }
+
+    if (input.notes != null) {
+      payload['notes'] = input.notes;
+    }
+
+    return payload;
+  }
+
+  private extractTableArrayPayload(response: unknown): unknown[] {
+    if (Array.isArray(response)) {
+      return response;
+    }
+
+    const record = this.asRecord(response);
+    if (!record) {
+      return [];
+    }
+
+    for (const key of ['tables', 'items', 'data', 'result']) {
+      const value = record[key];
+      if (Array.isArray(value)) {
+        return value;
+      }
+
+      const nested = this.asRecord(value);
+      if (nested) {
+        const nestedTables = this.extractTableArrayPayload(nested);
+        if (nestedTables.length) {
+          return nestedTables;
+        }
+      }
+    }
+
+    return [];
+  }
+
+  private extractTablePayload(response: unknown): Record<string, unknown> | null {
+    const record = this.asRecord(response);
+    if (!record) {
+      return null;
+    }
+
+    if ('id' in record || 'tableId' in record || 'name' in record || 'tableName' in record) {
+      return record;
+    }
+
+    for (const key of ['table', 'data', 'result']) {
+      const value = this.asRecord(record[key]);
+      if (value) {
+        const nestedTable = this.extractTablePayload(value);
+        if (nestedTable) {
+          return nestedTable;
+        }
+      }
+    }
+
+    return record;
+  }
+
   private fetchReservationsFromApi(): Observable<Reservation[]> {
     return this.http.get<unknown>(`${this.apiBaseUrl}/api/Reservations`).pipe(
       map((response) => this.normalizeReservations(response)),
@@ -1166,7 +1360,9 @@ export class RestaurantDataService {
       id,
       name: this.stringValue(tableRecord['name'] ?? record['tableName']) || `שולחן ${id}`,
       capacity: this.numberValue(tableRecord['capacity']),
-      status: this.normalizeTableStatus(tableRecord['status'])
+      status: this.normalizeTableStatus(tableRecord['status']),
+      location: this.stringValue(tableRecord['location'] ?? tableRecord['area'] ?? tableRecord['section']),
+      notes: this.stringValue(tableRecord['notes'] ?? tableRecord['description'])
     };
   }
 
@@ -1485,14 +1681,14 @@ export class RestaurantDataService {
     return PaymentMethod.CreditCard;
   }
 
-  private normalizeTableStatus(value: unknown): TableStatus {
+  private normalizeTableStatus(value: unknown, fallback = TableStatus.Occupied): TableStatus {
     const numericValue = this.numberValue(value);
     if (this.isTableStatus(numericValue)) {
       return numericValue;
     }
 
     if (typeof value === 'string') {
-      const statusName = value.toLowerCase();
+      const statusName = value.toLowerCase().replace(/[\s_-]/g, '');
       const status = Object.values(TableStatus)
         .filter((candidate): candidate is TableStatus => typeof candidate === 'number')
         .find((candidate) => TableStatus[candidate].toLowerCase() === statusName);
@@ -1502,7 +1698,7 @@ export class RestaurantDataService {
       }
     }
 
-    return TableStatus.Occupied;
+    return fallback;
   }
 
   private isOrderStatus(value: number): value is OrderStatus {

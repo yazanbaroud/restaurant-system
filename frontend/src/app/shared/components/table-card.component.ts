@@ -15,6 +15,12 @@ import { StatusBadgeComponent } from './status-badge.component';
         <app-status-badge [label]="tableStatusLabels[table.status]" [tone]="tableStatusTones[table.status]" />
       </div>
       <p>{{ table.capacity }} מקומות</p>
+      @if (table.location) {
+        <p class="muted">{{ table.location }}</p>
+      }
+      @if (table.notes) {
+        <p class="muted">{{ table.notes }}</p>
+      }
       @if (selectable) {
         <button type="button" class="btn btn-small" [class.btn-gold]="!selected" [class.btn-dark]="selected" (click)="select.emit(table)">
           {{ selected ? 'נבחר' : 'בחירה' }}

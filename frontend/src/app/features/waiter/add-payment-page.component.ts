@@ -2,9 +2,9 @@ import { AsyncPipe, CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { combineLatest, map, tap } from 'rxjs';
+import { combineLatest, finalize, map, tap } from 'rxjs';
 
-import { Order, Payment, PaymentMethod } from '../../core/models';
+import { Order, Payment, PaymentMethod, PaymentStatus } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { paymentMethodLabels } from '../../shared/ui-labels';
@@ -34,9 +34,12 @@ interface PaymentViewModel {
 
         @if (vm.isPaid) {
           <div class="success-panel paid-state">
-            <strong>ההזמנה שולמה במלואה</strong>
-            <p>אין יתרה פתוחה, ולא ניתן להוסיף תשלום נוסף במסך זה.</p>
+            <strong>ההזמנה סומנה כשולמה</strong>
+            <p>סטטוס התשלום התקבל מהשרת. אין אפשרות להוסיף תשלום נוסף במסך זה.</p>
           </div>
+        }
+        @if (errorMessage) {
+          <div class="validation-note">{{ errorMessage }}</div>
         }
 
         <div class="payment-summary-grid">
@@ -56,7 +59,7 @@ interface PaymentViewModel {
 
         <div class="payment-layout">
           <form class="panel payment-form" [formGroup]="form" (ngSubmit)="submit()">
-            <fieldset class="form-grid" [disabled]="vm.isPaid">
+            <fieldset class="form-grid" [disabled]="vm.isPaid || isSubmitting">
               <legend>תשלום חדש</legend>
               <label>
                 אמצעי תשלום
@@ -82,7 +85,7 @@ interface PaymentViewModel {
                 <p class="validation-note full">הסכום גבוה מהיתרה לתשלום.</p>
               }
               <button class="btn btn-gold full" type="submit" [disabled]="!canSubmit(vm)">
-                הוספת תשלום
+                {{ isSubmitting ? 'שומרים תשלום...' : 'הוספת תשלום' }}
               </button>
             </fieldset>
           </form>
@@ -138,7 +141,7 @@ export class AddPaymentPageComponent {
         payments,
         totalPaid,
         remainingBalance,
-        isPaid: totalPaid >= order.totalPrice
+        isPaid: order.paymentStatus === PaymentStatus.Paid
       };
     }),
     tap((vm) => {
@@ -159,12 +162,22 @@ export class AddPaymentPageComponent {
     })
   );
 
+  isSubmitting = false;
+  errorMessage = '';
+
   get amountValue(): number {
     return Number(this.form.controls.amount.value) || 0;
   }
 
   canSubmit(vm: PaymentViewModel): boolean {
-    return this.form.valid && !vm.isPaid && this.amountValue > 0 && this.amountValue <= vm.remainingBalance;
+    return (
+      this.form.valid &&
+      !this.isSubmitting &&
+      !vm.isPaid &&
+      vm.remainingBalance > 0 &&
+      this.amountValue > 0 &&
+      this.amountValue <= vm.remainingBalance
+    );
   }
 
   submit(): void {
@@ -174,7 +187,18 @@ export class AddPaymentPageComponent {
     }
 
     const amount = this.form.controls.amount.value;
+    this.isSubmitting = true;
+    this.errorMessage = '';
     this.form.controls.amount.setValue(0, { emitEvent: false });
-    this.data.addPayment(this.id, amount, this.form.controls.method.value);
+
+    this.data.addPayment(this.id, amount, this.form.controls.method.value).pipe(
+      finalize(() => {
+        this.isSubmitting = false;
+      })
+    ).subscribe({
+      error: () => {
+        this.errorMessage = 'לא הצלחנו לשמור את התשלום. נסו שוב בעוד רגע.';
+      }
+    });
   }
 }

@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { BehaviorSubject, Observable, catchError, map, of, switchMap, tap } from 'rxjs';
+import { BehaviorSubject, Observable, catchError, forkJoin, map, of, switchMap, tap } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import {
@@ -100,9 +100,8 @@ export class RestaurantDataService {
   }
 
   getOrder(id: number): Observable<Order | undefined> {
-    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Orders/${id}`).pipe(
-      map((response) => this.normalizeOrder(response)),
-      tap((order) => this.upsertOrder(order)),
+    return this.fetchOrderFromApi(id).pipe(
+      switchMap(() => this.orders$.pipe(map((orders) => orders.find((order) => order.id === id)))),
       catchError(() => this.orders$.pipe(map((orders) => orders.find((order) => order.id === id))))
     );
   }
@@ -172,7 +171,46 @@ export class RestaurantDataService {
     }
   }
 
-  addPayment(orderId: number, amount: number, method: PaymentMethod): Payment {
+  addPayment(orderId: number, amount: number, method: PaymentMethod): Observable<Payment> {
+    return this.http.post<unknown>(`${this.apiBaseUrl}/api/Payments`, this.createPaymentPayload(orderId, amount, method)).pipe(
+      map((response) => {
+        const orderPayload = this.extractNestedObject(response, ['order']);
+        return {
+          payment: this.normalizePayment(response, { orderId, amount, method }),
+          backendOrder: orderPayload ? this.normalizeOrder(orderPayload) : null,
+          isFallback: false
+        };
+      }),
+      catchError(() =>
+        of({
+          payment: this.addMockPayment(orderId, amount, method),
+          backendOrder: null,
+          isFallback: true
+        })
+      ),
+      tap((result) => {
+        if (result.backendOrder) {
+          this.upsertOrder(result.backendOrder);
+        }
+
+        this.upsertPayment(result.payment);
+
+        if (result.isFallback) {
+          this.updateMockOrderPaymentStatus(orderId);
+        }
+      }),
+      switchMap((result) =>
+        result.isFallback
+          ? of(result.payment)
+          : forkJoin({
+              payments: this.fetchPaymentsForOrderFromApi(orderId).pipe(catchError(() => of(this.paymentsSubject.value))),
+              order: this.fetchOrderFromApi(orderId).pipe(catchError(() => of(null)))
+            }).pipe(map(() => result.payment))
+      )
+    );
+  }
+
+  private addMockPayment(orderId: number, amount: number, method: PaymentMethod): Payment {
     const payment: Payment = {
       id: this.nextId(this.paymentsSubject.value),
       orderId,
@@ -181,15 +219,17 @@ export class RestaurantDataService {
       paidAt: new Date().toISOString()
     };
 
-    const payments = [payment, ...this.paymentsSubject.value];
-    this.paymentsSubject.next(payments);
+    return payment;
+  }
+
+  private updateMockOrderPaymentStatus(orderId: number): void {
     this.ordersSubject.next(
       this.ordersSubject.value.map((order) => {
         if (order.id !== orderId) {
           return order;
         }
 
-        const totalPaid = this.getTotalPaidForOrder(payments, orderId);
+        const totalPaid = this.getTotalPaidForOrder(this.paymentsSubject.value, orderId);
 
         return {
           ...order,
@@ -197,7 +237,6 @@ export class RestaurantDataService {
         };
       })
     );
-    return payment;
   }
 
   getReservations(): Observable<Reservation[]> {
@@ -236,16 +275,13 @@ export class RestaurantDataService {
   }
 
   getPayments(): Observable<Payment[]> {
-    return this.payments$;
+    return this.fetchPaymentsFromApi().pipe(switchMap(() => this.payments$));
   }
 
   getPaymentsForOrder(orderId: number): Observable<Payment[]> {
-    return this.payments$.pipe(
-      map((payments) =>
-        [...payments]
-          .filter((payment) => payment.orderId === orderId)
-          .sort((a, b) => b.paidAt.localeCompare(a.paidAt))
-      )
+    return this.fetchPaymentsForOrderFromApi(orderId).pipe(
+      switchMap(() => this.orderPaymentsFromState(orderId)),
+      catchError(() => this.orderPaymentsFromState(orderId))
     );
   }
 
@@ -290,6 +326,99 @@ export class RestaurantDataService {
       tap((orders) => this.ordersSubject.next(orders)),
       catchError(() => of(this.ordersSubject.value))
     );
+  }
+
+  private fetchOrderFromApi(id: number): Observable<Order> {
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Orders/${id}`).pipe(
+      map((response) => this.normalizeOrder(response)),
+      tap((order) => this.upsertOrder(order))
+    );
+  }
+
+  private fetchPaymentsFromApi(): Observable<Payment[]> {
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Payments`).pipe(
+      map((response) => this.normalizePayments(response)),
+      tap((payments) => this.paymentsSubject.next(payments)),
+      catchError(() => of(this.paymentsSubject.value))
+    );
+  }
+
+  private fetchPaymentsForOrderFromApi(orderId: number): Observable<Payment[]> {
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Payments/order/${orderId}`).pipe(
+      map((response) => this.normalizePayments(response, orderId)),
+      tap((payments) => this.replacePaymentsForOrder(orderId, payments))
+    );
+  }
+
+  private orderPaymentsFromState(orderId: number): Observable<Payment[]> {
+    return this.payments$.pipe(
+      map((payments) =>
+        [...payments]
+          .filter((payment) => payment.orderId === orderId)
+          .sort((a, b) => b.paidAt.localeCompare(a.paidAt))
+      )
+    );
+  }
+
+  private normalizePayments(response: unknown, fallbackOrderId?: number): Payment[] {
+    return this.extractArrayPayload(response).map((payment) => this.normalizePayment(payment, { orderId: fallbackOrderId }));
+  }
+
+  private normalizePayment(
+    response: unknown,
+    fallback: { orderId?: number; amount?: number; method?: PaymentMethod } = {}
+  ): Payment {
+    const record = this.extractPaymentPayload(response) ?? {};
+
+    return {
+      id: this.numberValue(record['id'], this.nextId(this.paymentsSubject.value)),
+      orderId: this.numberValue(record['orderId'], fallback.orderId ?? 0),
+      amount: this.numberValue(record['amount'], fallback.amount ?? 0),
+      method: this.normalizePaymentMethod(record['method'] ?? record['paymentMethod'] ?? fallback.method),
+      paidAt: this.stringValue(record['paidAt'] ?? record['createdAt']) || new Date().toISOString()
+    };
+  }
+
+  private extractPaymentPayload(response: unknown): Record<string, unknown> | null {
+    const record = this.asRecord(response);
+    if (!record) {
+      return null;
+    }
+
+    if ('amount' in record || 'paymentMethod' in record || 'paidAt' in record) {
+      return record;
+    }
+
+    for (const key of ['payment', 'data', 'result']) {
+      const value = this.asRecord(record[key]);
+      if (value) {
+        const nestedPayment = this.extractPaymentPayload(value);
+        if (nestedPayment) {
+          return nestedPayment;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private createPaymentPayload(orderId: number, amount: number, method: PaymentMethod): {
+    orderId: number;
+    amount: number;
+    method: PaymentMethod;
+  } {
+    return { orderId, amount, method };
+  }
+
+  private upsertPayment(payment: Payment): void {
+    const payments = this.paymentsSubject.value;
+    const exists = payments.some((candidate) => candidate.id === payment.id);
+    this.paymentsSubject.next(exists ? payments.map((candidate) => (candidate.id === payment.id ? payment : candidate)) : [payment, ...payments]);
+  }
+
+  private replacePaymentsForOrder(orderId: number, payments: Payment[]): void {
+    const otherPayments = this.paymentsSubject.value.filter((payment) => payment.orderId !== orderId);
+    this.paymentsSubject.next([...payments, ...otherPayments]);
   }
 
   private normalizeOrders(response: unknown): Order[] {
@@ -485,6 +614,27 @@ export class RestaurantDataService {
     return record;
   }
 
+  private extractNestedObject(response: unknown, keys: string[]): Record<string, unknown> | null {
+    const record = this.asRecord(response);
+    if (!record) {
+      return null;
+    }
+
+    for (const key of keys) {
+      const value = this.asRecord(record[key]);
+      if (value) {
+        return value;
+      }
+    }
+
+    const data = this.asRecord(record['data']);
+    if (data) {
+      return this.extractNestedObject(data, keys);
+    }
+
+    return null;
+  }
+
   private extractArrayValue(record: Record<string, unknown>, keys: string[]): unknown[] {
     for (const key of keys) {
       const value = record[key];
@@ -622,6 +772,26 @@ export class RestaurantDataService {
     return PaymentStatus.Unpaid;
   }
 
+  private normalizePaymentMethod(value: unknown): PaymentMethod {
+    const numericValue = this.numberValue(value);
+    if (this.isPaymentMethod(numericValue)) {
+      return numericValue;
+    }
+
+    if (typeof value === 'string') {
+      const methodName = value.toLowerCase();
+      const method = Object.values(PaymentMethod)
+        .filter((candidate): candidate is PaymentMethod => typeof candidate === 'number')
+        .find((candidate) => PaymentMethod[candidate].toLowerCase() === methodName);
+
+      if (method) {
+        return method;
+      }
+    }
+
+    return PaymentMethod.CreditCard;
+  }
+
   private normalizeTableStatus(value: unknown): TableStatus {
     const numericValue = this.numberValue(value);
     if (this.isTableStatus(numericValue)) {
@@ -652,6 +822,10 @@ export class RestaurantDataService {
 
   private isPaymentStatus(value: number): value is PaymentStatus {
     return Object.values(PaymentStatus).includes(value);
+  }
+
+  private isPaymentMethod(value: number): value is PaymentMethod {
+    return Object.values(PaymentMethod).includes(value);
   }
 
   private isTableStatus(value: number): value is TableStatus {

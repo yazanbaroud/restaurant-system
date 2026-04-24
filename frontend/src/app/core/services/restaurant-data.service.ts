@@ -294,8 +294,8 @@ export class RestaurantDataService {
 
   getOrder(id: number): Observable<Order | undefined> {
     return this.fetchOrderFromApi(id).pipe(
-      switchMap(() => this.orders$.pipe(map((orders) => orders.find((order) => order.id === id)))),
-      catchError(() => this.orders$.pipe(map((orders) => orders.find((order) => order.id === id))))
+      switchMap(() => this.orderFromState(id)),
+      catchError(() => this.refreshOrderFromList(id).pipe(switchMap(() => this.orderFromState(id))))
     );
   }
 
@@ -454,7 +454,7 @@ export class RestaurantDataService {
           ? of(result.payment)
           : forkJoin({
               payments: this.fetchPaymentsForOrderFromApi(orderId).pipe(catchError(() => of(this.paymentsSubject.value))),
-              order: this.fetchOrderFromApi(orderId).pipe(catchError(() => of(null)))
+              order: this.fetchOrderFromApi(orderId).pipe(catchError(() => this.refreshOrderFromList(orderId)))
             }).pipe(map(() => result.payment))
       )
     );
@@ -1275,6 +1275,21 @@ export class RestaurantDataService {
       map((response) => this.normalizeOrder(response)),
       tap((order) => this.upsertOrder(order))
     );
+  }
+
+  private refreshOrderFromList(id: number): Observable<Order | null> {
+    return this.fetchOrdersFromApi().pipe(
+      map((orders) => orders.find((order) => order.id === id) ?? null),
+      tap((order) => {
+        if (order) {
+          this.upsertOrder(order);
+        }
+      })
+    );
+  }
+
+  private orderFromState(id: number): Observable<Order | undefined> {
+    return this.orders$.pipe(map((orders) => orders.find((order) => order.id === id)));
   }
 
   private fetchPaymentsFromApi(): Observable<Payment[]> {

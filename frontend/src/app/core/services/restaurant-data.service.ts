@@ -44,6 +44,7 @@ import {
   UpdateMenuItemInput,
   UpdateTableInput,
   User,
+  UserRole,
   WaiterPerformanceReport
 } from '../models';
 
@@ -571,7 +572,112 @@ export class RestaurantDataService {
   }
 
   getUsers(): Observable<User[]> {
-    return this.users$;
+    return this.fetchUsersFromApi().pipe(switchMap(() => this.users$));
+  }
+
+  getUser(id: number): Observable<User | undefined> {
+    return this.fetchUserFromApi(id).pipe(
+      tap((user) => this.upsertUser(user)),
+      catchError(() => this.users$.pipe(map((users) => users.find((user) => user.id === id))))
+    );
+  }
+
+  private fetchUsersFromApi(): Observable<User[]> {
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Users`).pipe(
+      map((response) => this.normalizeUsers(response)),
+      tap((users) => this.usersSubject.next(users)),
+      catchError(() => of(this.usersSubject.value))
+    );
+  }
+
+  private fetchUserFromApi(id: number): Observable<User> {
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Users/${id}`).pipe(
+      map((response) => this.normalizeUser(response, { id }))
+    );
+  }
+
+  private normalizeUsers(response: unknown): User[] {
+    return this.extractUserArrayPayload(response).map((user) => this.normalizeUser(user));
+  }
+
+  private normalizeUser(response: unknown, fallback: Partial<User> = {}): User {
+    const record = this.extractUserPayload(response) ?? {};
+    const fullName = this.stringValue(record['fullName'] ?? record['name']).trim();
+    const nameParts = fullName.split(/\s+/).filter(Boolean);
+    const fallbackFirstName = fallback.firstName ?? (nameParts.length ? nameParts[0] : '');
+    const fallbackLastName = fallback.lastName ?? (nameParts.length > 1 ? nameParts.slice(1).join(' ') : '');
+
+    return {
+      id: this.numberValue(record['id'] ?? record['userId'], fallback.id ?? 0),
+      firstName: this.stringValue(record['firstName']).trim() || fallbackFirstName || 'משתמש',
+      lastName: this.stringValue(record['lastName']).trim() || fallbackLastName,
+      email: this.stringValue(record['email']).trim() || fallback.email || '',
+      phoneNumber: this.stringValue(record['phoneNumber'] ?? record['phone'] ?? record['mobile'] ?? record['telephone']).trim() || fallback.phoneNumber || '',
+      role: this.normalizeUserRole(record['role'] ?? record['roleId'] ?? record['userRole'] ?? fallback.role)
+    };
+  }
+
+  private extractUserArrayPayload(response: unknown): unknown[] {
+    if (Array.isArray(response)) {
+      return response;
+    }
+
+    const record = this.asRecord(response);
+    if (!record) {
+      return [];
+    }
+
+    for (const key of ['users', 'items', 'data', 'result', 'records']) {
+      const value = record[key];
+      if (Array.isArray(value)) {
+        return value;
+      }
+
+      const nested = this.asRecord(value);
+      if (nested) {
+        const nestedUsers = this.extractUserArrayPayload(nested);
+        if (nestedUsers.length) {
+          return nestedUsers;
+        }
+      }
+    }
+
+    return [];
+  }
+
+  private extractUserPayload(response: unknown): Record<string, unknown> | null {
+    const record = this.asRecord(response);
+    if (!record) {
+      return null;
+    }
+
+    if (
+      'id' in record ||
+      'userId' in record ||
+      'email' in record ||
+      'firstName' in record ||
+      'lastName' in record ||
+      'fullName' in record ||
+      'name' in record ||
+      'role' in record
+    ) {
+      return record;
+    }
+
+    for (const key of ['user', 'data', 'result']) {
+      const nested = this.extractUserPayload(record[key]);
+      if (nested) {
+        return nested;
+      }
+    }
+
+    return null;
+  }
+
+  private upsertUser(user: User): void {
+    const users = this.usersSubject.value;
+    const exists = users.some((candidate) => candidate.id === user.id);
+    this.usersSubject.next(exists ? users.map((candidate) => (candidate.id === user.id ? user : candidate)) : [user, ...users]);
   }
 
   getPayments(): Observable<Payment[]> {
@@ -1799,6 +1905,31 @@ export class RestaurantDataService {
     return typeof value === 'boolean' ? value : fallback;
   }
 
+  private normalizeUserRole(value: unknown): UserRole {
+    const numericValue = this.numberValue(value);
+    if (this.isUserRole(numericValue)) {
+      return numericValue;
+    }
+
+    if (typeof value === 'string') {
+      const roleName = value.toLowerCase().replace(/[\s_-]/g, '');
+
+      if (roleName === 'admin' || roleName === 'administrator' || roleName === 'manager') {
+        return UserRole.Admin;
+      }
+
+      if (roleName === 'waiter' || roleName === 'server') {
+        return UserRole.Waiter;
+      }
+
+      if (roleName === 'customer' || roleName === 'client') {
+        return UserRole.Customer;
+      }
+    }
+
+    return UserRole.Customer;
+  }
+
   private normalizeMenuCategory(value: unknown): MenuCategory {
     const numericValue = this.numberValue(value);
     if (this.isMenuCategory(numericValue)) {
@@ -1965,6 +2096,10 @@ export class RestaurantDataService {
 
   private isTableStatus(value: number): value is TableStatus {
     return Object.values(TableStatus).includes(value);
+  }
+
+  private isUserRole(value: number): value is UserRole {
+    return Object.values(UserRole).includes(value);
   }
 
   private numberValue(value: unknown, fallback = 0): number {

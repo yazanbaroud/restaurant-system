@@ -1423,13 +1423,13 @@ export class RestaurantDataService {
 
   private createReservationPayload(input: CreateReservationInput): Record<string, unknown> {
     const payload: Record<string, unknown> = {
-      customerFirstName: input.customerFirstName,
-      customerLastName: input.customerLastName,
+      firstName: input.customerFirstName,
+      lastName: input.customerLastName,
       phoneNumber: input.phoneNumber,
       reservationDate: input.reservationDate,
-      reservationTime: input.reservationTime,
-      guestCount: input.guestCount,
-      notes: input.notes
+      reservationTime: this.formatReservationTime(input.reservationTime),
+      guestsCount: input.guestCount,
+      customerNotes: input.notes
     };
 
     if (input.tableId != null) {
@@ -1437,6 +1437,11 @@ export class RestaurantDataService {
     }
 
     return payload;
+  }
+
+  private formatReservationTime(time: string): string {
+    const trimmedTime = time.trim();
+    return /^\d{2}:\d{2}$/.test(trimmedTime) ? `${trimmedTime}:00` : trimmedTime;
   }
 
   private extractReservationArrayPayload(response: unknown): unknown[] {

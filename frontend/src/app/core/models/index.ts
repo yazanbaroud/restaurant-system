@@ -4,5 +4,6 @@ export * from './menu.model';
 export * from './order.model';
 export * from './payment.model';
 export * from './reservation.model';
+export * from './reports.model';
 export * from './table.model';
 export * from './user.model';

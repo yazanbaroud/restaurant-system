@@ -24,13 +24,22 @@ import {
   OrderStatus,
   OrderType,
   Payment,
+  PaymentBreakdown,
   PaymentMethod,
   PaymentStatus,
+  PeakHourReport,
+  PeriodReportSummary,
   Reservation,
   ReservationStatus,
+  ReservationsReportSummary,
+  ReportsSummary,
+  SalesReportSummary,
   Table,
+  TableOccupancyReport,
   TableStatus,
-  User
+  TopDish,
+  User,
+  WaiterPerformanceReport
 } from '../models';
 
 @Injectable({ providedIn: 'root' })
@@ -394,7 +403,32 @@ export class RestaurantDataService {
   }
 
   getDashboardSummary(): Observable<DashboardSummary> {
-    return of(this.calculateDashboard());
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Dashboard/admin`).pipe(
+      map((response) => this.normalizeDashboardSummary(response, this.calculateDashboard())),
+      catchError(() => of(this.calculateDashboard()))
+    );
+  }
+
+  getReportsSummary(): Observable<ReportsSummary> {
+    const defaults = this.createReportDateDefaults();
+
+    return forkJoin({
+      daily: this.fetchReport(`daily?date=${defaults.today}`),
+      weekly: this.fetchReport(`weekly?weekStart=${defaults.weekStart}`),
+      monthly: this.fetchReport(`monthly?year=${defaults.year}&month=${defaults.month}`),
+      yearly: this.fetchReport(`yearly?year=${defaults.year}`),
+      sales: this.fetchReport(`sales?from=${defaults.monthStart}&to=${defaults.monthEnd}`),
+      topDishes: this.fetchReport(`top-dishes?from=${defaults.monthStart}&to=${defaults.monthEnd}&take=10`),
+      leastOrdered: this.fetchReport(`least-ordered?from=${defaults.monthStart}&to=${defaults.monthEnd}&take=10`),
+      paymentBreakdown: this.fetchReport(`payment-breakdown?from=${defaults.monthStart}&to=${defaults.monthEnd}`),
+      peakHours: this.fetchReport(`peak-hours?from=${defaults.monthStart}&to=${defaults.monthEnd}`),
+      waiterPerformance: this.fetchReport(`waiter-performance?from=${defaults.monthStart}&to=${defaults.monthEnd}`),
+      reservationsSummary: this.fetchReport(`reservations-summary?from=${defaults.monthStart}&to=${defaults.monthEnd}`),
+      tableOccupancy: this.fetchReport('table-occupancy')
+    }).pipe(
+      map((reports) => this.normalizeReportsSummary(reports, this.createFallbackReportsSummary())),
+      catchError(() => of(this.createFallbackReportsSummary()))
+    );
   }
 
   private calculateDashboard(): DashboardSummary {
@@ -422,6 +456,373 @@ export class RestaurantDataService {
       occupiedTables: tables.filter((table) => table.status === TableStatus.Occupied).length,
       availableTables: tables.filter((table) => table.status === TableStatus.Available).length
     };
+  }
+
+  private createFallbackReportsSummary(): ReportsSummary {
+    const dashboard = this.calculateDashboard();
+    const ordersCount = dashboard.activeOrders + dashboard.completedOrders + dashboard.cancelledOrders;
+    const periodFallback = (totalRevenue: number): PeriodReportSummary => ({
+      totalRevenue,
+      ordersCount,
+      completedOrders: dashboard.completedOrders,
+      cancelledOrders: dashboard.cancelledOrders,
+      averageOrderValue: ordersCount ? totalRevenue / ordersCount : 0
+    });
+    const totalTables = dashboard.occupiedTables + dashboard.availableTables;
+
+    return {
+      daily: periodFallback(dashboard.totalRevenueToday),
+      weekly: periodFallback(dashboard.totalRevenueThisMonth),
+      monthly: periodFallback(dashboard.totalRevenueThisMonth),
+      yearly: periodFallback(dashboard.totalRevenueThisMonth),
+      sales: {
+        totalRevenue: dashboard.totalRevenueThisMonth,
+        ordersCount,
+        itemsSold: dashboard.topDishes.reduce((sum, dish) => sum + dish.quantity, 0),
+        averageOrderValue: ordersCount ? dashboard.totalRevenueThisMonth / ordersCount : 0
+      },
+      topDishes: dashboard.topDishes,
+      leastOrdered: dashboard.topDishes.slice().reverse(),
+      paymentBreakdown: dashboard.paymentBreakdown,
+      peakHours: [],
+      waiterPerformance: [],
+      reservationsSummary: {
+        totalReservations: dashboard.reservationsToday + dashboard.pendingReservations,
+        pendingReservations: dashboard.pendingReservations,
+        approvedReservations: dashboard.reservationsToday,
+        rejectedReservations: 0,
+        cancelledReservations: 0,
+        arrivedReservations: 0,
+        noShowReservations: 0
+      },
+      tableOccupancy: {
+        totalTables,
+        occupiedTables: dashboard.occupiedTables,
+        availableTables: dashboard.availableTables,
+        reservedTables: 0,
+        occupancyRate: totalTables ? (dashboard.occupiedTables / totalTables) * 100 : 0
+      }
+    };
+  }
+
+  private fetchReport(pathAndQuery: string): Observable<unknown | null> {
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Reports/${pathAndQuery}`).pipe(
+      catchError(() => of(null))
+    );
+  }
+
+  private normalizeDashboardSummary(response: unknown, fallback: DashboardSummary): DashboardSummary {
+    const record = this.extractReportPayload(response);
+
+    return {
+      totalRevenueToday: this.firstNumberValue(
+        [record['totalRevenueToday'], record['todayRevenue'], record['revenueToday'], record['dailyRevenue']],
+        fallback.totalRevenueToday
+      ),
+      totalRevenueThisMonth: this.firstNumberValue(
+        [record['totalRevenueThisMonth'], record['monthlyRevenue'], record['revenueThisMonth'], record['monthRevenue']],
+        fallback.totalRevenueThisMonth
+      ),
+      activeOrders: this.firstNumberValue([record['activeOrders'], record['activeOrdersCount']], fallback.activeOrders),
+      completedOrders: this.firstNumberValue([record['completedOrders'], record['completedOrdersCount']], fallback.completedOrders),
+      cancelledOrders: this.firstNumberValue([record['cancelledOrders'], record['cancelledOrdersCount']], fallback.cancelledOrders),
+      unpaidOrders: this.firstNumberValue([record['unpaidOrders'], record['unpaidOrdersCount']], fallback.unpaidOrders),
+      reservationsToday: this.firstNumberValue([record['reservationsToday'], record['todayReservations']], fallback.reservationsToday),
+      pendingReservations: this.firstNumberValue([record['pendingReservations'], record['pendingReservationsCount']], fallback.pendingReservations),
+      occupiedTables: this.firstNumberValue([record['occupiedTables'], record['occupiedTablesCount']], fallback.occupiedTables),
+      availableTables: this.firstNumberValue([record['availableTables'], record['availableTablesCount']], fallback.availableTables),
+      topDishes: this.normalizeTopDishes(record['topDishes'] ?? record['topItems'] ?? record['bestSellingDishes'], fallback.topDishes),
+      paymentBreakdown: this.normalizePaymentBreakdown(
+        record['paymentBreakdown'] ?? record['paymentsByMethod'],
+        fallback.paymentBreakdown
+      )
+    };
+  }
+
+  private normalizeReportsSummary(reports: Record<string, unknown | null>, fallback: ReportsSummary): ReportsSummary {
+    return {
+      daily: this.normalizePeriodReport(reports['daily'], fallback.daily),
+      weekly: this.normalizePeriodReport(reports['weekly'], fallback.weekly),
+      monthly: this.normalizePeriodReport(reports['monthly'], fallback.monthly),
+      yearly: this.normalizePeriodReport(reports['yearly'], fallback.yearly),
+      sales: this.normalizeSalesReport(reports['sales'], fallback.sales),
+      topDishes: this.normalizeTopDishes(reports['topDishes'], fallback.topDishes),
+      leastOrdered: this.normalizeTopDishes(reports['leastOrdered'], fallback.leastOrdered),
+      paymentBreakdown: this.normalizePaymentBreakdown(reports['paymentBreakdown'], fallback.paymentBreakdown),
+      peakHours: this.normalizePeakHours(reports['peakHours'], fallback.peakHours),
+      waiterPerformance: this.normalizeWaiterPerformance(reports['waiterPerformance'], fallback.waiterPerformance),
+      reservationsSummary: this.normalizeReservationsReport(reports['reservationsSummary'], fallback.reservationsSummary),
+      tableOccupancy: this.normalizeTableOccupancy(reports['tableOccupancy'], fallback.tableOccupancy)
+    };
+  }
+
+  private normalizePeriodReport(response: unknown, fallback: PeriodReportSummary): PeriodReportSummary {
+    const record = this.extractReportPayload(response);
+    const totalRevenue = this.firstNumberValue(
+      [record['totalRevenue'], record['revenue'], record['salesTotal'], record['amount'], record['totalSales']],
+      fallback.totalRevenue
+    );
+    const ordersCount = this.firstNumberValue(
+      [record['ordersCount'], record['orderCount'], record['totalOrders'], record['completedOrders']],
+      fallback.ordersCount
+    );
+
+    return {
+      totalRevenue,
+      ordersCount,
+      completedOrders: this.firstNumberValue([record['completedOrders'], record['completedOrdersCount']], fallback.completedOrders),
+      cancelledOrders: this.firstNumberValue([record['cancelledOrders'], record['cancelledOrdersCount']], fallback.cancelledOrders),
+      averageOrderValue: this.firstNumberValue(
+        [record['averageOrderValue'], record['avgOrderValue'], record['averageTicket']],
+        ordersCount ? totalRevenue / ordersCount : fallback.averageOrderValue
+      )
+    };
+  }
+
+  private normalizeSalesReport(response: unknown, fallback: SalesReportSummary): SalesReportSummary {
+    const record = this.extractReportPayload(response);
+    const totalRevenue = this.firstNumberValue(
+      [record['totalRevenue'], record['revenue'], record['salesTotal'], record['totalSales']],
+      fallback.totalRevenue
+    );
+    const ordersCount = this.firstNumberValue(
+      [record['ordersCount'], record['orderCount'], record['totalOrders'], record['completedOrders']],
+      fallback.ordersCount
+    );
+
+    return {
+      totalRevenue,
+      ordersCount,
+      itemsSold: this.firstNumberValue([record['itemsSold'], record['totalItemsSold'], record['quantity']], fallback.itemsSold),
+      averageOrderValue: this.firstNumberValue(
+        [record['averageOrderValue'], record['avgOrderValue'], record['averageTicket']],
+        ordersCount ? totalRevenue / ordersCount : fallback.averageOrderValue
+      )
+    };
+  }
+
+  private normalizePeakHours(response: unknown, fallback: PeakHourReport[]): PeakHourReport[] {
+    const items = this.extractReportArrayPayload(response, ['peakHours', 'hours', 'items', 'data', 'result']);
+    if (!items.length) {
+      return fallback;
+    }
+
+    return items.map((item) => {
+      const record = this.asRecord(item) ?? {};
+      const rawHour = record['hour'] ?? record['hourOfDay'] ?? record['time'] ?? record['label'];
+
+      return {
+        hour: this.hourLabel(rawHour),
+        ordersCount: this.firstNumberValue([record['ordersCount'], record['orderCount'], record['count']], 0),
+        revenue: this.firstNumberValue([record['revenue'], record['totalRevenue'], record['amount']], 0)
+      };
+    });
+  }
+
+  private normalizeWaiterPerformance(response: unknown, fallback: WaiterPerformanceReport[]): WaiterPerformanceReport[] {
+    const items = this.extractReportArrayPayload(response, ['waiterPerformance', 'waiters', 'items', 'data', 'result']);
+    if (!items.length) {
+      return fallback;
+    }
+
+    return items.map((item, index) => {
+      const record = this.asRecord(item) ?? {};
+      const totalRevenue = this.firstNumberValue([record['revenue'], record['totalRevenue'], record['sales']], 0);
+      const ordersCount = this.firstNumberValue([record['ordersCount'], record['orderCount'], record['completedOrders'], record['count']], 0);
+
+      return {
+        waiterId: this.firstNumberValue([record['waiterId'], record['userId'], record['id']], index + 1),
+        waiterName: this.stringValue(record['waiterName'] ?? record['userName'] ?? record['name']) || `מלצר ${index + 1}`,
+        ordersCount,
+        revenue: totalRevenue,
+        averageOrderValue: this.firstNumberValue(
+          [record['averageOrderValue'], record['avgOrderValue']],
+          ordersCount ? totalRevenue / ordersCount : 0
+        )
+      };
+    });
+  }
+
+  private normalizeReservationsReport(response: unknown, fallback: ReservationsReportSummary): ReservationsReportSummary {
+    const record = this.extractReportPayload(response);
+
+    return {
+      totalReservations: this.firstNumberValue(
+        [record['totalReservations'], record['reservationsCount'], record['total']],
+        fallback.totalReservations
+      ),
+      pendingReservations: this.firstNumberValue([record['pendingReservations'], record['pendingCount']], fallback.pendingReservations),
+      approvedReservations: this.firstNumberValue([record['approvedReservations'], record['approvedCount']], fallback.approvedReservations),
+      rejectedReservations: this.firstNumberValue([record['rejectedReservations'], record['rejectedCount']], fallback.rejectedReservations),
+      cancelledReservations: this.firstNumberValue([record['cancelledReservations'], record['cancelledCount']], fallback.cancelledReservations),
+      arrivedReservations: this.firstNumberValue([record['arrivedReservations'], record['arrivedCount']], fallback.arrivedReservations),
+      noShowReservations: this.firstNumberValue([record['noShowReservations'], record['noShowCount'], record['noshowCount']], fallback.noShowReservations)
+    };
+  }
+
+  private normalizeTableOccupancy(response: unknown, fallback: TableOccupancyReport): TableOccupancyReport {
+    const record = this.extractReportPayload(response);
+    const occupiedTables = this.firstNumberValue([record['occupiedTables'], record['occupied']], fallback.occupiedTables);
+    const availableTables = this.firstNumberValue([record['availableTables'], record['available']], fallback.availableTables);
+    const reservedTables = this.firstNumberValue([record['reservedTables'], record['reserved']], fallback.reservedTables);
+    const totalTables = this.firstNumberValue(
+      [record['totalTables'], record['tablesCount'], record['total']],
+      occupiedTables + availableTables + reservedTables
+    );
+
+    return {
+      totalTables,
+      occupiedTables,
+      availableTables,
+      reservedTables,
+      occupancyRate: this.firstNumberValue(
+        [record['occupancyRate'], record['occupiedPercentage']],
+        totalTables ? (occupiedTables / totalTables) * 100 : fallback.occupancyRate
+      )
+    };
+  }
+
+  private normalizeTopDishes(response: unknown, fallback: TopDish[]): TopDish[] {
+    const items = this.extractReportArrayPayload(response, ['topDishes', 'dishes', 'items', 'data', 'result']);
+    if (!items.length) {
+      return fallback;
+    }
+
+    return items.map((item, index) => {
+      const record = this.asRecord(item) ?? {};
+      const menuItem = this.asRecord(record['menuItem']);
+      const menuItemId = this.firstNumberValue([record['menuItemId'], record['dishId'], record['id'], menuItem?.['id']], index + 1);
+
+      return {
+        menuItemId,
+        name:
+          this.stringValue(record['name'] ?? record['menuItemName'] ?? record['dishName'] ?? menuItem?.['name']) ||
+          `מנה ${menuItemId}`,
+        quantity: this.firstNumberValue([record['quantity'], record['totalQuantity'], record['orderCount'], record['count']], 0),
+        revenue: this.firstNumberValue([record['revenue'], record['totalRevenue'], record['amount'], record['sales']], 0)
+      };
+    });
+  }
+
+  private normalizePaymentBreakdown(response: unknown, fallback: PaymentBreakdown[]): PaymentBreakdown[] {
+    const items = this.extractReportArrayPayload(response, ['paymentBreakdown', 'paymentsByMethod', 'items', 'data', 'result']);
+    if (items.length) {
+      return items.map((item) => {
+        const record = this.asRecord(item) ?? {};
+
+        return {
+          method: this.normalizePaymentMethod(record['method'] ?? record['paymentMethod']),
+          amount: this.firstNumberValue([record['amount'], record['totalAmount'], record['revenue'], record['total']], 0),
+          count: this.firstNumberValue([record['count'], record['paymentCount'], record['transactions']], 0)
+        };
+      });
+    }
+
+    const record = this.extractReportPayload(response);
+    const dictionaryItems = Object.entries(record)
+      .filter(([, value]) => typeof value === 'number' || Boolean(this.asRecord(value)))
+      .map(([method, value]) => {
+        const nested = this.asRecord(value);
+
+        return {
+          method: this.normalizePaymentMethod(nested?.['method'] ?? nested?.['paymentMethod'] ?? method),
+          amount: this.firstNumberValue([nested?.['amount'], nested?.['totalAmount'], nested?.['revenue'], nested?.['total'], value], 0),
+          count: this.firstNumberValue([nested?.['count'], nested?.['paymentCount'], nested?.['transactions']], 0)
+        };
+      });
+
+    if (!dictionaryItems.length) {
+      return fallback;
+    }
+
+    return dictionaryItems;
+  }
+
+  private extractReportArrayPayload(response: unknown, keys: string[]): unknown[] {
+    if (Array.isArray(response)) {
+      return response;
+    }
+
+    const record = this.asRecord(response);
+    if (!record) {
+      return [];
+    }
+
+    for (const key of keys) {
+      const value = record[key];
+      if (Array.isArray(value)) {
+        return value;
+      }
+
+      const nested = this.asRecord(value);
+      if (nested) {
+        const nestedItems = this.extractReportArrayPayload(nested, keys);
+        if (nestedItems.length) {
+          return nestedItems;
+        }
+      }
+    }
+
+    return [];
+  }
+
+  private extractReportPayload(response: unknown): Record<string, unknown> {
+    const record = this.asRecord(response);
+    if (!record) {
+      return {};
+    }
+
+    for (const key of ['dashboard', 'report', 'summary', 'data', 'result']) {
+      const value = this.asRecord(record[key]);
+      if (value) {
+        return this.extractReportPayload(value);
+      }
+    }
+
+    return record;
+  }
+
+  private createReportDateDefaults(): {
+    today: string;
+    weekStart: string;
+    year: number;
+    month: number;
+    monthStart: string;
+    monthEnd: string;
+  } {
+    const now = new Date();
+    const weekStart = new Date(now);
+    const mondayOffset = (weekStart.getDay() + 6) % 7;
+    weekStart.setDate(weekStart.getDate() - mondayOffset);
+
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    return {
+      today: this.formatDateOnly(now),
+      weekStart: this.formatDateOnly(weekStart),
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
+      monthStart: this.formatDateOnly(monthStart),
+      monthEnd: this.formatDateOnly(monthEnd)
+    };
+  }
+
+  private formatDateOnly(date: Date): string {
+    return [
+      date.getFullYear(),
+      String(date.getMonth() + 1).padStart(2, '0'),
+      String(date.getDate()).padStart(2, '0')
+    ].join('-');
+  }
+
+  private hourLabel(value: unknown): string {
+    if (typeof value === 'string') {
+      return value;
+    }
+
+    const hour = Number(value);
+    return Number.isFinite(hour) ? `${String(hour).padStart(2, '0')}:00` : '';
   }
 
   private nextId<T extends { id: number }>(items: T[]): number {
@@ -1071,7 +1472,7 @@ export class RestaurantDataService {
     }
 
     if (typeof value === 'string') {
-      const methodName = value.toLowerCase();
+      const methodName = value.toLowerCase().replace(/[\s_-]/g, '');
       const method = Object.values(PaymentMethod)
         .filter((candidate): candidate is PaymentMethod => typeof candidate === 'number')
         .find((candidate) => PaymentMethod[candidate].toLowerCase() === methodName);
@@ -1131,6 +1532,17 @@ export class RestaurantDataService {
   private numberValue(value: unknown, fallback = 0): number {
     const numericValue = Number(value);
     return Number.isFinite(numericValue) ? numericValue : fallback;
+  }
+
+  private firstNumberValue(values: unknown[], fallback = 0): number {
+    for (const value of values) {
+      const numericValue = Number(value);
+      if (Number.isFinite(numericValue)) {
+        return numericValue;
+      }
+    }
+
+    return fallback;
   }
 
   private nullableNumberValue(value: unknown): number | null {

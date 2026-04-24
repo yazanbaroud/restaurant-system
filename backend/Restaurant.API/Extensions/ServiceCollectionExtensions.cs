@@ -46,7 +46,7 @@ public static class ServiceCollectionExtensions
         {
             options.AddPolicy(AppCorsPolicies.DefaultCors, policy =>
             {
-                policy.WithOrigins("http://localhost:4200")
+                policy.WithOrigins("http://localhost:4200", "http://127.0.0.1:4200")
                     .AllowAnyHeader()
                     .AllowAnyMethod()
                     .AllowCredentials();

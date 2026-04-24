@@ -160,15 +160,72 @@ export class RestaurantDataService {
     return order;
   }
 
-  updateOrderStatus(id: number, status: OrderStatus): void {
-    const order = this.ordersSubject.value.find((candidate) => candidate.id === id);
-    this.ordersSubject.next(
-      this.ordersSubject.value.map((order) => (order.id === id ? { ...order, status } : order))
+  updateOrderStatus(id: number, status: OrderStatus): Observable<Order> {
+    const existingLocalOrder = this.ordersSubject.value.find((candidate) => candidate.id === id);
+
+    return this.http.put<unknown>(`${this.apiBaseUrl}/api/Orders/${id}/status`, { status }).pipe(
+      map((response) => ({
+        order: this.normalizeOrder(response),
+        isFallback: false
+      })),
+      catchError(() =>
+        of({
+          order: this.updateMockOrderStatus(id, status),
+          isFallback: true
+        })
+      ),
+      tap((result) => {
+        this.upsertOrder(result.order);
+
+        if (result.isFallback) {
+          return;
+        }
+
+        this.syncTablesFromOrder(result.order);
+
+        if (
+          existingLocalOrder &&
+          this.shouldReleaseTables(status) &&
+          this.hasMissingReleasedTableState(result.order, existingLocalOrder)
+        ) {
+          this.releaseOrderTables(existingLocalOrder);
+        }
+      }),
+      map((result) => result.order)
     );
+  }
+
+  private updateMockOrderStatus(id: number, status: OrderStatus): Order {
+    const order = this.ordersSubject.value.find((candidate) => candidate.id === id);
+    const updatedOrder = order ? { ...order, status } : this.createMissingMockOrder(id, status);
 
     if (order && this.shouldReleaseTables(status)) {
       this.releaseOrderTables(order);
     }
+
+    return updatedOrder;
+  }
+
+  private createMissingMockOrder(id: number, status: OrderStatus): Order {
+    const now = new Date();
+    const orderNumber = this.createOrderNumber(now);
+
+    return {
+      id,
+      uniqueIdentifier: orderNumber,
+      orderNumber,
+      userId: null,
+      customerFirstName: '',
+      customerLastName: '',
+      createdAt: now.toISOString(),
+      status,
+      notes: '',
+      totalPrice: 0,
+      orderType: OrderType.DineIn,
+      paymentStatus: PaymentStatus.Unpaid,
+      items: [],
+      tables: []
+    };
   }
 
   addPayment(orderId: number, amount: number, method: PaymentMethod): Observable<Payment> {
@@ -549,6 +606,29 @@ export class RestaurantDataService {
         tableIds.has(table.id) ? { ...table, status: TableStatus.Occupied } : table
       )
     );
+  }
+
+  private syncTablesFromOrder(order: Order): void {
+    if (!order.tables.length) {
+      return;
+    }
+
+    const orderTables = new Map(order.tables.map((table) => [table.id, table]));
+    this.tablesSubject.next(
+      this.tablesSubject.value.map((table) => {
+        const backendTable = orderTables.get(table.id);
+        return backendTable ? { ...table, ...backendTable } : table;
+      })
+    );
+  }
+
+  private hasMissingReleasedTableState(backendOrder: Order, localOrder: Order): boolean {
+    if (!localOrder.tables.length) {
+      return false;
+    }
+
+    const backendTables = new Map(backendOrder.tables.map((table) => [table.id, table]));
+    return localOrder.tables.some((table) => backendTables.get(table.id)?.status !== TableStatus.Available);
   }
 
   private fetchMenuItemsFromApi(): Observable<MenuItem[]> {

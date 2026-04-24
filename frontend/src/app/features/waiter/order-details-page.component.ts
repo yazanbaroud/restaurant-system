@@ -1,6 +1,7 @@
 import { AsyncPipe, CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
+import { finalize } from 'rxjs';
 
 import { OrderStatus } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
@@ -29,6 +30,10 @@ import {
           <a class="btn btn-gold" [routerLink]="['/waiter/orders', order.id, 'payment']">גביית תשלום</a>
         </app-page-header>
 
+        @if (errorMessage) {
+          <p class="validation-note">{{ errorMessage }}</p>
+        }
+
         <div class="details-layout">
           <article class="panel">
             <div class="badge-row">
@@ -41,10 +46,10 @@ import {
               <p class="note">{{ order.notes }}</p>
             }
             <div class="status-actions">
-              <button class="btn btn-ghost" type="button" (click)="setStatus(OrderStatus.InSalads)">בסלטים</button>
-              <button class="btn btn-ghost" type="button" (click)="setStatus(OrderStatus.InMain)">בעיקריות</button>
-              <button class="btn btn-olive" type="button" (click)="setStatus(OrderStatus.Completed)">הושלם</button>
-              <button class="btn btn-danger" type="button" (click)="setStatus(OrderStatus.Cancelled)">ביטול</button>
+              <button class="btn btn-ghost" type="button" [disabled]="isUpdating" (click)="setStatus(OrderStatus.InSalads)">בסלטים</button>
+              <button class="btn btn-ghost" type="button" [disabled]="isUpdating" (click)="setStatus(OrderStatus.InMain)">בעיקריות</button>
+              <button class="btn btn-olive" type="button" [disabled]="isUpdating" (click)="setStatus(OrderStatus.Completed)">הושלם</button>
+              <button class="btn btn-danger" type="button" [disabled]="isUpdating" (click)="setStatus(OrderStatus.Cancelled)">ביטול</button>
             </div>
           </article>
 
@@ -79,8 +84,24 @@ export class OrderDetailsPageComponent {
   readonly orderTypeLabels = orderTypeLabels;
   readonly paymentStatusLabels = paymentStatusLabels;
   readonly paymentStatusTones = paymentStatusTones;
+  isUpdating = false;
+  errorMessage = '';
 
   setStatus(status: OrderStatus): void {
-    this.data.updateOrderStatus(this.id, status);
+    if (this.isUpdating) {
+      return;
+    }
+
+    this.isUpdating = true;
+    this.errorMessage = '';
+    this.data.updateOrderStatus(this.id, status).pipe(
+      finalize(() => {
+        this.isUpdating = false;
+      })
+    ).subscribe({
+      error: () => {
+        this.errorMessage = 'לא הצלחנו לעדכן את סטטוס ההזמנה. נסו שוב בעוד רגע.';
+      }
+    });
   }
 }

@@ -49,6 +49,12 @@ public sealed class PaymentsService(
         return response;
     }
 
+    public async Task<IReadOnlyCollection<PaymentResponseDto>> GetAllAsync(CancellationToken cancellationToken) =>
+        await db.Payments.AsNoTracking()
+            .OrderByDescending(x => x.PaidAt)
+            .Select(x => x.ToPaymentResponse())
+            .ToArrayAsync(cancellationToken);
+
     public async Task<IReadOnlyCollection<PaymentResponseDto>> GetByOrderAsync(int orderId, CancellationToken cancellationToken)
     {
         if (!await db.Orders.AnyAsync(x => x.Id == orderId, cancellationToken))

@@ -4,6 +4,7 @@ import { finalize } from 'rxjs';
 
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
+import { controlError, israeliPhoneValidator } from '../../shared/form-validation';
 
 @Component({
   selector: 'app-reservation-page',
@@ -30,32 +31,50 @@ import { PageHeaderComponent } from '../../shared/components/page-header.compone
           <label>
             שם פרטי
             <input formControlName="customerFirstName" autocomplete="given-name" />
+            @if (fieldError('customerFirstName')) {
+              <span class="field-error">{{ fieldError('customerFirstName') }}</span>
+            }
           </label>
           <label>
             שם משפחה
             <input formControlName="customerLastName" autocomplete="family-name" />
+            @if (fieldError('customerLastName')) {
+              <span class="field-error">{{ fieldError('customerLastName') }}</span>
+            }
           </label>
           <label>
             טלפון
             <input formControlName="phoneNumber" autocomplete="tel" />
+            @if (fieldError('phoneNumber')) {
+              <span class="field-error">{{ fieldError('phoneNumber') }}</span>
+            }
           </label>
           <label>
             תאריך
             <input type="date" formControlName="reservationDate" />
+            @if (fieldError('reservationDate')) {
+              <span class="field-error">{{ fieldError('reservationDate') }}</span>
+            }
           </label>
           <label>
             שעה
             <input type="time" formControlName="reservationTime" />
+            @if (fieldError('reservationTime')) {
+              <span class="field-error">{{ fieldError('reservationTime') }}</span>
+            }
           </label>
           <label>
             מספר סועדים
             <input type="number" min="1" max="30" formControlName="guestCount" />
+            @if (fieldError('guestCount')) {
+              <span class="field-error">{{ fieldError('guestCount') }}</span>
+            }
           </label>
           <label class="full">
             בקשות מיוחדות
             <textarea formControlName="notes" rows="4"></textarea>
           </label>
-          <button class="btn btn-gold full" type="submit" [disabled]="form.invalid || isSubmitting">
+          <button class="btn btn-gold full" type="submit" [disabled]="isSubmitting">
             {{ isSubmitting ? 'שולחים בקשה...' : 'שליחת בקשה' }}
           </button>
         </form>
@@ -78,7 +97,7 @@ export class ReservationPageComponent {
   readonly form = this.fb.nonNullable.group({
     customerFirstName: ['', Validators.required],
     customerLastName: ['', Validators.required],
-    phoneNumber: ['', [Validators.required, Validators.minLength(9)]],
+    phoneNumber: ['', [Validators.required, israeliPhoneValidator()]],
     reservationDate: ['2026-04-24', Validators.required],
     reservationTime: ['19:30', Validators.required],
     guestCount: [4, [Validators.required, Validators.min(1)]],
@@ -88,6 +107,7 @@ export class ReservationPageComponent {
   successMessage = '';
   errorMessage = '';
   isSubmitting = false;
+  submitted = false;
 
   submit(): void {
     if (this.isSubmitting) {
@@ -95,6 +115,7 @@ export class ReservationPageComponent {
     }
 
     if (this.form.invalid) {
+      this.submitted = true;
       this.form.markAllAsTouched();
       return;
     }
@@ -123,5 +144,9 @@ export class ReservationPageComponent {
         this.errorMessage = 'לא הצלחנו לשמור את ההזמנה. נסו שוב בעוד רגע.';
       }
     });
+  }
+
+  fieldError(controlName: keyof typeof this.form.controls): string {
+    return controlError(this.form.controls[controlName], this.submitted);
   }
 }

@@ -78,13 +78,13 @@ interface PaymentViewModel {
                   formControlName="amount"
                 />
               </label>
-              @if (amountValue <= 0) {
+              @if ((submitted || form.controls.amount.touched) && amountValue <= 0) {
                 <p class="validation-note full">יש להזין סכום גדול מאפס.</p>
               }
-              @if (amountValue > vm.remainingBalance && !vm.isPaid) {
+              @if ((submitted || form.controls.amount.touched) && amountValue > vm.remainingBalance && !vm.isPaid) {
                 <p class="validation-note full">הסכום גבוה מהיתרה לתשלום.</p>
               }
-              <button class="btn btn-gold full" type="submit" [disabled]="!canSubmit(vm)">
+              <button class="btn btn-gold full" type="submit" [disabled]="isSubmitting || vm.isPaid">
                 {{ isSubmitting ? 'שומרים תשלום...' : 'הוספת תשלום' }}
               </button>
             </fieldset>
@@ -168,6 +168,7 @@ export class AddPaymentPageComponent {
 
   isSubmitting = false;
   errorMessage = '';
+  submitted = false;
 
   get amountValue(): number {
     return Number(this.form.controls.amount.value) || 0;
@@ -187,6 +188,8 @@ export class AddPaymentPageComponent {
   submit(): void {
     const vm = this.latestViewModel;
     if (!vm || !this.canSubmit(vm)) {
+      this.submitted = true;
+      this.form.markAllAsTouched();
       return;
     }
 

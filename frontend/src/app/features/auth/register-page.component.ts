@@ -5,6 +5,7 @@ import { finalize } from 'rxjs';
 
 import { UserRole } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
+import { controlError, israeliPhoneValidator, strongPasswordValidator } from '../../shared/form-validation';
 
 @Component({
   selector: 'app-register-page',
@@ -25,24 +26,39 @@ import { AuthService } from '../../core/services/auth.service';
           <label>
             שם פרטי
             <input formControlName="firstName" autocomplete="given-name" />
+            @if (fieldError('firstName')) {
+              <span class="field-error">{{ fieldError('firstName') }}</span>
+            }
           </label>
           <label>
             שם משפחה
             <input formControlName="lastName" autocomplete="family-name" />
+            @if (fieldError('lastName')) {
+              <span class="field-error">{{ fieldError('lastName') }}</span>
+            }
           </label>
           <label>
             טלפון
             <input formControlName="phoneNumber" autocomplete="tel" />
+            @if (fieldError('phoneNumber')) {
+              <span class="field-error">{{ fieldError('phoneNumber') }}</span>
+            }
           </label>
           <label>
             אימייל
             <input type="email" formControlName="email" autocomplete="email" />
+            @if (fieldError('email')) {
+              <span class="field-error">{{ fieldError('email') }}</span>
+            }
           </label>
           <label class="full">
             סיסמה
             <input type="password" formControlName="password" autocomplete="new-password" />
+            @if (fieldError('password')) {
+              <span class="field-error">{{ fieldError('password') }}</span>
+            }
           </label>
-          <button class="btn btn-gold full" type="submit" [disabled]="form.invalid || isSubmitting">
+          <button class="btn btn-gold full" type="submit" [disabled]="isSubmitting">
             {{ isSubmitting ? 'שומר...' : 'הרשמה' }}
           </button>
         </form>
@@ -59,16 +75,18 @@ export class RegisterPageComponent {
   readonly form = this.fb.nonNullable.group({
     firstName: ['', Validators.required],
     lastName: ['', Validators.required],
-    phoneNumber: ['', Validators.required],
+    phoneNumber: ['', [Validators.required, israeliPhoneValidator()]],
     email: ['', [Validators.required, Validators.email]],
-    password: ['', [Validators.required, Validators.minLength(6)]]
+    password: ['', [Validators.required, strongPasswordValidator()]]
   });
 
   isSubmitting = false;
   errorMessage = '';
+  submitted = false;
 
   submit(): void {
     if (this.form.invalid) {
+      this.submitted = true;
       this.form.markAllAsTouched();
       return;
     }
@@ -89,5 +107,9 @@ export class RegisterPageComponent {
         this.errorMessage = 'ההרשמה נכשלה. בדקו את הפרטים ונסו שוב.';
       }
     });
+  }
+
+  fieldError(controlName: keyof typeof this.form.controls): string {
+    return controlError(this.form.controls[controlName], this.submitted);
   }
 }

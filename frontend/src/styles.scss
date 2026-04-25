@@ -1090,6 +1090,12 @@ textarea:focus {
   font-weight: 850;
 }
 
+.field-error {
+  color: var(--burgundy);
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
 .paid-state {
   display: block;
 }

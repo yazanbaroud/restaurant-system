@@ -7,6 +7,7 @@ import { Table, TableStatus } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { TableCardComponent } from '../../shared/components/table-card.component';
+import { controlError } from '../../shared/form-validation';
 
 @Component({
   selector: 'app-tables-management-page',
@@ -24,10 +25,16 @@ import { TableCardComponent } from '../../shared/components/table-card.component
         <label>
           שם שולחן
           <input formControlName="name" />
+          @if (fieldError('name')) {
+            <span class="field-error">{{ fieldError('name') }}</span>
+          }
         </label>
         <label>
           קיבולת
           <input type="number" min="1" formControlName="capacity" />
+          @if (fieldError('capacity')) {
+            <span class="field-error">{{ fieldError('capacity') }}</span>
+          }
         </label>
         <label>
           אזור
@@ -51,7 +58,7 @@ import { TableCardComponent } from '../../shared/components/table-card.component
         }
 
         <div class="actions-inline full">
-          <button class="btn btn-gold" type="submit" [disabled]="form.invalid || isSubmitting">
+          <button class="btn btn-gold" type="submit" [disabled]="isSubmitting">
             {{ editingTableId ? 'שמירת שינויים' : 'יצירת שולחן' }}
           </button>
           @if (editingTableId) {
@@ -94,6 +101,7 @@ export class TablesManagementPageComponent {
   updatingTableId: number | null = null;
   isSubmitting = false;
   errorMessage = '';
+  submitted = false;
 
   submit(): void {
     if (this.isSubmitting) {
@@ -101,6 +109,7 @@ export class TablesManagementPageComponent {
     }
 
     if (this.form.invalid) {
+      this.submitted = true;
       this.form.markAllAsTouched();
       return;
     }
@@ -142,6 +151,7 @@ export class TablesManagementPageComponent {
 
   resetForm(): void {
     this.editingTableId = null;
+    this.submitted = false;
     this.form.reset({
       name: '',
       capacity: 4,
@@ -171,5 +181,9 @@ export class TablesManagementPageComponent {
 
   isUpdating(id: number): boolean {
     return this.updatingTableId === id;
+  }
+
+  fieldError(controlName: keyof typeof this.form.controls): string {
+    return controlError(this.form.controls[controlName], this.submitted);
   }
 }

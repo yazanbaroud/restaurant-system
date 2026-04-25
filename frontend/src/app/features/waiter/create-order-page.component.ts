@@ -8,6 +8,7 @@ import { MenuItem, OrderType, Table, TableStatus } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { MenuItemCardComponent } from '../../shared/components/menu-item-card.component';
+import { controlError } from '../../shared/form-validation';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { TableCardComponent } from '../../shared/components/table-card.component';
 import { orderTypeLabels } from '../../shared/ui-labels';
@@ -61,10 +62,16 @@ interface CartLine {
               <label>
                 שם פרטי
                 <input formControlName="customerFirstName" />
+                @if (fieldError('customerFirstName')) {
+                  <span class="field-error">{{ fieldError('customerFirstName') }}</span>
+                }
               </label>
               <label>
                 שם משפחה
                 <input formControlName="customerLastName" />
+                @if (fieldError('customerLastName')) {
+                  <span class="field-error">{{ fieldError('customerLastName') }}</span>
+                }
               </label>
               <label class="full">
                 הערות להזמנה
@@ -122,7 +129,13 @@ interface CartLine {
           @if (errorMessage) {
             <p class="validation-note full">{{ errorMessage }}</p>
           }
-          <button class="btn btn-gold full" type="submit" [disabled]="!canSubmit">
+          @if (submitted && cart.length === 0) {
+            <p class="validation-note full">יש להוסיף לפחות מנה אחת להזמנה.</p>
+          }
+          @if (submitted && form.controls.orderType.value === OrderType.DineIn && selectedTableIds.size === 0) {
+            <p class="validation-note full">יש לבחור שולחן להזמנה במסעדה.</p>
+          }
+          <button class="btn btn-gold full" type="submit" [disabled]="isSubmitting">
             {{ isSubmitting ? 'שולחים...' : 'שליחת הזמנה למטבח' }}
           </button>
         </aside>
@@ -155,6 +168,7 @@ export class CreateOrderPageComponent implements OnInit {
   isSubmitting = false;
   errorMessage = '';
   orderDetailsBaseLink = '/waiter/orders';
+  submitted = false;
 
   ngOnInit(): void {
     this.orderDetailsBaseLink = this.isInsideRoute('admin') ? '/admin/orders' : '/waiter/orders';
@@ -207,6 +221,7 @@ export class CreateOrderPageComponent implements OnInit {
 
   submit(): void {
     if (!this.canSubmit) {
+      this.submitted = true;
       this.form.markAllAsTouched();
       return;
     }
@@ -236,5 +251,9 @@ export class CreateOrderPageComponent implements OnInit {
         this.errorMessage = 'לא הצלחנו לפתוח את ההזמנה. נסו שוב בעוד רגע.';
       }
     });
+  }
+
+  fieldError(controlName: keyof typeof this.form.controls): string {
+    return controlError(this.form.controls[controlName], this.submitted);
   }
 }

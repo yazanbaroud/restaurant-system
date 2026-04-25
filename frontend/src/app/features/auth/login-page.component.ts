@@ -5,6 +5,7 @@ import { finalize } from 'rxjs';
 
 import { User, UserRole } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
+import { controlError } from '../../shared/form-validation';
 import { roleLabels } from '../../shared/ui-labels';
 
 @Component({
@@ -34,12 +35,18 @@ import { roleLabels } from '../../shared/ui-labels';
           <label class="full">
             אימייל
             <input type="email" formControlName="email" autocomplete="email" />
+            @if (fieldError('email')) {
+              <span class="field-error">{{ fieldError('email') }}</span>
+            }
           </label>
           <label class="full">
             סיסמה
             <input type="password" formControlName="password" autocomplete="current-password" />
+            @if (fieldError('password')) {
+              <span class="field-error">{{ fieldError('password') }}</span>
+            }
           </label>
-          <button class="btn btn-gold full" type="submit" [disabled]="form.invalid || isSubmitting">
+          <button class="btn btn-gold full" type="submit" [disabled]="isSubmitting">
             {{ isSubmitting ? 'מתחברים...' : 'כניסה' }}
           </button>
         </form>
@@ -63,6 +70,7 @@ export class LoginPageComponent {
 
   isSubmitting = false;
   errorMessage = '';
+  submitted = false;
 
   get requestedRoleLabel(): string {
     const role = Number(this.route.snapshot.queryParamMap.get('role')) as UserRole;
@@ -75,6 +83,7 @@ export class LoginPageComponent {
 
   submit(): void {
     if (this.form.invalid) {
+      this.submitted = true;
       this.form.markAllAsTouched();
       return;
     }
@@ -134,5 +143,9 @@ export class LoginPageComponent {
 
   private isRouteSection(path: string, section: string): boolean {
     return path === section || path.startsWith(`${section}/`);
+  }
+
+  fieldError(controlName: keyof typeof this.form.controls): string {
+    return controlError(this.form.controls[controlName], this.submitted);
   }
 }

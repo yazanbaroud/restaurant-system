@@ -8,6 +8,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
+import { controlError, israeliPhoneValidator, strongPasswordValidator } from '../../shared/form-validation';
 import { roleLabels } from '../../shared/ui-labels';
 
 @Component({
@@ -33,21 +34,33 @@ import { roleLabels } from '../../shared/ui-labels';
         <label>
           שם פרטי
           <input formControlName="firstName" autocomplete="given-name" />
+          @if (fieldError('firstName')) {
+            <span class="field-error">{{ fieldError('firstName') }}</span>
+          }
         </label>
 
         <label>
           שם משפחה
           <input formControlName="lastName" autocomplete="family-name" />
+          @if (fieldError('lastName')) {
+            <span class="field-error">{{ fieldError('lastName') }}</span>
+          }
         </label>
 
         <label>
           דוא"ל
           <input type="email" formControlName="email" autocomplete="email" />
+          @if (fieldError('email')) {
+            <span class="field-error">{{ fieldError('email') }}</span>
+          }
         </label>
 
         <label>
           טלפון
           <input formControlName="phoneNumber" autocomplete="tel" />
+          @if (fieldError('phoneNumber')) {
+            <span class="field-error">{{ fieldError('phoneNumber') }}</span>
+          }
         </label>
 
         <label>
@@ -63,6 +76,9 @@ import { roleLabels } from '../../shared/ui-labels';
           <label>
             סיסמה
             <input type="password" formControlName="password" autocomplete="new-password" />
+            @if (fieldError('password')) {
+              <span class="field-error">{{ fieldError('password') }}</span>
+            }
           </label>
         }
 
@@ -79,7 +95,7 @@ import { roleLabels } from '../../shared/ui-labels';
         }
 
         <div class="actions-inline full">
-          <button class="btn btn-gold" type="submit" [disabled]="!canSubmit()">שמירה</button>
+          <button class="btn btn-gold" type="submit" [disabled]="isSubmitting">שמירה</button>
           @if (editingUserId) {
             <button class="btn btn-ghost" type="button" [disabled]="isSubmitting" (click)="resetForm()">ביטול</button>
           }
@@ -120,7 +136,6 @@ import { roleLabels } from '../../shared/ui-labels';
 
                 <div class="actions-inline">
                   <button class="btn btn-small btn-ghost" type="button" [disabled]="isSubmitting || isBusy(user.id)" (click)="edit(user)">עריכה</button>
-                </div>
               </article>
             }
           </div>
@@ -151,16 +166,16 @@ export class UsersManagementPageComponent {
     firstName: ['', Validators.required],
     lastName: ['', Validators.required],
     email: ['', [Validators.required, Validators.email]],
-    phoneNumber: ['', Validators.required],
-    password: [''],
+    phoneNumber: ['', [Validators.required, israeliPhoneValidator()]],
+    password: ['', strongPasswordValidator()],
     role: [UserRole.Customer, Validators.required]
   });
-
   editingUserId: number | null = null;
   editingOriginalRole: UserRole | null = null;
   actingUserId: number | null = null;
   isSubmitting = false;
   isLoading = true;
+  formSubmitted = false;
   errorMessage = '';
   successMessage = '';
 
@@ -191,6 +206,10 @@ export class UsersManagementPageComponent {
     }
 
     if (!this.canSubmit()) {
+      this.formSubmitted = true;
+      if (!this.editingUserId && !this.form.controls.password.value.trim()) {
+        this.form.controls.password.setErrors({ required: true });
+      }
       this.form.markAllAsTouched();
       this.errorMessage = this.editingUserId
         ? 'מלאו את כל פרטי המשתמש הנדרשים.'
@@ -301,6 +320,7 @@ export class UsersManagementPageComponent {
   resetForm(role = UserRole.Customer): void {
     this.editingUserId = null;
     this.editingOriginalRole = null;
+    this.formSubmitted = false;
     this.form.reset({
       firstName: '',
       lastName: '',
@@ -335,4 +355,10 @@ export class UsersManagementPageComponent {
   canQuickChangeRole(user: User): boolean {
     return !this.isCurrentUser(user) && user.role !== UserRole.Admin;
   }
+
+  fieldError(controlName: keyof typeof this.form.controls): string {
+    return controlError(this.form.controls[controlName], this.formSubmitted);
+  }
+
+
 }

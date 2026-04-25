@@ -1,5 +1,6 @@
 using FluentValidation;
 using Restaurant.API.DTOs;
+using Restaurant.API.Helpers;
 
 namespace Restaurant.API.Validators;
 
@@ -9,7 +10,10 @@ public sealed class CreateReservationDtoValidator : AbstractValidator<CreateRese
     {
         RuleFor(x => x.FirstName).NotEmpty().MaximumLength(100);
         RuleFor(x => x.LastName).NotEmpty().MaximumLength(100);
-        RuleFor(x => x.PhoneNumber).NotEmpty().MaximumLength(40);
+        RuleFor(x => x.PhoneNumber)
+            .NotEmpty().WithMessage("מספר טלפון הוא שדה חובה")
+            .MaximumLength(40)
+            .Matches(ValidationPatterns.IsraeliPhone).WithMessage("מספר הטלפון אינו תקין");
         RuleFor(x => x.GuestsCount).GreaterThan(0);
         RuleFor(x => x.CustomerNotes).MaximumLength(1000);
         RuleFor(x => x.ReservationDate).Must(x => x >= DateOnly.FromDateTime(DateTime.UtcNow.Date)).WithMessage("Reservation date cannot be in the past.");
@@ -22,7 +26,10 @@ public sealed class UpdateReservationDtoValidator : AbstractValidator<UpdateRese
     {
         RuleFor(x => x.FirstName).NotEmpty().MaximumLength(100);
         RuleFor(x => x.LastName).NotEmpty().MaximumLength(100);
-        RuleFor(x => x.PhoneNumber).NotEmpty().MaximumLength(40);
+        RuleFor(x => x.PhoneNumber)
+            .NotEmpty().WithMessage("מספר טלפון הוא שדה חובה")
+            .MaximumLength(40)
+            .Matches(ValidationPatterns.IsraeliPhone).WithMessage("מספר הטלפון אינו תקין");
         RuleFor(x => x.GuestsCount).GreaterThan(0);
         RuleFor(x => x.CustomerNotes).MaximumLength(1000);
         RuleFor(x => x.RestaurantNotes).MaximumLength(1000);

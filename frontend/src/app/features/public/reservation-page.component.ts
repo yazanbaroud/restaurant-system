@@ -51,14 +51,14 @@ import { controlError, israeliPhoneValidator } from '../../shared/form-validatio
           </label>
           <label>
             תאריך
-            <input type="date" formControlName="reservationDate" />
+            <input class="date-time-input" type="date" formControlName="reservationDate" />
             @if (fieldError('reservationDate')) {
               <span class="field-error">{{ fieldError('reservationDate') }}</span>
             }
           </label>
           <label>
             שעה
-            <input type="time" formControlName="reservationTime" />
+            <input class="date-time-input" type="time" formControlName="reservationTime" />
             @if (fieldError('reservationTime')) {
               <span class="field-error">{{ fieldError('reservationTime') }}</span>
             }
@@ -98,7 +98,7 @@ export class ReservationPageComponent {
     customerFirstName: ['', Validators.required],
     customerLastName: ['', Validators.required],
     phoneNumber: ['', [Validators.required, israeliPhoneValidator()]],
-    reservationDate: ['2026-04-24', Validators.required],
+    reservationDate: [this.todayDate(), Validators.required],
     reservationTime: ['19:30', Validators.required],
     guestCount: [4, [Validators.required, Validators.min(1)]],
     notes: ['']
@@ -134,7 +134,7 @@ export class ReservationPageComponent {
           customerFirstName: '',
           customerLastName: '',
           phoneNumber: '',
-          reservationDate: '2026-04-24',
+          reservationDate: this.todayDate(),
           reservationTime: '19:30',
           guestCount: 4,
           notes: ''
@@ -148,5 +148,13 @@ export class ReservationPageComponent {
 
   fieldError(controlName: keyof typeof this.form.controls): string {
     return controlError(this.form.controls[controlName], this.submitted);
+  }
+
+  private todayDate(): string {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 }

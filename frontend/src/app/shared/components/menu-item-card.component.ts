@@ -2,7 +2,7 @@ import { CurrencyPipe } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { MenuItem } from '../../core/models';
+import { MenuCategory, MenuItem } from '../../core/models';
 import { categoryLabels } from '../ui-labels';
 import { StatusBadgeComponent } from './status-badge.component';
 
@@ -17,7 +17,7 @@ import { StatusBadgeComponent } from './status-badge.component';
       </a>
       <div class="menu-card__body">
         <div class="inline-between">
-          <app-status-badge [label]="categoryLabels[item.category]" tone="gold" />
+          <app-status-badge [label]="categoryName" tone="gold" />
           <strong class="price">{{ item.price | currency: 'ILS' : 'symbol' : '1.0-0' }}</strong>
         </div>
         <h3>{{ item.name }}</h3>
@@ -40,4 +40,8 @@ export class MenuItemCardComponent {
   @Output() add = new EventEmitter<MenuItem>();
 
   readonly categoryLabels = categoryLabels;
+
+  get categoryName(): string {
+    return this.item.categoryName || this.categoryLabels[this.item.category as MenuCategory] || `קטגוריה ${this.item.category}`;
+  }
 }

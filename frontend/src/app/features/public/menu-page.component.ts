@@ -2,13 +2,12 @@ import { AsyncPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { MenuCategory, MenuItem } from '../../core/models';
+import { MenuCategoryRecord, MenuItem } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { MenuItemCardComponent } from '../../shared/components/menu-item-card.component';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
-import { categoryLabels } from '../../shared/ui-labels';
 
-type CategoryFilter = MenuCategory | 'all';
+type CategoryFilter = number | 'all';
 
 @Component({
   selector: 'app-menu-page',
@@ -25,14 +24,16 @@ type CategoryFilter = MenuCategory | 'all';
       </app-page-header>
 
       <div class="segmented-control">
-        @for (category of categories; track category.value) {
-          <button
-            type="button"
-            [class.active]="selectedCategory === category.value"
-            (click)="selectedCategory = category.value"
-          >
-            {{ category.label }}
-          </button>
+        @if (categories$ | async; as categories) {
+          @for (category of categoryFilters(categories); track category.value) {
+            <button
+              type="button"
+              [class.active]="selectedCategory === category.value"
+              (click)="selectedCategory = category.value"
+            >
+              {{ category.label }}
+            </button>
+          }
         }
       </div>
 
@@ -50,12 +51,7 @@ export class MenuPageComponent {
   private readonly data = inject(RestaurantDataService);
 
   readonly menuItems$ = this.data.getAvailableMenuItems();
-  readonly categories: { value: CategoryFilter; label: string }[] = [
-    { value: 'all', label: 'הכל' },
-    ...Object.values(MenuCategory)
-      .filter((value): value is MenuCategory => typeof value === 'number')
-      .map((value) => ({ value, label: categoryLabels[value] }))
-  ];
+  readonly categories$ = this.data.getMenuCategories();
 
   selectedCategory: CategoryFilter = 'all';
 
@@ -65,5 +61,12 @@ export class MenuPageComponent {
     }
 
     return items.filter((item) => item.category === this.selectedCategory);
+  }
+
+  categoryFilters(categories: MenuCategoryRecord[]): { value: CategoryFilter; label: string }[] {
+    return [
+      { value: 'all', label: 'הכל' },
+      ...categories.map((category) => ({ value: category.id, label: category.name }))
+    ];
   }
 }

@@ -81,6 +81,33 @@ namespace Restaurant.API.Migrations
                     b.ToTable("MenuItemImages");
                 });
 
+            modelBuilder.Entity("Restaurant.API.Models.MenuCategoryRecord", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("MenuCategories");
+                });
+
             modelBuilder.Entity("Restaurant.API.Models.Order", b =>
                 {
                     b.Property<int>("Id")

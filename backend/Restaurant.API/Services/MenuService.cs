@@ -1,7 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Restaurant.API.Data;
 using Restaurant.API.DTOs;
-using Restaurant.API.Enums;
 using Restaurant.API.Helpers;
 using Restaurant.API.Interfaces;
 using Restaurant.API.Models;
@@ -10,13 +9,23 @@ namespace Restaurant.API.Services;
 
 public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : IMenuService
 {
-    public async Task<IReadOnlyCollection<MenuItemResponseDto>> GetAllAsync(MenuCategory? category, bool? isAvailable, CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<MenuItemResponseDto>> GetAllAsync(int? category, bool? isAvailable, bool includeInactiveCategories, CancellationToken cancellationToken)
     {
         var query = db.MenuItems.AsNoTracking().Include(x => x.Images).AsQueryable();
         if (category.HasValue) query = query.Where(x => x.Category == category.Value);
         if (isAvailable.HasValue) query = query.Where(x => x.IsAvailable == isAvailable.Value);
+        if (!includeInactiveCategories)
+        {
+            var activeCategoryIds = await db.MenuCategories.AsNoTracking()
+                .Where(x => x.IsActive)
+                .Select(x => x.Id)
+                .ToArrayAsync(cancellationToken);
+            query = query.Where(x => activeCategoryIds.Contains(x.Category));
+        }
+
         var items = await query.OrderBy(x => x.Category).ThenBy(x => x.Name).ToArrayAsync(cancellationToken);
-        return items.Select(x => x.ToMenuItemResponse()).ToArray();
+        var categoryNames = await GetCategoryNamesAsync(cancellationToken);
+        return items.Select(x => x.ToMenuItemResponse(CategoryName(categoryNames, x.Category))).ToArray();
     }
 
     public async Task<MenuItemResponseDto> GetByIdAsync(int id, bool includeUnavailable, CancellationToken cancellationToken)
@@ -27,9 +36,19 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
             query = query.Where(x => x.IsAvailable);
         }
 
+        if (!includeUnavailable)
+        {
+            var activeCategoryIds = await db.MenuCategories.AsNoTracking()
+                .Where(x => x.IsActive)
+                .Select(x => x.Id)
+                .ToArrayAsync(cancellationToken);
+            query = query.Where(x => activeCategoryIds.Contains(x.Category));
+        }
+
         var item = await query.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new ApiException("Menu item not found.", StatusCodes.Status404NotFound);
-        return item.ToMenuItemResponse();
+        var categoryNames = await GetCategoryNamesAsync(cancellationToken);
+        return item.ToMenuItemResponse(CategoryName(categoryNames, item.Category));
     }
 
     public async Task<MenuItemResponseDto> CreateAsync(CreateMenuItemDto dto, CancellationToken cancellationToken)
@@ -38,6 +57,12 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
         if (await db.MenuItems.AnyAsync(x => x.Name == name, cancellationToken))
         {
             throw new ApiException("A menu item with this name already exists.", StatusCodes.Status409Conflict);
+        }
+
+        var category = await GetCategoryAsync(dto.Category, cancellationToken);
+        if (!category.IsActive)
+        {
+            throw new ApiException("Menu category is inactive.", StatusCodes.Status400BadRequest);
         }
 
         var item = new MenuItem
@@ -51,7 +76,7 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
 
         db.MenuItems.Add(item);
         await db.SaveChangesAsync(cancellationToken);
-        return item.ToMenuItemResponse();
+        return item.ToMenuItemResponse(category.Name);
     }
 
     public async Task<MenuItemResponseDto> UpdateAsync(int id, UpdateMenuItemDto dto, CancellationToken cancellationToken)
@@ -65,13 +90,15 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
             throw new ApiException("A menu item with this name already exists.", StatusCodes.Status409Conflict);
         }
 
+        var category = await GetCategoryAsync(dto.Category, cancellationToken);
+
         item.Name = name;
         item.Description = dto.Description.Trim();
         item.Price = dto.Price;
         item.Category = dto.Category;
         item.IsAvailable = dto.IsAvailable;
         await db.SaveChangesAsync(cancellationToken);
-        return item.ToMenuItemResponse();
+        return item.ToMenuItemResponse(category.Name);
     }
 
     public async Task DeleteAsync(int id, CancellationToken cancellationToken)
@@ -106,4 +133,64 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
         db.MenuItemImages.Remove(image);
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task<IReadOnlyCollection<MenuCategoryResponseDto>> GetCategoriesAsync(bool includeInactive, CancellationToken cancellationToken)
+    {
+        var query = db.MenuCategories.AsNoTracking().AsQueryable();
+        if (!includeInactive)
+        {
+            query = query.Where(x => x.IsActive);
+        }
+
+        var categories = await query.OrderBy(x => x.SortOrder).ThenBy(x => x.Name).ToArrayAsync(cancellationToken);
+        return categories.Select(x => x.ToMenuCategoryResponse()).ToArray();
+    }
+
+    public async Task<MenuCategoryResponseDto> CreateCategoryAsync(CreateMenuCategoryDto dto, CancellationToken cancellationToken)
+    {
+        var name = dto.Name.Trim();
+        if (await db.MenuCategories.AnyAsync(x => x.Name == name, cancellationToken))
+        {
+            throw new ApiException("A menu category with this name already exists.", StatusCodes.Status409Conflict);
+        }
+
+        var sortOrder = await db.MenuCategories.MaxAsync(x => (int?)x.SortOrder, cancellationToken) ?? 0;
+        var category = new MenuCategoryRecord
+        {
+            Name = name,
+            IsActive = dto.IsActive,
+            SortOrder = sortOrder + 10
+        };
+
+        db.MenuCategories.Add(category);
+        await db.SaveChangesAsync(cancellationToken);
+        return category.ToMenuCategoryResponse();
+    }
+
+    public async Task<MenuCategoryResponseDto> UpdateCategoryAsync(int id, UpdateMenuCategoryDto dto, CancellationToken cancellationToken)
+    {
+        var category = await db.MenuCategories.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
+            ?? throw new ApiException("Menu category not found.", StatusCodes.Status404NotFound);
+
+        var name = dto.Name.Trim();
+        if (await db.MenuCategories.AnyAsync(x => x.Id != id && x.Name == name, cancellationToken))
+        {
+            throw new ApiException("A menu category with this name already exists.", StatusCodes.Status409Conflict);
+        }
+
+        category.Name = name;
+        category.IsActive = dto.IsActive;
+        await db.SaveChangesAsync(cancellationToken);
+        return category.ToMenuCategoryResponse();
+    }
+
+    private async Task<MenuCategoryRecord> GetCategoryAsync(int id, CancellationToken cancellationToken) =>
+        await db.MenuCategories.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
+            ?? throw new ApiException("Menu category not found.", StatusCodes.Status400BadRequest);
+
+    private async Task<Dictionary<int, string>> GetCategoryNamesAsync(CancellationToken cancellationToken) =>
+        await db.MenuCategories.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);
+
+    private static string CategoryName(IReadOnlyDictionary<int, string> categories, int category) =>
+        categories.TryGetValue(category, out var name) ? name : string.Empty;
 }

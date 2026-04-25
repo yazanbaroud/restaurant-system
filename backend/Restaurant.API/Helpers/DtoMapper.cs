@@ -12,14 +12,21 @@ public static class DtoMapper
         new(user.Id, user.FirstName, user.LastName, user.Email, user.PhoneNumber, user.Role);
 
     public static MenuItemResponseDto ToMenuItemResponse(this MenuItem item) =>
+        item.ToMenuItemResponse(null);
+
+    public static MenuItemResponseDto ToMenuItemResponse(this MenuItem item, string? categoryName) =>
         new(
             item.Id,
             item.Name,
             item.Description,
             item.Price,
             item.Category,
+            categoryName ?? string.Empty,
             item.IsAvailable,
             item.Images.Select(x => new MenuItemImageResponseDto(x.Id, x.MenuItemId, x.ImageUrl, x.IsMainImage)).ToArray());
+
+    public static MenuCategoryResponseDto ToMenuCategoryResponse(this MenuCategoryRecord category) =>
+        new(category.Id, category.Name, category.IsActive, category.SortOrder);
 
     public static TableResponseDto ToTableResponse(this Table table) =>
         new(table.Id, table.Name, table.Capacity, table.Status);

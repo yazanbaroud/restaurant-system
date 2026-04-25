@@ -13,6 +13,7 @@ import {
   MOCK_USERS
 } from '../mock/mock-data';
 import {
+  CreateMenuCategoryInput,
   CreateOrderInput,
   CreateOrderItemInput,
   CreateMenuItemInput,
@@ -21,6 +22,7 @@ import {
   CreateUserInput,
   DashboardSummary,
   MenuCategory,
+  MenuCategoryRecord,
   MenuItem,
   MenuItemImage,
   Order,
@@ -41,6 +43,7 @@ import {
   Table,
   TableOccupancyReport,
   TableStatus,
+  UpdateMenuCategoryInput,
   TopDish,
   UpdateMenuItemInput,
   UpdateTableInput,
@@ -55,6 +58,7 @@ export class RestaurantDataService {
   private readonly http = inject(HttpClient);
   private readonly apiBaseUrl = environment.apiBaseUrl;
   private readonly menuSubject = new BehaviorSubject<MenuItem[]>(structuredClone(MOCK_MENU_ITEMS));
+  private readonly menuCategoriesSubject = new BehaviorSubject<MenuCategoryRecord[]>(this.defaultMenuCategories());
   private readonly tablesSubject = new BehaviorSubject<Table[]>(structuredClone(MOCK_TABLES));
   private readonly ordersSubject = new BehaviorSubject<Order[]>(structuredClone(MOCK_ORDERS));
   private readonly reservationsSubject = new BehaviorSubject<Reservation[]>(structuredClone(MOCK_RESERVATIONS));
@@ -62,6 +66,7 @@ export class RestaurantDataService {
   private readonly usersSubject = new BehaviorSubject<User[]>(structuredClone(MOCK_USERS));
 
   readonly menuItems$ = this.menuSubject.asObservable();
+  readonly menuCategories$ = this.menuCategoriesSubject.asObservable();
   readonly tables$ = this.tablesSubject.asObservable();
   readonly orders$ = this.ordersSubject.asObservable();
   readonly reservations$ = this.reservationsSubject.asObservable();
@@ -74,6 +79,29 @@ export class RestaurantDataService {
 
   getAvailableMenuItems(): Observable<MenuItem[]> {
     return this.getMenuItems().pipe(map((items) => items.filter((item) => item.isAvailable)));
+  }
+
+  getMenuCategories(): Observable<MenuCategoryRecord[]> {
+    return this.fetchMenuCategoriesFromApi().pipe(switchMap(() => this.menuCategories$));
+  }
+
+  createMenuCategory(input: CreateMenuCategoryInput): Observable<MenuCategoryRecord> {
+    return this.http.post<unknown>(`${this.apiBaseUrl}/api/Menu/categories`, input).pipe(
+      map((response) => this.normalizeMenuCategoryRecord(response, input)),
+      catchError(() => of(this.createMockMenuCategory(input))),
+      tap((category) => this.upsertMenuCategory(category))
+    );
+  }
+
+  updateMenuCategory(id: number, input: UpdateMenuCategoryInput): Observable<MenuCategoryRecord> {
+    const existingCategory = this.menuCategoriesSubject.value.find((category) => category.id === id);
+    const fallbackCategory: Partial<MenuCategoryRecord> = { ...existingCategory, ...input, id };
+
+    return this.http.put<unknown>(`${this.apiBaseUrl}/api/Menu/categories/${id}`, input).pipe(
+      map((response) => this.normalizeMenuCategoryRecord(response, fallbackCategory)),
+      catchError(() => of(this.updateMockMenuCategory(id, input))),
+      tap((category) => this.upsertMenuCategory(category))
+    );
   }
 
   getMenuItem(id: number): Observable<MenuItem | undefined> {
@@ -166,6 +194,7 @@ export class RestaurantDataService {
       description: input.description,
       price: input.price,
       category: input.category,
+      categoryName: this.menuCategoryName(input.category),
       isAvailable: input.isAvailable,
       images: input.images?.length ? input.images : this.defaultMenuImages()
     };
@@ -180,6 +209,7 @@ export class RestaurantDataService {
       description: input.description ?? item?.description ?? '',
       price: input.price ?? item?.price ?? 0,
       category: input.category ?? item?.category ?? MenuCategory.MainCourses,
+      categoryName: this.menuCategoryName(input.category ?? item?.category ?? MenuCategory.MainCourses),
       isAvailable: input.isAvailable ?? item?.isAvailable ?? true,
       images: input.images?.length ? input.images : item?.images ?? this.defaultMenuImages(),
       imageItems: item?.imageItems
@@ -193,6 +223,7 @@ export class RestaurantDataService {
       description: '',
       price: 0,
       category: MenuCategory.MainCourses,
+      categoryName: this.menuCategoryName(MenuCategory.MainCourses),
       isAvailable: true,
       images: imageUrl ? [imageUrl] : this.defaultMenuImages()
     };
@@ -1753,6 +1784,14 @@ export class RestaurantDataService {
     );
   }
 
+  private fetchMenuCategoriesFromApi(): Observable<MenuCategoryRecord[]> {
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Menu/categories`).pipe(
+      map((response) => this.normalizeMenuCategories(response)),
+      tap((categories) => this.menuCategoriesSubject.next(categories)),
+      catchError(() => of(this.menuCategoriesSubject.value))
+    );
+  }
+
   private fetchMenuItemFromApi(id: number): Observable<MenuItem> {
     return this.http.get<unknown>(`${this.apiBaseUrl}/api/Menu/${id}`).pipe(
       map((response) => this.normalizeMenuItem(response))
@@ -1768,17 +1807,74 @@ export class RestaurantDataService {
     const record = this.extractMenuPayload(response) ?? {};
     const imageItems = this.normalizeMenuImageItems(record['images'] ?? record['imageUrls'] ?? record['imageUrl']);
     const images = imageItems.length ? imageItems.map((image) => image.imageUrl) : this.normalizeImages(record['images'] ?? record['imageUrls'] ?? record['imageUrl'] ?? fallback.images);
+    const category = this.normalizeMenuCategory(record['category'] ?? record['categoryId'] ?? fallback.category);
 
     return {
       id: this.numberValue(record['id'], fallback.id ?? this.nextId(this.menuSubject.value)),
       name: this.stringValue(record['name']) || fallback.name || '',
       description: this.stringValue(record['description']) || fallback.description || '',
       price: this.numberValue(record['price'], fallback.price ?? 0),
-      category: this.normalizeMenuCategory(record['category'] ?? fallback.category),
+      category,
+      categoryName:
+        this.stringValue(record['categoryName'] ?? record['categoryLabel']) ||
+        fallback.categoryName ||
+        this.menuCategoryName(category),
       isAvailable: this.booleanValue(record['isAvailable'], fallback.isAvailable ?? true),
       images,
       imageItems: imageItems.length ? imageItems : fallback.imageItems
     };
+  }
+
+  private normalizeMenuCategories(response: unknown): MenuCategoryRecord[] {
+    return this.extractArrayPayload(response)
+      .map((category) => this.normalizeMenuCategoryRecord(category))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+  }
+
+  private normalizeMenuCategoryRecord(response: unknown, fallback: Partial<MenuCategoryRecord> = {}): MenuCategoryRecord {
+    const record = this.asRecord(response) ?? {};
+    const id = this.numberValue(record['id'] ?? record['category'] ?? record['categoryId'], fallback.id ?? this.nextId(this.menuCategoriesSubject.value));
+
+    return {
+      id,
+      name:
+        this.stringValue(record['name'] ?? record['categoryName'] ?? record['label']) ||
+        fallback.name ||
+        this.fallbackCategoryName(id),
+      isActive: this.booleanValue(record['isActive'] ?? record['active'], fallback.isActive ?? true),
+      sortOrder: this.numberValue(record['sortOrder'] ?? record['order'], fallback.sortOrder ?? id * 10)
+    };
+  }
+
+  private createMockMenuCategory(input: CreateMenuCategoryInput): MenuCategoryRecord {
+    const sortOrder = Math.max(0, ...this.menuCategoriesSubject.value.map((category) => category.sortOrder)) + 10;
+    return {
+      id: this.nextId(this.menuCategoriesSubject.value),
+      name: input.name,
+      isActive: input.isActive,
+      sortOrder
+    };
+  }
+
+  private updateMockMenuCategory(id: number, input: UpdateMenuCategoryInput): MenuCategoryRecord {
+    const category = this.menuCategoriesSubject.value.find((candidate) => candidate.id === id);
+
+    return {
+      id,
+      name: input.name ?? category?.name ?? '',
+      isActive: input.isActive ?? category?.isActive ?? true,
+      sortOrder: category?.sortOrder ?? id * 10
+    };
+  }
+
+  private upsertMenuCategory(category: MenuCategoryRecord): void {
+    const categories = this.menuCategoriesSubject.value;
+    const exists = categories.some((candidate) => candidate.id === category.id);
+    const next = exists
+      ? categories.map((candidate) => (candidate.id === category.id ? category : candidate))
+      : [...categories, category];
+
+    this.menuCategoriesSubject.next(next.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)));
   }
 
   private createMenuItemPayload(input: CreateMenuItemInput): Record<string, unknown> {
@@ -1801,6 +1897,34 @@ export class RestaurantDataService {
       category: input.category ?? existingItem?.category ?? MenuCategory.MainCourses,
       isAvailable: input.isAvailable ?? existingItem?.isAvailable ?? true
     };
+  }
+
+  private defaultMenuCategories(): MenuCategoryRecord[] {
+    return Object.values(MenuCategory)
+      .filter((value): value is MenuCategory => typeof value === 'number')
+      .map((id) => ({
+        id,
+        name: this.fallbackCategoryName(id),
+        isActive: true,
+        sortOrder: id * 10
+      }));
+  }
+
+  private menuCategoryName(id: number): string {
+    return this.menuCategoriesSubject.value.find((category) => category.id === id)?.name || this.fallbackCategoryName(id);
+  }
+
+  private fallbackCategoryName(id: number): string {
+    const labels: Record<number, string> = {
+      [MenuCategory.Salads]: 'סלטים',
+      [MenuCategory.MainCourses]: 'עיקריות',
+      [MenuCategory.Fish]: 'דגים',
+      [MenuCategory.Meats]: 'בשרים',
+      [MenuCategory.Desserts]: 'קינוחים',
+      [MenuCategory.Drinks]: 'שתייה'
+    };
+
+    return labels[id] ?? `קטגוריה ${id}`;
   }
 
   private menuFallbackWithoutImages(fallback: Partial<MenuItem>): Partial<MenuItem> {
@@ -2030,9 +2154,9 @@ export class RestaurantDataService {
     return UserRole.Customer;
   }
 
-  private normalizeMenuCategory(value: unknown): MenuCategory {
+  private normalizeMenuCategory(value: unknown): number {
     const numericValue = this.numberValue(value);
-    if (this.isMenuCategory(numericValue)) {
+    if (Number.isFinite(numericValue) && numericValue > 0) {
       return numericValue;
     }
 
@@ -2048,10 +2172,6 @@ export class RestaurantDataService {
     }
 
     return MenuCategory.MainCourses;
-  }
-
-  private isMenuCategory(value: number): value is MenuCategory {
-    return Object.values(MenuCategory).includes(value);
   }
 
   private normalizeOrderStatus(value: unknown): OrderStatus {

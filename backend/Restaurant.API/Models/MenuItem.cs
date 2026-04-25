@@ -8,7 +8,7 @@ public sealed class MenuItem
     public string Name { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public decimal Price { get; set; }
-    public MenuCategory Category { get; set; }
+    public int Category { get; set; }
     public bool IsAvailable { get; set; } = true;
     public ICollection<MenuItemImage> Images { get; set; } = new List<MenuItemImage>();
     public ICollection<OrderItem> OrderItems { get; set; } = new List<OrderItem>();

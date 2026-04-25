@@ -3,6 +3,7 @@ import { Component, inject } from '@angular/core';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { combineLatest, map, shareReplay } from 'rxjs';
 
+import { MenuCategory, MenuItem } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { MenuItemCardComponent } from '../../shared/components/menu-item-card.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
@@ -19,7 +20,7 @@ import { categoryLabels } from '../../shared/ui-labels';
           <img [src]="item.images[0]" [alt]="item.name" />
         </div>
         <div class="dish-detail__content">
-          <app-status-badge [label]="categoryLabels[item.category]" tone="gold" />
+          <app-status-badge [label]="categoryName(item)" tone="gold" />
           <h1>{{ item.name }}</h1>
           <p>{{ item.description }}</p>
           <strong class="price price--large">{{ item.price | currency: 'ILS' : 'symbol' : '1.0-0' }}</strong>
@@ -33,7 +34,7 @@ import { categoryLabels } from '../../shared/ui-labels';
       <section class="section container">
         <div class="section-heading">
           <p class="eyebrow">עוד מהקטגוריה</p>
-          <h2>{{ categoryLabels[item.category] }}</h2>
+          <h2>{{ categoryName(item) }}</h2>
         </div>
         <div class="menu-grid">
           @for (related of relatedItems$ | async; track related.id) {
@@ -61,4 +62,8 @@ export class DishDetailsPageComponent {
     )
   );
   readonly categoryLabels = categoryLabels;
+
+  categoryName(item: MenuItem): string {
+    return item.categoryName || categoryLabels[item.category as MenuCategory] || `קטגוריה ${item.category}`;
+  }
 }

@@ -7,6 +7,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<Table> Tables => Set<Table>();
+    public DbSet<MenuCategoryRecord> MenuCategories => Set<MenuCategoryRecord>();
     public DbSet<MenuItem> MenuItems => Set<MenuItem>();
     public DbSet<MenuItemImage> MenuItemImages => Set<MenuItemImage>();
     public DbSet<Order> Orders => Set<Order>();
@@ -42,7 +43,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.Name).HasMaxLength(150).IsRequired();
             entity.Property(x => x.Description).HasMaxLength(1000).IsRequired();
             entity.Property(x => x.Price).HasPrecision(18, 2);
-            entity.Property(x => x.Category).HasConversion<int>().IsRequired();
+            entity.Property(x => x.Category).IsRequired();
+        });
+
+        modelBuilder.Entity<MenuCategoryRecord>(entity =>
+        {
+            entity.HasIndex(x => x.Name).IsUnique();
+            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
         });
 
         modelBuilder.Entity<MenuItemImage>(entity =>

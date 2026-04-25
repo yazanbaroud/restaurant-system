@@ -13,11 +13,16 @@ public sealed class MenuController(IMenuService menuService) : ControllerBase
 {
     [HttpGet]
     [AllowAnonymous]
-    public async Task<ActionResult<IReadOnlyCollection<MenuItemResponseDto>>> GetAll([FromQuery] MenuCategory? category, [FromQuery] bool? isAvailable, CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyCollection<MenuItemResponseDto>>> GetAll([FromQuery] int? category, [FromQuery] bool? isAvailable, CancellationToken cancellationToken)
     {
         var effectiveAvailability = CanReadUnavailableMenuItems() ? isAvailable : true;
-        return Ok(await menuService.GetAllAsync(category, effectiveAvailability, cancellationToken));
+        return Ok(await menuService.GetAllAsync(category, effectiveAvailability, CanReadUnavailableMenuItems(), cancellationToken));
     }
+
+    [HttpGet("categories")]
+    [AllowAnonymous]
+    public async Task<ActionResult<IReadOnlyCollection<MenuCategoryResponseDto>>> GetCategories(CancellationToken cancellationToken) =>
+        Ok(await menuService.GetCategoriesAsync(CanReadUnavailableMenuItems(), cancellationToken));
 
     [HttpGet("{id:int}")]
     [AllowAnonymous]
@@ -57,6 +62,16 @@ public sealed class MenuController(IMenuService menuService) : ControllerBase
         await menuService.DeleteImageAsync(id, imageId, cancellationToken);
         return NoContent();
     }
+
+    [HttpPost("categories")]
+    [Authorize(Roles = AppRoles.Admin)]
+    public async Task<ActionResult<MenuCategoryResponseDto>> CreateCategory(CreateMenuCategoryDto dto, CancellationToken cancellationToken) =>
+        Created(string.Empty, await menuService.CreateCategoryAsync(dto, cancellationToken));
+
+    [HttpPut("categories/{id:int}")]
+    [Authorize(Roles = AppRoles.Admin)]
+    public async Task<ActionResult<MenuCategoryResponseDto>> UpdateCategory(int id, UpdateMenuCategoryDto dto, CancellationToken cancellationToken) =>
+        Ok(await menuService.UpdateCategoryAsync(id, dto, cancellationToken));
 
     private bool CanReadUnavailableMenuItems() =>
         User.Identity?.IsAuthenticated == true && User.IsInRole(AppRoles.Admin);

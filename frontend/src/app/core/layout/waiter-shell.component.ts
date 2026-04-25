@@ -23,9 +23,6 @@ import { AuthService } from '../services/auth.service';
           <a routerLink="/waiter/create-order" routerLinkActive="active">הזמנה חדשה</a>
           <a routerLink="/waiter/reservations" routerLinkActive="active">הזמנות מקום</a>
         </nav>
-        <button type="button" class="btn btn-ghost" routerLink="/admin">
-          תצוגת מנהל
-        </button>
       </aside>
       <section class="staff-main">
         <header class="staff-topline">

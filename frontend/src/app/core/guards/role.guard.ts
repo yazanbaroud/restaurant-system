@@ -16,11 +16,11 @@ export const roleGuard: CanActivateFn = (route, state) => {
 
   const currentUser = auth.currentUser;
   if (currentUser) {
-    return authorizeUser(currentUser, roles, router, state.url);
+    return authorizeUser(currentUser, roles, router);
   }
 
   return auth.me().pipe(
-    map((user) => authorizeUser(user, roles, router, state.url)),
+    map((user) => authorizeUser(user, roles, router)),
     catchError(() => {
       auth.logout();
       return of(loginRedirect(router, state.url, roles));
@@ -31,16 +31,13 @@ export const roleGuard: CanActivateFn = (route, state) => {
 function authorizeUser(
   user: User,
   roles: UserRole[] | undefined,
-  router: Router,
-  returnUrl: string
+  router: Router
 ): true | UrlTree {
   if (!roles?.length || roles.includes(user.role)) {
     return true;
   }
 
-  return router.createUrlTree(['/login'], {
-    queryParams: { returnUrl, forbidden: 'true' }
-  });
+  return router.createUrlTree([defaultRouteForRole(user.role)]);
 }
 
 function loginRedirect(router: Router, returnUrl: string, roles: UserRole[] | undefined): UrlTree {
@@ -50,4 +47,16 @@ function loginRedirect(router: Router, returnUrl: string, roles: UserRole[] | un
       role: roles?.[0] ?? null
     }
   });
+}
+
+function defaultRouteForRole(role: UserRole): string {
+  if (role === UserRole.Admin) {
+    return '/admin';
+  }
+
+  if (role === UserRole.Waiter) {
+    return '/waiter';
+  }
+
+  return '/';
 }

@@ -78,7 +78,7 @@ import { paymentMethodLabels } from '../../shared/ui-labels';
           <h2>הזמנות פעילות</h2>
           <div class="resource-grid">
             @for (order of activeOrders$ | async; track order.id) {
-              <app-order-card [order]="order" [detailsLink]="['/admin/orders']" />
+              <app-order-card [order]="order" [detailsLink]="['/admin/orders', order.id]" />
             }
           </div>
         </section>

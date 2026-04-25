@@ -1,6 +1,6 @@
 import { AsyncPipe, CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
 import { OrderStatus } from '../../core/models';
@@ -27,7 +27,7 @@ import {
           [title]="'הזמנה #' + order.orderNumber"
           [subtitle]="order.customerFirstName + ' ' + order.customerLastName"
         >
-          <a class="btn btn-gold" [routerLink]="['/waiter/orders', order.id, 'payment']">גביית תשלום</a>
+          <a class="btn btn-gold" [routerLink]="[orderDetailsBaseLink, order.id, 'payment']">גביית תשלום</a>
         </app-page-header>
 
         @if (errorMessage) {
@@ -75,10 +75,14 @@ import {
 })
 export class OrderDetailsPageComponent {
   private readonly data = inject(RestaurantDataService);
-  private readonly id = Number(inject(ActivatedRoute).snapshot.paramMap.get('id'));
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  private readonly id = Number(this.route.snapshot.paramMap.get('id'));
+  private readonly isAdminRoute = this.router.url.startsWith('/admin');
 
   readonly OrderStatus = OrderStatus;
   readonly order$ = this.data.getOrder(this.id);
+  readonly orderDetailsBaseLink = this.isAdminRoute ? '/admin/orders' : '/waiter/orders';
   readonly orderStatusLabels = orderStatusLabels;
   readonly orderStatusTones = orderStatusTones;
   readonly orderTypeLabels = orderTypeLabels;

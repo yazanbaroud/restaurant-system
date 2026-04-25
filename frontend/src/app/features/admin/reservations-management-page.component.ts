@@ -5,7 +5,7 @@ import { finalize } from 'rxjs';
 import { Reservation, ReservationStatus } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
-import { ReservationCardComponent } from '../../shared/components/reservation-card.component';
+import { ReservationCardComponent, ReservationStatusChange } from '../../shared/components/reservation-card.component';
 import { reservationStatusLabels } from '../../shared/ui-labels';
 
 type ReservationFilter = 'all' | ReservationStatus;
@@ -69,15 +69,20 @@ export class ReservationsManagementPageComponent {
     return reservations.filter((reservation) => reservation.status === this.selectedFilter);
   }
 
-  setStatus(id: number, status: ReservationStatus): void {
-    if (this.updatingReservationId) {
+  setStatus(id: number, change: ReservationStatusChange): void {
+    if (this.updatingReservationId !== null) {
+      return;
+    }
+
+    const restaurantNotes = change.restaurantNotes?.trim() || this.restaurantNoteForStatus(change.status);
+    if (change.status === ReservationStatus.Rejected && !restaurantNotes) {
+      this.errorMessage = 'נא להזין סיבת דחייה לפני עדכון ההזמנה.';
       return;
     }
 
     this.updatingReservationId = id;
     this.errorMessage = '';
-    const restaurantNotes = this.restaurantNoteForStatus(status);
-    this.data.updateReservationStatus(id, status, restaurantNotes).pipe(
+    this.data.updateReservationStatus(id, change.status, restaurantNotes).pipe(
       finalize(() => {
         this.updatingReservationId = null;
       })
@@ -95,7 +100,6 @@ export class ReservationsManagementPageComponent {
   private restaurantNoteForStatus(status: ReservationStatus): string {
     const notes: Partial<Record<ReservationStatus, string>> = {
       [ReservationStatus.Approved]: 'אושר במערכת הניהול',
-      [ReservationStatus.Rejected]: 'נדחה במערכת הניהול',
       [ReservationStatus.Cancelled]: 'בוטל במערכת הניהול',
       [ReservationStatus.Arrived]: 'הלקוח הגיע למסעדה',
       [ReservationStatus.NoShow]: 'הלקוח לא הגיע'

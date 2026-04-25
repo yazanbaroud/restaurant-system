@@ -28,9 +28,6 @@ import { AuthService } from '../services/auth.service';
           <a routerLink="/admin/payments" routerLinkActive="active">תשלומים</a>
           <a routerLink="/admin/reports" routerLinkActive="active">דוחות</a>
         </nav>
-        <button type="button" class="btn btn-ghost" routerLink="/waiter">
-          מעבר לתפעול מלצר
-        </button>
       </aside>
       <section class="staff-main">
         <header class="staff-topline">

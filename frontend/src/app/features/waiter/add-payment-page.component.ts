@@ -1,7 +1,7 @@
 import { AsyncPipe, CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { combineLatest, finalize, map, tap } from 'rxjs';
 
 import { Order, Payment, PaymentMethod, PaymentStatus } from '../../core/models';
@@ -29,7 +29,7 @@ interface PaymentViewModel {
           [title]="'גביית תשלום להזמנה #' + vm.order.orderNumber"
           [subtitle]="vm.order.customerFirstName + ' ' + vm.order.customerLastName"
         >
-          <a class="btn btn-ghost" [routerLink]="['/waiter/orders', vm.order.id]">חזרה להזמנה</a>
+          <a class="btn btn-ghost" [routerLink]="[orderDetailsBaseLink, vm.order.id]">חזרה להזמנה</a>
         </app-page-header>
 
         @if (vm.isPaid) {
@@ -109,7 +109,7 @@ interface PaymentViewModel {
     } @else {
       <section class="page-surface narrow-page empty-state">
         <h1>ההזמנה לא נמצאה</h1>
-        <a class="btn btn-dark" routerLink="/waiter">חזרה להזמנות פעילות</a>
+        <a class="btn btn-dark" [routerLink]="ordersHomeLink">חזרה להזמנות</a>
       </section>
     }
   `
@@ -117,12 +117,16 @@ interface PaymentViewModel {
 export class AddPaymentPageComponent {
   private readonly data = inject(RestaurantDataService);
   private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
   private readonly id = Number(this.route.snapshot.paramMap.get('id'));
+  private readonly isAdminRoute = this.router.url.startsWith('/admin');
   private latestViewModel: PaymentViewModel | null = null;
 
   readonly PaymentMethod = PaymentMethod;
   readonly paymentMethodLabels = paymentMethodLabels;
+  readonly orderDetailsBaseLink = this.isAdminRoute ? '/admin/orders' : '/waiter/orders';
+  readonly ordersHomeLink = this.isAdminRoute ? ['/admin/orders'] : ['/waiter'];
   readonly form = this.fb.nonNullable.group({
     amount: [0, [Validators.required, Validators.min(0.01)]],
     method: [PaymentMethod.CreditCard, Validators.required]

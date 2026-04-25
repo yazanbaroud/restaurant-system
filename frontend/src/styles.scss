@@ -957,6 +957,12 @@ textarea:focus {
   font-weight: 800;
 }
 
+.reservation-card__rejection {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .menu-admin-card {
   display: grid;
   gap: 12px;

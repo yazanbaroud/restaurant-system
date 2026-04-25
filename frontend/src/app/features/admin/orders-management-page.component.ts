@@ -1,5 +1,6 @@
 import { AsyncPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import { Order, OrderStatus } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
@@ -12,14 +13,16 @@ type OrderFilter = 'all' | OrderStatus;
 @Component({
   selector: 'app-orders-management-page',
   standalone: true,
-  imports: [AsyncPipe, OrderCardComponent, PageHeaderComponent],
+  imports: [AsyncPipe, OrderCardComponent, PageHeaderComponent, RouterLink],
   template: `
     <section class="page-surface">
       <app-page-header
         eyebrow="ניהול הזמנות"
         title="כל הזמנות המסעדה"
         subtitle="סינון לפי מצב הזמנה ותשלום, כולל מעבר לפרטי הזמנה."
-      />
+      >
+        <a class="btn btn-gold" routerLink="/admin/orders/new">הזמנה חדשה</a>
+      </app-page-header>
       <div class="segmented-control">
         @for (filter of filters; track filter.value) {
           <button type="button" [class.active]="selectedFilter === filter.value" (click)="selectedFilter = filter.value">
@@ -30,7 +33,7 @@ type OrderFilter = 'all' | OrderStatus;
       @if (orders$ | async; as orders) {
         <div class="resource-grid">
           @for (order of filteredOrders(orders); track order.id) {
-            <app-order-card [order]="order" [detailsLink]="['/waiter/orders', order.id]" />
+            <app-order-card [order]="order" [detailsLink]="['/admin/orders', order.id]" />
           }
         </div>
       }

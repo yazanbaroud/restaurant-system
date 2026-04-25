@@ -1,7 +1,7 @@
 import { AsyncPipe, CurrencyPipe } from '@angular/common';
-import { Component, inject } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { finalize } from 'rxjs';
 
 import { MenuItem, OrderType, Table, TableStatus } from '../../core/models';
@@ -130,11 +130,12 @@ interface CartLine {
     </section>
   `
 })
-export class CreateOrderPageComponent {
+export class CreateOrderPageComponent implements OnInit {
   private readonly data = inject(RestaurantDataService);
   private readonly auth = inject(AuthService);
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
 
   readonly OrderType = OrderType;
   readonly TableStatus = TableStatus;
@@ -153,6 +154,11 @@ export class CreateOrderPageComponent {
   cart: CartLine[] = [];
   isSubmitting = false;
   errorMessage = '';
+  orderDetailsBaseLink = '/waiter/orders';
+
+  ngOnInit(): void {
+    this.orderDetailsBaseLink = this.isInsideRoute('admin') ? '/admin/orders' : '/waiter/orders';
+  }
 
   get total(): number {
     return this.cart.reduce((sum, line) => sum + line.item.price * line.quantity, 0);
@@ -195,6 +201,10 @@ export class CreateOrderPageComponent {
       .filter((line) => line.quantity > 0);
   }
 
+  private isInsideRoute(path: string): boolean {
+    return this.route.snapshot.pathFromRoot.some((snapshot) => snapshot.routeConfig?.path === path);
+  }
+
   submit(): void {
     if (!this.canSubmit) {
       this.form.markAllAsTouched();
@@ -221,7 +231,7 @@ export class CreateOrderPageComponent {
         this.isSubmitting = false;
       })
     ).subscribe({
-      next: (order) => void this.router.navigate(['/waiter/orders', order.id]),
+      next: (order) => void this.router.navigate([this.orderDetailsBaseLink, order.id]),
       error: () => {
         this.errorMessage = 'לא הצלחנו לפתוח את ההזמנה. נסו שוב בעוד רגע.';
       }

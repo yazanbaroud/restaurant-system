@@ -42,7 +42,7 @@ export const routes: Routes = [
     path: 'waiter',
     component: WaiterShellComponent,
     canActivate: [roleGuard],
-    data: { roles: [UserRole.Waiter, UserRole.Admin] },
+    data: { roles: [UserRole.Waiter] },
     children: [
       { path: '', component: ActiveOrdersPageComponent },
       { path: 'create-order', component: CreateOrderPageComponent },
@@ -59,6 +59,9 @@ export const routes: Routes = [
     children: [
       { path: '', component: AdminDashboardPageComponent },
       { path: 'orders', component: OrdersManagementPageComponent },
+      { path: 'orders/new', component: CreateOrderPageComponent },
+      { path: 'orders/:id', component: OrderDetailsPageComponent },
+      { path: 'orders/:id/payment', component: AddPaymentPageComponent },
       { path: 'reservations', component: ReservationsManagementPageComponent },
       { path: 'menu', component: MenuManagementPageComponent },
       { path: 'tables', component: TablesManagementPageComponent },

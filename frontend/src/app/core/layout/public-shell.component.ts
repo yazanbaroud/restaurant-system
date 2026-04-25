@@ -24,9 +24,6 @@ import { AuthService } from '../services/auth.service';
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">בית</a>
           <a routerLink="/menu" routerLinkActive="active">תפריט</a>
           <a routerLink="/reservation" routerLinkActive="active">הזמנת מקום</a>
-          @if (!(auth.currentUser$ | async)) {
-            <a routerLink="/login" routerLinkActive="active">כניסה</a>
-          }
         </nav>
         <div class="role-switch">
           @if (auth.currentUser$ | async; as user) {
@@ -37,10 +34,9 @@ import { AuthService } from '../services/auth.service';
             @if (user.role === UserRole.Waiter) {
               <a class="btn btn-small btn-dark" routerLink="/waiter">חזרה לממשק מלצר</a>
             }
-            <button type="button" class="btn btn-small btn-ghost" (click)="logout()">יציאה</button>
+            <button type="button" class="btn btn-small btn-ghost" (click)="logout()">התנתקות</button>
           } @else {
-            <button type="button" class="btn btn-small btn-ghost" (click)="goToStaff(UserRole.Waiter, '/waiter')">מלצר</button>
-            <button type="button" class="btn btn-small btn-dark" (click)="goToStaff(UserRole.Admin, '/admin')">מנהל</button>
+            <a class="btn btn-small btn-dark" routerLink="/login" routerLinkActive="active">התחברות</a>
           }
         </div>
       </header>
@@ -55,12 +51,6 @@ export class PublicShellComponent {
   readonly router = inject(Router);
   readonly roleLabels = roleLabels;
   readonly UserRole = UserRole;
-
-  goToStaff(role: UserRole, path: string): void {
-    void this.router.navigate(['/login'], {
-      queryParams: { role, returnUrl: path }
-    });
-  }
 
   logout(): void {
     this.auth.logout();

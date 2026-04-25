@@ -96,21 +96,43 @@ export class LoginPageComponent {
 
   private navigateAfterLogin(user: User): void {
     const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
-    if (returnUrl) {
-      void this.router.navigateByUrl(returnUrl);
-      return;
+    const authorizedReturnUrl = this.getAuthorizedReturnUrl(user, returnUrl);
+
+    void this.router.navigateByUrl(authorizedReturnUrl ?? this.getDefaultRouteForRole(user.role));
+  }
+
+  private getDefaultRouteForRole(role: UserRole): string {
+    if (role === UserRole.Admin) {
+      return '/admin';
     }
 
+    if (role === UserRole.Waiter) {
+      return '/waiter';
+    }
+
+    return '/';
+  }
+
+  private getAuthorizedReturnUrl(user: User, returnUrl: string | null): string | null {
+    if (!returnUrl || !returnUrl.startsWith('/') || returnUrl.startsWith('//')) {
+      return null;
+    }
+
+    const path = returnUrl.split(/[?#]/)[0];
     if (user.role === UserRole.Admin) {
-      void this.router.navigateByUrl('/admin');
-      return;
+      return this.isRouteSection(path, '/admin') ? returnUrl : null;
     }
 
     if (user.role === UserRole.Waiter) {
-      void this.router.navigateByUrl('/waiter');
-      return;
+      return this.isRouteSection(path, '/waiter') ? returnUrl : null;
     }
 
-    void this.router.navigateByUrl('/');
+    return path === '/' || this.isRouteSection(path, '/menu') || this.isRouteSection(path, '/reservation')
+      ? returnUrl
+      : null;
+  }
+
+  private isRouteSection(path: string, section: string): boolean {
+    return path === section || path.startsWith(`${section}/`);
   }
 }

@@ -49,11 +49,38 @@ public sealed class PaymentsService(
         return response;
     }
 
-    public async Task<IReadOnlyCollection<PaymentResponseDto>> GetAllAsync(CancellationToken cancellationToken) =>
-        await db.Payments.AsNoTracking()
+    public async Task<IReadOnlyCollection<PaymentResponseDto>> GetAllAsync(
+        DateOnly? date,
+        DateTimeOffset? from,
+        DateTimeOffset? to,
+        CancellationToken cancellationToken)
+    {
+        var query = db.Payments.AsNoTracking();
+
+        if (from.HasValue)
+        {
+            var fromUtc = from.Value.UtcDateTime;
+            query = query.Where(x => x.PaidAt >= fromUtc);
+        }
+
+        if (to.HasValue)
+        {
+            var toUtc = to.Value.UtcDateTime;
+            query = query.Where(x => x.PaidAt < toUtc);
+        }
+
+        if (!from.HasValue && !to.HasValue && date.HasValue)
+        {
+            var start = date.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            var end = start.AddDays(1);
+            query = query.Where(x => x.PaidAt >= start && x.PaidAt < end);
+        }
+
+        return await query
             .OrderByDescending(x => x.PaidAt)
             .Select(x => x.ToPaymentResponse())
             .ToArrayAsync(cancellationToken);
+    }
 
     public async Task<IReadOnlyCollection<PaymentResponseDto>> GetByOrderAsync(int orderId, CancellationToken cancellationToken)
     {

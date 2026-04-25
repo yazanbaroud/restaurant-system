@@ -17,8 +17,12 @@ public sealed class PaymentsController(IPaymentsService paymentsService) : Contr
 
     [HttpGet]
     [Authorize(Roles = AppRoles.Admin)]
-    public async Task<ActionResult<IReadOnlyCollection<PaymentResponseDto>>> GetAll(CancellationToken cancellationToken) =>
-        Ok(await paymentsService.GetAllAsync(cancellationToken));
+    public async Task<ActionResult<IReadOnlyCollection<PaymentResponseDto>>> GetAll(
+        [FromQuery] DateOnly? date,
+        [FromQuery] DateTimeOffset? from,
+        [FromQuery] DateTimeOffset? to,
+        CancellationToken cancellationToken) =>
+        Ok(await paymentsService.GetAllAsync(date, from, to, cancellationToken));
 
     [HttpGet("order/{orderId:int}")]
     public async Task<ActionResult<IReadOnlyCollection<PaymentResponseDto>>> GetByOrder(int orderId, CancellationToken cancellationToken) =>

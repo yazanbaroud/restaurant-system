@@ -807,7 +807,11 @@ export class RestaurantDataService {
     this.usersSubject.next(this.usersSubject.value.filter((user) => user.id !== id));
   }
 
-  getPayments(): Observable<Payment[]> {
+  getPayments(date?: string): Observable<Payment[]> {
+    if (date) {
+      return this.fetchPaymentsFromApi(date);
+    }
+
     return this.fetchPaymentsFromApi().pipe(switchMap(() => this.payments$));
   }
 
@@ -1419,11 +1423,16 @@ export class RestaurantDataService {
     return this.orders$.pipe(map((orders) => orders.find((order) => order.id === id)));
   }
 
-  private fetchPaymentsFromApi(): Observable<Payment[]> {
-    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Payments`).pipe(
+  private fetchPaymentsFromApi(date?: string): Observable<Payment[]> {
+    return this.http.get<unknown>(this.paymentsUrl(date)).pipe(
       map((response) => this.normalizePayments(response)),
-      tap((payments) => this.paymentsSubject.next(payments)),
-      catchError(() => of(this.paymentsSubject.value))
+      map((payments) => date ? this.filterPaymentsByLocalDate(payments, date) : payments),
+      tap((payments) => {
+        if (!date) {
+          this.paymentsSubject.next(payments);
+        }
+      }),
+      catchError(() => of(date ? this.filterPaymentsByLocalDate(this.paymentsSubject.value, date) : this.paymentsSubject.value))
     );
   }
 
@@ -1432,6 +1441,40 @@ export class RestaurantDataService {
       map((response) => this.normalizePayments(response, orderId)),
       tap((payments) => this.replacePaymentsForOrder(orderId, payments))
     );
+  }
+
+  private paymentsUrl(date?: string): string {
+    const baseUrl = `${this.apiBaseUrl}/api/Payments`;
+    if (!date) {
+      return baseUrl;
+    }
+
+    const from = this.localDateBoundaryIso(date, 0);
+    const to = this.localDateBoundaryIso(date, 1);
+    return `${baseUrl}?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
+  }
+
+  private localDateBoundaryIso(date: string, dayOffset: number): string {
+    const [year, month, day] = date.split('-').map(Number);
+    if (!year || !month || !day) {
+      return new Date().toISOString();
+    }
+
+    return new Date(year, month - 1, day + dayOffset).toISOString();
+  }
+
+  private filterPaymentsByLocalDate(payments: Payment[], date: string): Payment[] {
+    return payments.filter((payment) => this.localDateValue(payment.paidAt) === date);
+  }
+
+  private localDateValue(value: string): string {
+    const parsedDate = new Date(value);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return '';
+    }
+
+    const localDate = new Date(parsedDate.getTime() - parsedDate.getTimezoneOffset() * 60000);
+    return localDate.toISOString().slice(0, 10);
   }
 
   private orderPaymentsFromState(orderId: number): Observable<Payment[]> {

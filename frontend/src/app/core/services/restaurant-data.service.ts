@@ -651,6 +651,12 @@ export class RestaurantDataService {
     );
   }
 
+  deleteUser(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiBaseUrl}/api/Users/${id}`).pipe(
+      tap(() => this.removeUser(id))
+    );
+  }
+
   private fetchUsersFromApi(): Observable<User[]> {
     return this.http.get<unknown>(`${this.apiBaseUrl}/api/Users`).pipe(
       map((response) => this.normalizeUsers(response)),
@@ -795,6 +801,10 @@ export class RestaurantDataService {
     const users = this.usersSubject.value;
     const exists = users.some((candidate) => candidate.id === user.id);
     this.usersSubject.next(exists ? users.map((candidate) => (candidate.id === user.id ? user : candidate)) : [user, ...users]);
+  }
+
+  private removeUser(id: number): void {
+    this.usersSubject.next(this.usersSubject.value.filter((user) => user.id !== id));
   }
 
   getPayments(): Observable<Payment[]> {

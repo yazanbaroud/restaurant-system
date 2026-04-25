@@ -97,6 +97,30 @@ public sealed class UsersService(
         logger.LogInformation("Admin reset password for user {UserId}", user.Id);
     }
 
+    public async Task DeleteAsync(int id, int currentUserId, CancellationToken cancellationToken)
+    {
+        if (id == currentUserId)
+        {
+            throw new ApiException("לא ניתן למחוק את החשבון הפעיל.", StatusCodes.Status409Conflict);
+        }
+
+        var user = await db.Users.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
+            ?? throw new ApiException("User not found.", StatusCodes.Status404NotFound);
+
+        if (user.Role == UserRole.Admin)
+        {
+            var adminCount = await db.Users.CountAsync(x => x.Role == UserRole.Admin, cancellationToken);
+            if (adminCount <= 1)
+            {
+                throw new ApiException("חייב להישאר לפחות מנהל אחד.", StatusCodes.Status409Conflict);
+            }
+        }
+
+        db.Users.Remove(user);
+        await db.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Admin deleted user {UserId} with role {Role}", user.Id, user.Role);
+    }
+
     private async Task EnsureEmailAvailableAsync(string email, int? currentUserId, CancellationToken cancellationToken)
     {
         var normalizedEmail = email.Trim().ToLowerInvariant();

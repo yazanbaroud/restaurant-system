@@ -1,4 +1,4 @@
-using FluentValidation;
+﻿using FluentValidation;
 using Restaurant.API.DTOs;
 using Restaurant.API.Helpers;
 
@@ -42,5 +42,16 @@ public sealed class UpdateUserRoleDtoValidator : AbstractValidator<UpdateUserRol
     public UpdateUserRoleDtoValidator()
     {
         RuleFor(x => x.Role).IsInEnum();
+    }
+}
+
+public sealed class ResetUserPasswordDtoValidator : AbstractValidator<ResetUserPasswordDto>
+{
+    public ResetUserPasswordDtoValidator()
+    {
+        RuleFor(x => x.NewPassword).NotEmpty().MinimumLength(8)
+            .Matches("[A-Z]").WithMessage("הסיסמה חייבת להכיל אות גדולה באנגלית.")
+            .Matches("[a-z]").WithMessage("הסיסמה חייבת להכיל אות קטנה באנגלית.")
+            .Matches("[0-9]").WithMessage("הסיסמה חייבת להכיל ספרה.");
     }
 }

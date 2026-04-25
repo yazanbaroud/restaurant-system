@@ -58,6 +58,34 @@ public sealed class AuthService(
         return user.ToCurrentUser();
     }
 
+    public async Task<CurrentUserDto> UpdateCurrentUserAsync(int userId, UpdateCurrentUserDto dto, CancellationToken cancellationToken)
+    {
+        var user = await db.Users.SingleOrDefaultAsync(x => x.Id == userId, cancellationToken)
+            ?? throw new ApiException("User not found.", StatusCodes.Status404NotFound);
+
+        user.FirstName = dto.FirstName.Trim();
+        user.LastName = dto.LastName.Trim();
+        user.PhoneNumber = dto.PhoneNumber.Trim();
+
+        await db.SaveChangesAsync(cancellationToken);
+        return user.ToCurrentUser();
+    }
+
+    public async Task ChangePasswordAsync(int userId, ChangePasswordDto dto, CancellationToken cancellationToken)
+    {
+        var user = await db.Users.SingleOrDefaultAsync(x => x.Id == userId, cancellationToken)
+            ?? throw new ApiException("User not found.", StatusCodes.Status404NotFound);
+
+        if (!passwordHasher.VerifyPassword(dto.CurrentPassword, user.PasswordHash))
+        {
+            throw new ApiException("Current password is incorrect.", StatusCodes.Status400BadRequest);
+        }
+
+        user.PasswordHash = passwordHasher.HashPassword(dto.NewPassword);
+        await db.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("User {UserId} changed their password", user.Id);
+    }
+
     private AuthResponseDto CreateAuthResponse(User user)
     {
         var (token, expiresAtUtc) = jwtTokenGenerator.Generate(user);

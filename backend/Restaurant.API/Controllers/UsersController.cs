@@ -33,4 +33,11 @@ public sealed class UsersController(IUsersService usersService) : ControllerBase
     [HttpPut("{id:int}/role")]
     public async Task<ActionResult<UserResponseDto>> UpdateRole(int id, UpdateUserRoleDto dto, CancellationToken cancellationToken) =>
         Ok(await usersService.UpdateRoleAsync(User.GetUserId(), id, dto, cancellationToken));
+
+    [HttpPut("{id:int}/password-reset")]
+    public async Task<IActionResult> ResetPassword(int id, ResetUserPasswordDto dto, CancellationToken cancellationToken)
+    {
+        await usersService.ResetPasswordAsync(id, dto, cancellationToken);
+        return NoContent();
+    }
 }

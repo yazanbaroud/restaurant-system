@@ -21,6 +21,17 @@ export interface RegisterRequest {
   role?: UserRole;
 }
 
+export interface UpdateProfileRequest {
+  firstName: string;
+  lastName: string;
+  phoneNumber: string;
+}
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
@@ -74,6 +85,17 @@ export class AuthService {
       map((response) => this.normalizeUser(this.extractUserPayload(response) ?? response)),
       tap((user) => this.currentUserSubject.next(user))
     );
+  }
+
+  updateProfile(input: UpdateProfileRequest): Observable<User> {
+    return this.http.put<unknown>(`${this.apiBaseUrl}/api/Auth/me`, input).pipe(
+      map((response) => this.normalizeUser(this.extractUserPayload(response) ?? response)),
+      tap((user) => this.currentUserSubject.next(user))
+    );
+  }
+
+  changePassword(input: ChangePasswordRequest): Observable<void> {
+    return this.http.put<void>(`${this.apiBaseUrl}/api/Auth/me/password`, input);
   }
 
   logout(): void {

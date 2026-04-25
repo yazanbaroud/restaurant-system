@@ -24,4 +24,17 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
     [Authorize]
     public async Task<ActionResult<CurrentUserDto>> Me(CancellationToken cancellationToken) =>
         Ok(await authService.GetCurrentUserAsync(User.GetUserId(), cancellationToken));
+
+    [HttpPut("me")]
+    [Authorize]
+    public async Task<ActionResult<CurrentUserDto>> UpdateMe(UpdateCurrentUserDto dto, CancellationToken cancellationToken) =>
+        Ok(await authService.UpdateCurrentUserAsync(User.GetUserId(), dto, cancellationToken));
+
+    [HttpPut("me/password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword(ChangePasswordDto dto, CancellationToken cancellationToken)
+    {
+        await authService.ChangePasswordAsync(User.GetUserId(), dto, cancellationToken);
+        return NoContent();
+    }
 }

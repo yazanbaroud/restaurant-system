@@ -9,4 +9,5 @@ public interface IUsersService
     Task<UserResponseDto> CreateAsync(CreateUserDto dto, CancellationToken cancellationToken);
     Task<UserResponseDto> UpdateAsync(int id, UpdateUserDto dto, CancellationToken cancellationToken);
     Task<UserResponseDto> UpdateRoleAsync(int currentUserId, int id, UpdateUserRoleDto dto, CancellationToken cancellationToken);
+    Task ResetPasswordAsync(int id, ResetUserPasswordDto dto, CancellationToken cancellationToken);
 }

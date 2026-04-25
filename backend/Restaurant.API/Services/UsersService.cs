@@ -87,6 +87,16 @@ public sealed class UsersService(
         return user.ToUserResponse();
     }
 
+    public async Task ResetPasswordAsync(int id, ResetUserPasswordDto dto, CancellationToken cancellationToken)
+    {
+        var user = await db.Users.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
+            ?? throw new ApiException("User not found.", StatusCodes.Status404NotFound);
+
+        user.PasswordHash = passwordHasher.HashPassword(dto.NewPassword);
+        await db.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Admin reset password for user {UserId}", user.Id);
+    }
+
     private async Task EnsureEmailAvailableAsync(string email, int? currentUserId, CancellationToken cancellationToken)
     {
         var normalizedEmail = email.Trim().ToLowerInvariant();

@@ -1784,6 +1784,10 @@ export class RestaurantDataService {
     );
   }
 
+  resetUserPassword(id: number, newPassword: string): Observable<void> {
+    return this.http.put<void>(`${this.apiBaseUrl}/api/Users/${id}/password-reset`, { newPassword });
+  }
+
   private fetchMenuCategoriesFromApi(): Observable<MenuCategoryRecord[]> {
     return this.http.get<unknown>(`${this.apiBaseUrl}/api/Menu/categories`).pipe(
       map((response) => this.normalizeMenuCategories(response)),

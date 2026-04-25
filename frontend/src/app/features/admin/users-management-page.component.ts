@@ -136,6 +136,30 @@ import { roleLabels } from '../../shared/ui-labels';
 
                 <div class="actions-inline">
                   <button class="btn btn-small btn-ghost" type="button" [disabled]="isSubmitting || isBusy(user.id)" (click)="edit(user)">עריכה</button>
+                  <button class="btn btn-small btn-dark" type="button" [disabled]="isSubmitting || isBusy(user.id)" (click)="startPasswordReset(user)">איפוס סיסמה</button>
+                </div>
+                @if (resettingPasswordUserId === user.id) {
+                  <form class="form-grid password-reset-panel" [formGroup]="passwordResetForm" (ngSubmit)="submitPasswordReset(user)">
+                    <label>
+                      סיסמה חדשה
+                      <input type="password" formControlName="newPassword" autocomplete="new-password" />
+                      @if (passwordResetFieldError('newPassword')) {
+                        <span class="field-error">{{ passwordResetFieldError('newPassword') }}</span>
+                      }
+                    </label>
+                    <label>
+                      אימות סיסמה
+                      <input type="password" formControlName="confirmPassword" autocomplete="new-password" />
+                      @if (passwordResetFieldError('confirmPassword')) {
+                        <span class="field-error">{{ passwordResetFieldError('confirmPassword') }}</span>
+                      }
+                    </label>
+                    <div class="actions-inline full">
+                      <button class="btn btn-small btn-danger" type="submit" [disabled]="isResettingPassword">שמירת סיסמה חדשה</button>
+                      <button class="btn btn-small btn-ghost" type="button" [disabled]="isResettingPassword" (click)="cancelPasswordReset()">ביטול</button>
+                    </div>
+                  </form>
+                }
               </article>
             }
           </div>
@@ -170,12 +194,20 @@ export class UsersManagementPageComponent {
     password: ['', strongPasswordValidator()],
     role: [UserRole.Customer, Validators.required]
   });
+  readonly passwordResetForm = this.fb.nonNullable.group({
+    newPassword: ['', [Validators.required, strongPasswordValidator()]],
+    confirmPassword: ['', Validators.required]
+  });
+
   editingUserId: number | null = null;
   editingOriginalRole: UserRole | null = null;
   actingUserId: number | null = null;
   isSubmitting = false;
   isLoading = true;
+  isResettingPassword = false;
   formSubmitted = false;
+  passwordResetSubmitted = false;
+  resettingPasswordUserId: number | null = null;
   errorMessage = '';
   successMessage = '';
 
@@ -259,6 +291,60 @@ export class UsersManagementPageComponent {
       },
       error: () => {
         this.errorMessage = 'לא הצלחנו לשמור את המשתמש. בדקו את הפרטים ונסו שוב.';
+      }
+    });
+  }
+
+  startPasswordReset(user: User): void {
+    if (this.isResettingPassword) {
+      return;
+    }
+
+    this.resettingPasswordUserId = user.id;
+    this.passwordResetSubmitted = false;
+    this.errorMessage = '';
+    this.successMessage = '';
+    this.passwordResetForm.reset({
+      newPassword: '',
+      confirmPassword: ''
+    });
+  }
+
+  cancelPasswordReset(): void {
+    this.resettingPasswordUserId = null;
+    this.passwordResetSubmitted = false;
+    this.passwordResetForm.reset({
+      newPassword: '',
+      confirmPassword: ''
+    });
+  }
+
+  submitPasswordReset(user: User): void {
+    this.passwordResetSubmitted = true;
+    this.passwordResetForm.controls.confirmPassword.setErrors(null);
+    if (this.passwordResetForm.controls.newPassword.value !== this.passwordResetForm.controls.confirmPassword.value) {
+      this.passwordResetForm.controls.confirmPassword.setErrors({ passwordMismatch: true });
+    }
+
+    if (this.passwordResetForm.invalid || this.isResettingPassword) {
+      this.passwordResetForm.markAllAsTouched();
+      return;
+    }
+
+    this.isResettingPassword = true;
+    this.errorMessage = '';
+    this.successMessage = '';
+    this.data.resetUserPassword(user.id, this.passwordResetForm.controls.newPassword.value).pipe(
+      finalize(() => {
+        this.isResettingPassword = false;
+      })
+    ).subscribe({
+      next: () => {
+        this.successMessage = 'הסיסמה עודכנה בהצלחה';
+        this.cancelPasswordReset();
+      },
+      error: () => {
+        this.errorMessage = 'לא הצלחנו לעדכן את הסיסמה';
       }
     });
   }
@@ -360,5 +446,7 @@ export class UsersManagementPageComponent {
     return controlError(this.form.controls[controlName], this.formSubmitted);
   }
 
-
+  passwordResetFieldError(controlName: keyof typeof this.passwordResetForm.controls): string {
+    return controlError(this.passwordResetForm.controls[controlName], this.passwordResetSubmitted);
+  }
 }

@@ -1096,6 +1096,28 @@ textarea:focus {
   font-weight: 800;
 }
 
+.success-note {
+  margin: -4px 0 0;
+  color: var(--olive-dark);
+  font-weight: 850;
+}
+
+.account-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.account-summary span,
+.account-summary strong {
+  display: block;
+}
+
+.password-reset-panel {
+  margin-top: 12px;
+}
+
 .paid-state {
   display: block;
 }

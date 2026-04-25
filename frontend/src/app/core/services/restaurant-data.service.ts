@@ -104,6 +104,12 @@ export class RestaurantDataService {
     );
   }
 
+  deleteMenuCategory(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.apiBaseUrl}/api/Menu/categories/${id}`).pipe(
+      tap(() => this.removeMenuCategory(id))
+    );
+  }
+
   getMenuItem(id: number): Observable<MenuItem | undefined> {
     return this.fetchMenuItemFromApi(id).pipe(
       tap((item) => this.upsertMenuItem(item)),
@@ -1879,6 +1885,10 @@ export class RestaurantDataService {
       : [...categories, category];
 
     this.menuCategoriesSubject.next(next.sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)));
+  }
+
+  private removeMenuCategory(id: number): void {
+    this.menuCategoriesSubject.next(this.menuCategoriesSubject.value.filter((category) => category.id !== id));
   }
 
   private createMenuItemPayload(input: CreateMenuItemInput): Record<string, unknown> {

@@ -73,6 +73,14 @@ public sealed class MenuController(IMenuService menuService) : ControllerBase
     public async Task<ActionResult<MenuCategoryResponseDto>> UpdateCategory(int id, UpdateMenuCategoryDto dto, CancellationToken cancellationToken) =>
         Ok(await menuService.UpdateCategoryAsync(id, dto, cancellationToken));
 
+    [HttpDelete("categories/{id:int}")]
+    [Authorize(Roles = AppRoles.Admin)]
+    public async Task<IActionResult> DeleteCategory(int id, CancellationToken cancellationToken)
+    {
+        await menuService.DeleteCategoryAsync(id, cancellationToken);
+        return NoContent();
+    }
+
     private bool CanReadUnavailableMenuItems() =>
         User.Identity?.IsAuthenticated == true && User.IsInRole(AppRoles.Admin);
 }

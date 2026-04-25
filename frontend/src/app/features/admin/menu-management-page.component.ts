@@ -1,4 +1,5 @@
 import { AsyncPipe, CurrencyPipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize, shareReplay, tap } from 'rxjs';
@@ -106,6 +107,9 @@ import { categoryLabels } from '../../shared/ui-labels';
             @if (categoryErrorMessage) {
               <p class="validation-note full">{{ categoryErrorMessage }}</p>
             }
+            @if (categorySuccessMessage) {
+              <p class="success-note full">{{ categorySuccessMessage }}</p>
+            }
             <div class="actions-inline full">
               <button class="btn btn-gold" type="submit" [disabled]="isCategorySubmitting">
                 {{ editingCategoryId ? 'שמירה' : 'קטגוריה חדשה' }}
@@ -123,7 +127,10 @@ import { categoryLabels } from '../../shared/ui-labels';
                   <span>{{ category.name }}</span>
                   <div class="actions-inline">
                     <app-status-badge [label]="category.isActive ? 'פעילה' : 'לא פעילה'" [tone]="category.isActive ? 'olive' : 'charcoal'" />
-                    <button class="btn btn-small btn-ghost" type="button" [disabled]="isCategorySubmitting" (click)="editCategory(category)">עריכת קטגוריה</button>
+                    <button class="btn btn-small btn-ghost" type="button" [disabled]="isCategorySubmitting || isDeletingCategory(category.id)" (click)="editCategory(category)">עריכת קטגוריה</button>
+                    <button class="btn btn-small btn-danger" type="button" [disabled]="isCategorySubmitting || deletingCategoryId !== null" (click)="deleteCategory(category)">
+                      מחיקת קטגוריה
+                    </button>
                   </div>
                 </div>
               }
@@ -185,10 +192,12 @@ export class MenuManagementPageComponent {
   editingItemId: number | null = null;
   editingCategoryId: number | null = null;
   actingItemId: number | null = null;
+  deletingCategoryId: number | null = null;
   isSubmitting = false;
   isCategorySubmitting = false;
   errorMessage = '';
   categoryErrorMessage = '';
+  categorySuccessMessage = '';
   formSubmitted = false;
   categoryFormSubmitted = false;
 
@@ -251,6 +260,7 @@ export class MenuManagementPageComponent {
 
     this.isCategorySubmitting = true;
     this.categoryErrorMessage = '';
+    this.categorySuccessMessage = '';
     const value = this.categoryForm.getRawValue();
     const request$ = this.editingCategoryId
       ? this.data.updateMenuCategory(this.editingCategoryId, value)
@@ -292,6 +302,7 @@ export class MenuManagementPageComponent {
 
     this.editingCategoryId = category.id;
     this.categoryErrorMessage = '';
+    this.categorySuccessMessage = '';
     this.categoryFormSubmitted = false;
     this.categoryForm.reset({
       name: category.name,
@@ -318,6 +329,31 @@ export class MenuManagementPageComponent {
     this.categoryForm.reset({
       name: '',
       isActive: true
+    });
+  }
+
+  deleteCategory(category: MenuCategoryRecord): void {
+    if (this.deletingCategoryId !== null) {
+      return;
+    }
+
+    this.deletingCategoryId = category.id;
+    this.categoryErrorMessage = '';
+    this.categorySuccessMessage = '';
+    this.data.deleteMenuCategory(category.id).pipe(
+      finalize(() => {
+        this.deletingCategoryId = null;
+      })
+    ).subscribe({
+      next: () => {
+        this.categorySuccessMessage = 'הקטגוריה נמחקה בהצלחה';
+        if (this.editingCategoryId === category.id) {
+          this.resetCategoryForm();
+        }
+      },
+      error: (error: unknown) => {
+        this.categoryErrorMessage = this.categoryDeleteErrorMessage(error);
+      }
     });
   }
 
@@ -366,6 +402,10 @@ export class MenuManagementPageComponent {
     return this.actingItemId === id;
   }
 
+  isDeletingCategory(id: number): boolean {
+    return this.deletingCategoryId === id;
+  }
+
   activeCategories(categories: MenuCategoryRecord[]): MenuCategoryRecord[] {
     return categories.filter((category) => category.isActive || category.id === this.form.controls.category.value);
   }
@@ -404,5 +444,13 @@ export class MenuManagementPageComponent {
 
   private firstActiveCategory(categories: MenuCategoryRecord[]): MenuCategoryRecord | undefined {
     return categories.find((category) => category.isActive);
+  }
+
+  private categoryDeleteErrorMessage(error: unknown): string {
+    if (error instanceof HttpErrorResponse && error.status === 409) {
+      return 'לא ניתן למחוק קטגוריה שיש בה מנות. ניתן להפוך אותה ללא פעילה.';
+    }
+
+    return 'לא הצלחנו למחוק את הקטגוריה';
   }
 }

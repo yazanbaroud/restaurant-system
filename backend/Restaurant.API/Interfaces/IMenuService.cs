@@ -13,4 +13,5 @@ public interface IMenuService
     Task<IReadOnlyCollection<MenuCategoryResponseDto>> GetCategoriesAsync(bool includeInactive, CancellationToken cancellationToken);
     Task<MenuCategoryResponseDto> CreateCategoryAsync(CreateMenuCategoryDto dto, CancellationToken cancellationToken);
     Task<MenuCategoryResponseDto> UpdateCategoryAsync(int id, UpdateMenuCategoryDto dto, CancellationToken cancellationToken);
+    Task DeleteCategoryAsync(int id, CancellationToken cancellationToken);
 }

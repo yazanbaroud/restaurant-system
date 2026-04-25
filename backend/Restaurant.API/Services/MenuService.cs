@@ -184,6 +184,21 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
         return category.ToMenuCategoryResponse();
     }
 
+    public async Task DeleteCategoryAsync(int id, CancellationToken cancellationToken)
+    {
+        var category = await db.MenuCategories.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
+            ?? throw new ApiException("Menu category not found.", StatusCodes.Status404NotFound);
+
+        if (await db.MenuItems.AnyAsync(x => x.Category == id, cancellationToken))
+        {
+            throw new ApiException("לא ניתן למחוק קטגוריה שיש בה מנות. ניתן להפוך אותה ללא פעילה.", StatusCodes.Status409Conflict);
+        }
+
+        db.MenuCategories.Remove(category);
+        await db.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Menu category {MenuCategoryId} deleted", category.Id);
+    }
+
     private async Task<MenuCategoryRecord> GetCategoryAsync(int id, CancellationToken cancellationToken) =>
         await db.MenuCategories.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new ApiException("Menu category not found.", StatusCodes.Status400BadRequest);

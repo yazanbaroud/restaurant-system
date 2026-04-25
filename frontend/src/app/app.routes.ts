@@ -7,6 +7,7 @@ import { roleGuard } from './core/guards/role.guard';
 import { UserRole } from './core/models';
 import { LoginPageComponent } from './features/auth/login-page.component';
 import { RegisterPageComponent } from './features/auth/register-page.component';
+import { AccountPageComponent } from './features/account/account-page.component';
 import { AdminDashboardPageComponent } from './features/admin/admin-dashboard-page.component';
 import { MenuManagementPageComponent } from './features/admin/menu-management-page.component';
 import { OrdersManagementPageComponent } from './features/admin/orders-management-page.component';
@@ -34,6 +35,7 @@ export const routes: Routes = [
       { path: 'menu', component: MenuPageComponent },
       { path: 'menu/:id', component: DishDetailsPageComponent },
       { path: 'reservation', component: ReservationPageComponent },
+      { path: 'account', component: AccountPageComponent, canActivate: [roleGuard] },
       { path: 'login', component: LoginPageComponent },
       { path: 'register', component: RegisterPageComponent }
     ]

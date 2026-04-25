@@ -38,6 +38,7 @@ import { AuthService } from '../services/auth.service';
           @if (auth.currentUser$ | async; as user) {
             <div class="actions-inline">
               <div class="user-chip">{{ user.firstName }} {{ user.lastName }}</div>
+              <a class="btn btn-small btn-ghost" routerLink="/account">אזור אישי</a>
               <button type="button" class="btn btn-small btn-ghost" (click)="logout()">יציאה</button>
             </div>
           }

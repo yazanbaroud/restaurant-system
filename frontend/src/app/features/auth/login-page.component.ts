@@ -128,6 +128,10 @@ export class LoginPageComponent {
     }
 
     const path = returnUrl.split(/[?#]/)[0];
+    if (this.isRouteSection(path, '/account')) {
+      return returnUrl;
+    }
+
     if (user.role === UserRole.Admin) {
       return this.isRouteSection(path, '/admin') ? returnUrl : null;
     }

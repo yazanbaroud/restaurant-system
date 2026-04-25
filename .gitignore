@@ -5,3 +5,5 @@ node_modules/
 dist/
 .env
 appsettings.Development.json
+.dotnet-home/
+backend-api*.log

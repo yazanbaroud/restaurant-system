@@ -38,10 +38,12 @@ public sealed class ReservationsService(
         return response;
     }
 
-    public async Task<IReadOnlyCollection<ReservationResponseDto>> GetAllAsync(DateOnly? date, ReservationStatus? status, string? phoneNumber, CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<ReservationResponseDto>> GetAllAsync(DateOnly? date, DateOnly? from, DateOnly? to, ReservationStatus? status, string? phoneNumber, CancellationToken cancellationToken)
     {
         var query = db.Reservations.AsNoTracking().AsQueryable();
         if (date.HasValue) query = query.Where(x => x.ReservationDate == date.Value);
+        if (from.HasValue) query = query.Where(x => x.ReservationDate >= from.Value);
+        if (to.HasValue) query = query.Where(x => x.ReservationDate <= to.Value);
         if (status.HasValue) query = query.Where(x => x.Status == status.Value);
         if (!string.IsNullOrWhiteSpace(phoneNumber)) query = query.Where(x => x.PhoneNumber.Contains(phoneNumber.Trim()));
         return await query.OrderBy(x => x.ReservationDate).ThenBy(x => x.ReservationTime).Select(x => x.ToReservationResponse()).ToArrayAsync(cancellationToken);

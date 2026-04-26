@@ -6,7 +6,7 @@ namespace Restaurant.API.Interfaces;
 public interface IReservationsService
 {
     Task<ReservationResponseDto> CreateAsync(CreateReservationDto dto, CancellationToken cancellationToken);
-    Task<IReadOnlyCollection<ReservationResponseDto>> GetAllAsync(DateOnly? date, ReservationStatus? status, string? phoneNumber, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<ReservationResponseDto>> GetAllAsync(DateOnly? date, DateOnly? from, DateOnly? to, ReservationStatus? status, string? phoneNumber, CancellationToken cancellationToken);
     Task<ReservationResponseDto> GetByIdAsync(int id, CancellationToken cancellationToken);
     Task<ReservationResponseDto> UpdateAsync(int id, UpdateReservationDto dto, CancellationToken cancellationToken);
     Task<ReservationResponseDto> UpdateStatusAsync(int id, UpdateReservationStatusDto dto, CancellationToken cancellationToken);

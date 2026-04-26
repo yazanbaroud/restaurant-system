@@ -20,10 +20,12 @@ public sealed class ReservationsController(IReservationsService reservationsServ
     [Authorize(Roles = AppRoles.AdminOrWaiter)]
     public async Task<ActionResult<IReadOnlyCollection<ReservationResponseDto>>> GetAll(
         [FromQuery] DateOnly? date,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
         [FromQuery] ReservationStatus? status,
         [FromQuery] string? phoneNumber,
         CancellationToken cancellationToken) =>
-        Ok(await reservationsService.GetAllAsync(date, status, phoneNumber, cancellationToken));
+        Ok(await reservationsService.GetAllAsync(date, from, to, status, phoneNumber, cancellationToken));
 
     [HttpGet("{id:int}")]
     [Authorize(Roles = AppRoles.AdminOrWaiter)]

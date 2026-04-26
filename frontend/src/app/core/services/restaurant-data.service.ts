@@ -1,4 +1,4 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject, Observable, catchError, forkJoin, map, of, switchMap, tap } from 'rxjs';
 
@@ -528,8 +528,8 @@ export class RestaurantDataService {
     );
   }
 
-  getReservations(): Observable<Reservation[]> {
-    return this.fetchReservationsFromApi().pipe(switchMap(() => this.reservations$));
+  getReservations(fromDate?: string, toDate?: string): Observable<Reservation[]> {
+    return this.fetchReservationsFromApi(fromDate, toDate).pipe(switchMap(() => this.reservations$));
   }
 
   createReservation(input: CreateReservationInput): Observable<Reservation> {
@@ -1379,8 +1379,20 @@ export class RestaurantDataService {
     return record;
   }
 
-  private fetchReservationsFromApi(): Observable<Reservation[]> {
-    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Reservations`).pipe(
+  private fetchReservationsFromApi(fromDate?: string, toDate?: string): Observable<Reservation[]> {
+    let params = new HttpParams();
+    const from = fromDate?.trim();
+    const to = toDate?.trim();
+
+    if (from) {
+      params = params.set('from', from);
+    }
+
+    if (to) {
+      params = params.set('to', to);
+    }
+
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Reservations`, { params }).pipe(
       map((response) => this.normalizeReservations(response)),
       tap((reservations) => this.reservationsSubject.next(reservations)),
       catchError(() => of(this.reservationsSubject.value))

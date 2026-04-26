@@ -86,42 +86,7 @@ import { categoryLabels } from '../../shared/ui-labels';
               <button class="btn btn-small btn-ghost" type="button" (click)="toggleCategoryPanel()">סגירה</button>
             </div>
 
-            <div class="category-panel-grid" [class.category-panel-grid--editing]="isCategoryFormOpen">
-              <div class="category-list-card">
-                <div class="inline-between category-section-heading">
-                  <h3>רשימת קטגוריות</h3>
-                  <button class="btn btn-small btn-gold" type="button" [disabled]="isCategorySubmitting" (click)="startCreateCategory()">קטגוריה חדשה</button>
-                </div>
-
-                @if (categorySuccessMessage) {
-                  <p class="success-note">{{ categorySuccessMessage }}</p>
-                }
-                @if (!isCategoryFormOpen && categoryErrorMessage) {
-                  <p class="validation-note">{{ categoryErrorMessage }}</p>
-                }
-
-                @if (!categories.length) {
-                  <div class="category-empty-state">לא נמצאו קטגוריות</div>
-                } @else {
-                  <div class="compact-list category-list">
-                    @for (category of categories; track category.id) {
-                      <div class="category-row">
-                        <div class="category-row-main">
-                          <span>{{ category.name }}</span>
-                          <app-status-badge [label]="category.isActive ? 'פעילה' : 'לא פעילה'" [tone]="category.isActive ? 'olive' : 'charcoal'" />
-                        </div>
-                        <div class="actions-inline category-actions">
-                          <button class="btn btn-small btn-ghost" type="button" [disabled]="isCategorySubmitting || isDeletingCategory(category.id)" (click)="editCategory(category)">עריכה</button>
-                          <button class="btn btn-small btn-ghost category-delete-button" type="button" [disabled]="isCategorySubmitting || deletingCategoryId !== null" (click)="deleteCategory(category)">
-                            מחיקה
-                          </button>
-                        </div>
-                      </div>
-                    }
-                  </div>
-                }
-              </div>
-
+            <div class="category-panel-grid">
               @if (isCategoryFormOpen) {
                 <form class="category-editor-card" [formGroup]="categoryForm" (ngSubmit)="submitCategory()">
                   <div class="category-section-heading">
@@ -147,6 +112,41 @@ import { categoryLabels } from '../../shared/ui-labels';
                     <button class="btn btn-ghost" type="button" [disabled]="isCategorySubmitting" (click)="resetCategoryForm()">ביטול</button>
                   </div>
                 </form>
+              } @else {
+                <div class="category-list-card">
+                  <div class="inline-between category-section-heading">
+                    <h3>רשימת קטגוריות</h3>
+                    <button class="btn btn-small btn-gold" type="button" [disabled]="isCategorySubmitting" (click)="startCreateCategory()">קטגוריה חדשה</button>
+                  </div>
+
+                  @if (categorySuccessMessage) {
+                    <p class="success-note">{{ categorySuccessMessage }}</p>
+                  }
+                  @if (categoryErrorMessage) {
+                    <p class="validation-note">{{ categoryErrorMessage }}</p>
+                  }
+
+                  @if (!categories.length) {
+                    <div class="category-empty-state">לא נמצאו קטגוריות</div>
+                  } @else {
+                    <div class="compact-list category-list">
+                      @for (category of categories; track category.id) {
+                        <div class="category-row">
+                          <div class="category-row-main">
+                            <span>{{ category.name }}</span>
+                            <app-status-badge [label]="category.isActive ? 'פעילה' : 'לא פעילה'" [tone]="category.isActive ? 'olive' : 'charcoal'" />
+                          </div>
+                          <div class="actions-inline category-actions">
+                            <button class="btn btn-small btn-ghost" type="button" [disabled]="isCategorySubmitting || isDeletingCategory(category.id)" (click)="editCategory(category)">עריכה</button>
+                            <button class="btn btn-small btn-ghost category-delete-button" type="button" [disabled]="isCategorySubmitting || deletingCategoryId !== null" (click)="deleteCategory(category)">
+                              מחיקה
+                            </button>
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  }
+                </div>
               }
             </div>
           </section>
@@ -254,10 +254,6 @@ import { categoryLabels } from '../../shared/ui-labels';
       grid-template-columns: minmax(0, 1fr);
       gap: 1rem;
       align-items: start;
-    }
-
-    .category-panel-grid--editing {
-      grid-template-columns: minmax(0, 1fr) minmax(240px, 340px);
     }
 
     .category-editor-card,
@@ -424,10 +420,6 @@ import { categoryLabels } from '../../shared/ui-labels';
       }
 
       .category-panel-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .category-panel-grid--editing {
         grid-template-columns: 1fr;
       }
     }
@@ -615,9 +607,7 @@ export class MenuManagementPageComponent {
     ).subscribe({
       next: () => {
         this.categorySuccessMessage = 'הקטגוריה נמחקה בהצלחה';
-        if (this.editingCategoryId === category.id) {
-          this.resetCategoryForm();
-        }
+        this.resetCategoryForm();
       },
       error: (error: unknown) => {
         this.categoryErrorMessage = this.categoryDeleteErrorMessage(error);

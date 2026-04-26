@@ -94,21 +94,14 @@ import { roleLabels } from '../../shared/ui-labels';
             }
           </label>
 
-          @if (editingUserId) {
-            <label>
-              תפקיד
-              <select formControlName="role">
-                @for (role of formRoles; track role) {
-                  <option [ngValue]="role">{{ roleLabels[role] }}</option>
-                }
-              </select>
-            </label>
-          } @else {
-            <div class="readonly-role">
-              <span>תפקיד</span>
-              <app-status-badge [label]="roleLabels[form.controls.role.value]" tone="gold" />
-            </div>
-          }
+          <label>
+            תפקיד
+            <select formControlName="role">
+              @for (role of formRoles; track role) {
+                <option [ngValue]="role">{{ roleLabels[role] }}</option>
+              }
+            </select>
+          </label>
 
           @if (!editingUserId) {
             <label>
@@ -254,18 +247,6 @@ import { roleLabels } from '../../shared/ui-labels';
     .form-heading h2 {
       margin: 0;
       font-size: 1.35rem;
-    }
-
-    .readonly-role {
-      display: flex;
-      flex-direction: column;
-      gap: 0.45rem;
-    }
-
-    .readonly-role > span {
-      color: var(--muted);
-      font-size: 0.9rem;
-      font-weight: 700;
     }
 
     .users-grid {

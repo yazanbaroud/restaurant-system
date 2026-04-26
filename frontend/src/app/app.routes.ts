@@ -9,6 +9,7 @@ import { LoginPageComponent } from './features/auth/login-page.component';
 import { RegisterPageComponent } from './features/auth/register-page.component';
 import { AccountPageComponent } from './features/account/account-page.component';
 import { AdminDashboardPageComponent } from './features/admin/admin-dashboard-page.component';
+import { MenuItemFormPageComponent } from './features/admin/menu-item-form-page.component';
 import { MenuManagementPageComponent } from './features/admin/menu-management-page.component';
 import { OrdersManagementPageComponent } from './features/admin/orders-management-page.component';
 import { PaymentsTrackingPageComponent } from './features/admin/payments-tracking-page.component';
@@ -65,6 +66,8 @@ export const routes: Routes = [
       { path: 'orders/:id', component: OrderDetailsPageComponent },
       { path: 'orders/:id/payment', component: AddPaymentPageComponent },
       { path: 'reservations', component: ReservationsManagementPageComponent },
+      { path: 'menu/new', component: MenuItemFormPageComponent },
+      { path: 'menu/:id/edit', component: MenuItemFormPageComponent },
       { path: 'menu', component: MenuManagementPageComponent },
       { path: 'tables', component: TablesManagementPageComponent },
       { path: 'users', component: UsersManagementPageComponent },

@@ -20,10 +20,12 @@ public sealed class OrdersController(IOrdersService ordersService) : ControllerB
     public async Task<ActionResult<IReadOnlyCollection<OrderResponseDto>>> GetAll(
         [FromQuery] OrderStatus? status,
         [FromQuery] DateOnly? date,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
         [FromQuery] PaymentStatus? paymentStatus,
         [FromQuery] OrderType? orderType,
         CancellationToken cancellationToken) =>
-        Ok(await ordersService.GetAllAsync(status, date, paymentStatus, orderType, IsWaiterOnly(), cancellationToken));
+        Ok(await ordersService.GetAllAsync(status, date, from, to, paymentStatus, orderType, IsWaiterOnly(), cancellationToken));
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<OrderResponseDto>> GetById(int id, CancellationToken cancellationToken) =>

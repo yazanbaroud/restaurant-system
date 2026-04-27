@@ -56,7 +56,7 @@ public sealed class OrdersService(
         return order.ToOrderResponse();
     }
 
-    public async Task<IReadOnlyCollection<OrderResponseDto>> GetAllAsync(OrderStatus? status, DateOnly? date, PaymentStatus? paymentStatus, OrderType? orderType, bool activeOnly, CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<OrderResponseDto>> GetAllAsync(OrderStatus? status, DateOnly? date, DateOnly? from, DateOnly? to, PaymentStatus? paymentStatus, OrderType? orderType, bool activeOnly, CancellationToken cancellationToken)
     {
         var query = IncludeOrderGraph(db.Orders.AsNoTracking());
         if (activeOnly) query = query.Where(x => x.Status == OrderStatus.InSalads || x.Status == OrderStatus.InMain);
@@ -68,6 +68,20 @@ public sealed class OrdersService(
             var start = date.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
             var end = start.AddDays(1);
             query = query.Where(x => x.CreatedAt >= start && x.CreatedAt < end);
+        }
+        if (from.HasValue && to.HasValue && from.Value > to.Value)
+        {
+            throw new ApiException("The start date must be before or equal to the end date.");
+        }
+        if (from.HasValue)
+        {
+            var start = from.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            query = query.Where(x => x.CreatedAt >= start);
+        }
+        if (to.HasValue)
+        {
+            var end = to.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddDays(1);
+            query = query.Where(x => x.CreatedAt < end);
         }
 
         var orders = await query.OrderByDescending(x => x.CreatedAt).ToArrayAsync(cancellationToken);

@@ -327,8 +327,8 @@ export class RestaurantDataService {
     );
   }
 
-  getOrders(): Observable<Order[]> {
-    return this.fetchOrdersFromApi().pipe(switchMap(() => this.orders$));
+  getOrders(fromDate?: string, toDate?: string): Observable<Order[]> {
+    return this.fetchOrdersFromApi(fromDate, toDate).pipe(switchMap(() => this.orders$));
   }
 
   getOrder(id: number): Observable<Order | undefined> {
@@ -829,21 +829,28 @@ export class RestaurantDataService {
     );
   }
 
-  getReportsSummary(): Observable<ReportsSummary> {
+  getReportsSummary(fromDate?: string, toDate?: string): Observable<ReportsSummary> {
     const defaults = this.createReportDateDefaults();
+    const from = fromDate?.trim() || defaults.monthStart;
+    const to = toDate?.trim() || defaults.monthEnd;
+    const rangeAnchor = this.dateFromDateOnly(from) ?? new Date();
+    const reportYear = rangeAnchor.getFullYear();
+    const reportMonth = rangeAnchor.getMonth() + 1;
+    const dailyDate = to || defaults.today;
+    const weekStart = this.formatDateOnly(this.weekStartForDate(rangeAnchor));
 
     return forkJoin({
-      daily: this.fetchReport(`daily?date=${defaults.today}`),
-      weekly: this.fetchReport(`weekly?weekStart=${defaults.weekStart}`),
-      monthly: this.fetchReport(`monthly?year=${defaults.year}&month=${defaults.month}`),
-      yearly: this.fetchReport(`yearly?year=${defaults.year}`),
-      sales: this.fetchReport(`sales?from=${defaults.monthStart}&to=${defaults.monthEnd}`),
-      topDishes: this.fetchReport(`top-dishes?from=${defaults.monthStart}&to=${defaults.monthEnd}&take=10`),
-      leastOrdered: this.fetchReport(`least-ordered?from=${defaults.monthStart}&to=${defaults.monthEnd}&take=10`),
-      paymentBreakdown: this.fetchReport(`payment-breakdown?from=${defaults.monthStart}&to=${defaults.monthEnd}`),
-      peakHours: this.fetchReport(`peak-hours?from=${defaults.monthStart}&to=${defaults.monthEnd}`),
-      waiterPerformance: this.fetchReport(`waiter-performance?from=${defaults.monthStart}&to=${defaults.monthEnd}`),
-      reservationsSummary: this.fetchReport(`reservations-summary?from=${defaults.monthStart}&to=${defaults.monthEnd}`),
+      daily: this.fetchReport(`daily?date=${encodeURIComponent(dailyDate)}`),
+      weekly: this.fetchReport(`weekly?weekStart=${encodeURIComponent(weekStart)}`),
+      monthly: this.fetchReport(`monthly?year=${reportYear}&month=${reportMonth}`),
+      yearly: this.fetchReport(`yearly?year=${reportYear}`),
+      sales: this.fetchReport(`sales?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+      topDishes: this.fetchReport(`top-dishes?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&take=10`),
+      leastOrdered: this.fetchReport(`least-ordered?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&take=10`),
+      paymentBreakdown: this.fetchReport(`payment-breakdown?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+      peakHours: this.fetchReport(`peak-hours?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+      waiterPerformance: this.fetchReport(`waiter-performance?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+      reservationsSummary: this.fetchReport(`reservations-summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
       tableOccupancy: this.fetchReport('table-occupancy')
     }).pipe(
       map((reports) => this.normalizeReportsSummary(reports, this.createFallbackReportsSummary())),
@@ -1228,6 +1235,22 @@ export class RestaurantDataService {
     };
   }
 
+  private dateFromDateOnly(value: string): Date | null {
+    const [year, month, day] = value.split('-').map(Number);
+    if (!year || !month || !day) {
+      return null;
+    }
+
+    return new Date(year, month - 1, day);
+  }
+
+  private weekStartForDate(date: Date): Date {
+    const weekStart = new Date(date);
+    const mondayOffset = (weekStart.getDay() + 6) % 7;
+    weekStart.setDate(weekStart.getDate() - mondayOffset);
+    return weekStart;
+  }
+
   private formatDateOnly(date: Date): string {
     return [
       date.getFullYear(),
@@ -1405,11 +1428,23 @@ export class RestaurantDataService {
     );
   }
 
-  private fetchOrdersFromApi(): Observable<Order[]> {
-    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Orders`).pipe(
+  private fetchOrdersFromApi(fromDate?: string, toDate?: string): Observable<Order[]> {
+    let params = new HttpParams();
+    const from = fromDate?.trim();
+    const to = toDate?.trim();
+
+    if (from) {
+      params = params.set('from', from);
+    }
+
+    if (to) {
+      params = params.set('to', to);
+    }
+
+    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Orders`, { params }).pipe(
       map((response) => this.normalizeOrders(response)),
       tap((orders) => this.ordersSubject.next(orders)),
-      catchError(() => of(this.ordersSubject.value))
+      catchError(() => of(this.filterOrdersByDateRange(this.ordersSubject.value, from, to)))
     );
   }
 
@@ -1477,6 +1512,17 @@ export class RestaurantDataService {
 
   private filterPaymentsByLocalDate(payments: Payment[], date: string): Payment[] {
     return payments.filter((payment) => this.localDateValue(payment.paidAt) === date);
+  }
+
+  private filterOrdersByDateRange(orders: Order[], fromDate?: string, toDate?: string): Order[] {
+    if (!fromDate && !toDate) {
+      return orders;
+    }
+
+    return orders.filter((order) => {
+      const orderDate = this.localDateValue(order.createdAt);
+      return (!fromDate || orderDate >= fromDate) && (!toDate || orderDate <= toDate);
+    });
   }
 
   private localDateValue(value: string): string {

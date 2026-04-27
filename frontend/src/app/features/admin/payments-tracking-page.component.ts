@@ -54,6 +54,7 @@ interface PaymentsViewModel {
           </div>
 
           <div class="payments-summary-inline">
+            <button type="button" class="btn btn-small btn-ghost payments-reset-filters" (click)="resetFilters()">איפוס סינון</button>
             <span>כמות: <strong>{{ vm.totalCount }}</strong></span>
             <span>סה״כ: <strong>{{ vm.totalAmount | currency: 'ILS' : 'symbol' : '1.0-0' }}</strong></span>
           </div>
@@ -125,6 +126,11 @@ interface PaymentsViewModel {
       font-size: 1rem;
     }
 
+    .payments-reset-filters {
+      min-height: 36px;
+      padding-inline: 12px;
+    }
+
     .payments-table {
       max-height: min(62vh, 680px);
       overflow: auto;
@@ -191,6 +197,14 @@ export class PaymentsTrackingPageComponent {
 
   setMethodFilter(value: string): void {
     this.methodFilter = value === 'all' ? 'all' : Number(value) as PaymentMethod;
+    this.methodFilter$.next(this.methodFilter);
+  }
+
+  resetFilters(): void {
+    const today = this.todayLocalDate();
+    this.selectedDate = today;
+    this.methodFilter = 'all';
+    this.dateFilter$.next(today);
     this.methodFilter$.next(this.methodFilter);
   }
 

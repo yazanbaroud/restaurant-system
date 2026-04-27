@@ -31,18 +31,25 @@ interface CartLine {
     TableCardComponent
   ],
   template: `
-    <section class="page-surface">
+    <section class="page-surface create-order-page">
       <app-page-header
         eyebrow="פתיחת הזמנה"
-        title="זרימת הזמנה מהירה"
-        subtitle="בחירת סוג הזמנה, שולחן, מנות וסיכום תשלום ראשוני."
+        title="הזמנה חדשה"
+        subtitle="בחירה מהירה של סוג הזמנה, שולחן, מנות וסיכום לפני שליחה למטבח."
       />
 
-      <form class="order-builder" [formGroup]="form" (ngSubmit)="submit()">
-        <div class="order-builder__main">
-          <section class="panel">
-            <h2>סוג הזמנה</h2>
-            <div class="segmented-control">
+      <form class="order-builder create-order-layout" [formGroup]="form" (ngSubmit)="submit()">
+        <div class="order-builder__main create-order-main">
+          <section class="panel create-order-step">
+            <div class="step-heading">
+              <span>1</span>
+              <div>
+                <h2>פרטי הזמנה</h2>
+                <p>בחרו סוג הזמנה והכניסו שם לקוח קצר לזיהוי מהיר.</p>
+              </div>
+            </div>
+
+            <div class="segmented-control waiter-segmented">
               <button
                 type="button"
                 [class.active]="form.controls.orderType.value === OrderType.DineIn"
@@ -58,7 +65,8 @@ interface CartLine {
                 {{ orderTypeLabels[OrderType.TakeAway] }}
               </button>
             </div>
-            <div class="form-grid">
+
+            <div class="form-grid waiter-form-grid">
               <label>
                 שם פרטי
                 <input formControlName="customerFirstName" />
@@ -75,15 +83,22 @@ interface CartLine {
               </label>
               <label class="full">
                 הערות להזמנה
-                <textarea rows="3" formControlName="notes"></textarea>
+                <textarea rows="3" formControlName="notes" placeholder="לדוגמה: אלרגיה, סדר הגשה, בקשה מהמטבח"></textarea>
               </label>
             </div>
           </section>
 
           @if (form.controls.orderType.value === OrderType.DineIn) {
-            <section class="panel">
-              <h2>בחירת שולחן</h2>
-              <div class="table-grid">
+            <section class="panel create-order-step">
+              <div class="step-heading">
+                <span>2</span>
+                <div>
+                  <h2>בחירת שולחן</h2>
+                  <p>{{ selectedTableIds.size ? selectedTableIds.size + ' שולחנות נבחרו' : 'בחרו שולחן פנוי להזמנה במסעדה.' }}</p>
+                </div>
+              </div>
+
+              <div class="table-grid waiter-table-grid">
                 @for (table of tables$ | async; track table.id) {
                   <app-table-card
                     [table]="table"
@@ -96,36 +111,81 @@ interface CartLine {
             </section>
           }
 
-          <section class="panel">
-            <h2>הוספת מנות</h2>
-            <div class="menu-grid menu-grid--compact">
-              @for (item of menuItems$ | async; track item.id) {
-                <app-menu-item-card [item]="item" [showAdd]="true" (add)="addItem(item)" />
-              }
+          <section class="panel create-order-step">
+            <div class="step-heading">
+              <span>{{ form.controls.orderType.value === OrderType.DineIn ? '3' : '2' }}</span>
+              <div>
+                <h2>הוספת מנות</h2>
+                <p>הוסיפו מנות לעגלה. הכמויות וההערות נשמרות בסיכום.</p>
+              </div>
             </div>
+
+            <label class="dish-search">
+              חיפוש מנה
+              <input
+                #menuSearch
+                type="search"
+                [value]="menuSearchTerm"
+                placeholder="חיפוש לפי שם מנה או תיאור"
+                autocomplete="off"
+                (input)="menuSearchTerm = menuSearch.value"
+              />
+            </label>
+
+            @if (menuItems$ | async; as menuItems) {
+              @if (filteredMenuItems(menuItems); as visibleMenuItems) {
+                <div class="menu-grid menu-grid--compact waiter-menu-grid">
+                  @for (item of visibleMenuItems; track item.id) {
+                    <app-menu-item-card [item]="item" [showAdd]="true" (add)="addItem(item)" />
+                  }
+                </div>
+
+                @if (!visibleMenuItems.length) {
+                  <div class="empty-state empty-state--compact">
+                    <h2>לא נמצאו מנות מתאימות</h2>
+                  </div>
+                }
+              }
+            }
           </section>
         </div>
 
-        <aside class="order-summary">
-          <p class="eyebrow">סיכום הזמנה</p>
-          <h2>{{ total | currency: 'ILS' : 'symbol' : '1.0-0' }}</h2>
-          <div class="cart-lines">
+        <aside class="order-summary waiter-order-summary">
+          <div class="summary-top">
+            <p class="eyebrow">סיכום הזמנה</p>
+            <h2>{{ total | currency: 'ILS' : 'symbol' : '1.0-0' }}</h2>
+            <span>{{ cart.length }} מנות בעגלה</span>
+          </div>
+
+          <div class="cart-lines waiter-cart-lines">
             @for (line of cart; track line.item.id) {
-              <div class="cart-line">
-                <div>
+              <div class="cart-line waiter-cart-line">
+                <div class="cart-line__details">
                   <strong>{{ line.item.name }}</strong>
                   <span>{{ line.item.price | currency: 'ILS' : 'symbol' : '1.0-0' }}</span>
                 </div>
-                <div class="stepper">
-                  <button type="button" (click)="decrement(line.item.id)">−</button>
+                <div class="stepper waiter-stepper">
+                  <button type="button" aria-label="הפחתת כמות" (click)="decrement(line.item.id)">−</button>
                   <span>{{ line.quantity }}</span>
-                  <button type="button" (click)="increment(line.item.id)">+</button>
+                  <button type="button" aria-label="הגדלת כמות" (click)="increment(line.item.id)">+</button>
                 </div>
+                <label class="cart-line__note">
+                  הערה למנה
+                  <input
+                    [value]="line.notes"
+                    placeholder="ללא בצל, רוטב בצד..."
+                    (input)="updateLineNotes(line.item.id, $event)"
+                  />
+                </label>
               </div>
             } @empty {
-              <p class="muted">עוד לא נוספו מנות.</p>
+              <div class="cart-empty">
+                <strong>העגלה ריקה</strong>
+                <span>הוסיפו מנה אחת לפחות כדי לשלוח למטבח.</span>
+              </div>
             }
           </div>
+
           @if (errorMessage) {
             <p class="validation-note full">{{ errorMessage }}</p>
           }
@@ -135,13 +195,189 @@ interface CartLine {
           @if (submitted && form.controls.orderType.value === OrderType.DineIn && selectedTableIds.size === 0) {
             <p class="validation-note full">יש לבחור שולחן להזמנה במסעדה.</p>
           }
-          <button class="btn btn-gold full" type="submit" [disabled]="isSubmitting">
+
+          <button class="btn btn-gold full waiter-submit" type="submit" [disabled]="isSubmitting">
             {{ isSubmitting ? 'שולחים...' : 'שליחת הזמנה למטבח' }}
           </button>
         </aside>
       </form>
     </section>
-  `
+  `,
+  styles: [`
+    .create-order-page {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .create-order-layout {
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 390px);
+      align-items: start;
+      gap: 18px;
+    }
+
+    .create-order-main {
+      gap: 18px;
+    }
+
+    .create-order-step {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .step-heading {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.85rem;
+    }
+
+    .step-heading > span {
+      flex: 0 0 auto;
+      display: inline-grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      background: var(--brown-950);
+      color: var(--ivory);
+      font-weight: 950;
+    }
+
+    .step-heading h2,
+    .step-heading p {
+      margin: 0;
+    }
+
+    .step-heading p {
+      color: var(--muted);
+      font-weight: 750;
+    }
+
+    .waiter-segmented {
+      margin-bottom: 0;
+    }
+
+    .waiter-segmented button,
+    .waiter-submit,
+    .waiter-stepper button {
+      min-height: 46px;
+    }
+
+    .dish-search input,
+    .waiter-form-grid input,
+    .waiter-form-grid textarea,
+    .cart-line__note input {
+      min-height: 48px;
+    }
+
+    .dish-search {
+      max-width: 420px;
+    }
+
+    .waiter-table-grid {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .waiter-menu-grid {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .waiter-order-summary {
+      position: sticky;
+      top: 92px;
+      display: grid;
+      gap: 1rem;
+      max-height: calc(100vh - 116px);
+      overflow: auto;
+    }
+
+    .summary-top {
+      display: grid;
+      gap: 0.25rem;
+    }
+
+    .summary-top h2 {
+      margin: 0;
+      color: var(--brown-950);
+      font-size: 2rem;
+    }
+
+    .summary-top span {
+      color: var(--muted);
+      font-weight: 850;
+    }
+
+    .waiter-cart-lines {
+      gap: 0.85rem;
+    }
+
+    .waiter-cart-line {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 0.7rem;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 248, 237, 0.62);
+    }
+
+    .cart-line__details {
+      display: grid;
+      gap: 0.2rem;
+      min-width: 0;
+    }
+
+    .cart-line__details strong {
+      color: var(--brown-950);
+      overflow-wrap: anywhere;
+    }
+
+    .cart-line__details span {
+      color: var(--muted);
+      font-weight: 850;
+    }
+
+    .cart-line__note {
+      grid-column: 1 / -1;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .cart-empty {
+      display: grid;
+      gap: 0.25rem;
+      min-height: 120px;
+      place-items: center;
+      border: 1px dashed var(--line);
+      border-radius: var(--radius);
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .cart-empty strong {
+      color: var(--brown-950);
+    }
+
+    @media (max-width: 1060px) {
+      .create-order-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .waiter-order-summary {
+        position: static;
+        max-height: none;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .waiter-form-grid,
+      .waiter-table-grid,
+      .waiter-menu-grid,
+      .waiter-cart-line {
+        grid-template-columns: 1fr;
+      }
+    }
+  `]
 })
 export class CreateOrderPageComponent implements OnInit {
   private readonly data = inject(RestaurantDataService);
@@ -169,6 +405,7 @@ export class CreateOrderPageComponent implements OnInit {
   errorMessage = '';
   orderDetailsBaseLink = '/waiter/orders';
   submitted = false;
+  menuSearchTerm = '';
 
   ngOnInit(): void {
     this.orderDetailsBaseLink = this.isInsideRoute('admin') ? '/admin/orders' : '/waiter/orders';
@@ -193,6 +430,18 @@ export class CreateOrderPageComponent implements OnInit {
     this.selectedTableIds = next;
   }
 
+  filteredMenuItems(items: MenuItem[]): MenuItem[] {
+    const search = this.menuSearchTerm.trim().toLowerCase();
+    if (!search) {
+      return items;
+    }
+
+    return items.filter((item) =>
+      item.name.toLowerCase().includes(search) ||
+      item.description.toLowerCase().includes(search)
+    );
+  }
+
   addItem(item: MenuItem): void {
     const existing = this.cart.find((line) => line.item.id === item.id);
     if (existing) {
@@ -213,6 +462,11 @@ export class CreateOrderPageComponent implements OnInit {
     this.cart = this.cart
       .map((line) => (line.item.id === itemId ? { ...line, quantity: line.quantity - 1 } : line))
       .filter((line) => line.quantity > 0);
+  }
+
+  updateLineNotes(itemId: number, event: Event): void {
+    const notes = (event.target as HTMLInputElement | null)?.value ?? '';
+    this.cart = this.cart.map((line) => line.item.id === itemId ? { ...line, notes } : line);
   }
 
   private isInsideRoute(path: string): boolean {

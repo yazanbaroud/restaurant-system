@@ -393,6 +393,8 @@ interface OrderDetailsViewModel {
     }
 
     .order-side-panel {
+      position: sticky;
+      top: 92px;
       display: grid;
       gap: 18px;
     }
@@ -405,7 +407,8 @@ interface OrderDetailsViewModel {
     }
 
     .status-action {
-      min-height: 40px;
+      min-height: 48px;
+      padding-inline: 12px;
     }
 
     .status-action--active {
@@ -434,6 +437,10 @@ interface OrderDetailsViewModel {
       .order-details-grid,
       .order-workspace {
         grid-template-columns: 1fr;
+      }
+
+      .order-side-panel {
+        position: static;
       }
 
       .order-hero__total {
@@ -470,6 +477,11 @@ interface OrderDetailsViewModel {
 
       .status-actions {
         grid-template-columns: 1fr;
+      }
+
+      .order-hero h2,
+      .order-hero__total strong {
+        font-size: 1.55rem;
       }
     }
   `]

@@ -357,6 +357,17 @@ interface PaymentViewModel {
       border: 0;
     }
 
+    .payment-form {
+      position: sticky;
+      top: 92px;
+    }
+
+    .payment-form input,
+    .payment-form select,
+    .payment-form button {
+      min-height: 50px;
+    }
+
     .payment-form legend {
       margin-bottom: 0.25rem;
       color: var(--brown-950);
@@ -373,6 +384,10 @@ interface PaymentViewModel {
       .payment-summary-grid,
       .payment-layout {
         grid-template-columns: 1fr;
+      }
+
+      .payment-form {
+        position: static;
       }
 
       .payment-summary-status {

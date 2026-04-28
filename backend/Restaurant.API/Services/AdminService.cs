@@ -24,7 +24,7 @@ public sealed class AdminService(
         var normalizedEmail = email.Trim().ToLowerInvariant();
         if (await db.Users.AnyAsync(x => x.Email == normalizedEmail, cancellationToken))
         {
-            throw new ApiException("A user with this email already exists.", StatusCodes.Status409Conflict);
+            throw new ApiException("כבר קיים משתמש עם האימייל הזה.", StatusCodes.Status409Conflict);
         }
 
         var user = new User

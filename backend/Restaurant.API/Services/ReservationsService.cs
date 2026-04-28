@@ -59,14 +59,14 @@ public sealed class ReservationsService(
     public async Task<ReservationResponseDto> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
         var reservation = await db.Reservations.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("Reservation not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("הזמנת המקום לא נמצאה.", StatusCodes.Status404NotFound);
         return reservation.ToReservationResponse();
     }
 
     public async Task<ReservationResponseDto> UpdateAsync(int id, UpdateReservationDto dto, CancellationToken cancellationToken)
     {
         var reservation = await db.Reservations.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("Reservation not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("הזמנת המקום לא נמצאה.", StatusCodes.Status404NotFound);
         reservation.FirstName = dto.FirstName.Trim();
         reservation.LastName = dto.LastName.Trim();
         reservation.PhoneNumber = dto.PhoneNumber.Trim();
@@ -82,7 +82,7 @@ public sealed class ReservationsService(
     public async Task<ReservationResponseDto> UpdateStatusAsync(int id, UpdateReservationStatusDto dto, CancellationToken cancellationToken)
     {
         var reservation = await db.Reservations.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("Reservation not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("הזמנת המקום לא נמצאה.", StatusCodes.Status404NotFound);
         reservation.Status = dto.Status;
         reservation.RestaurantNotes = dto.RestaurantNotes?.Trim();
         await db.SaveChangesAsync(cancellationToken);
@@ -95,10 +95,10 @@ public sealed class ReservationsService(
     public async Task DeleteAsync(int id, CancellationToken cancellationToken)
     {
         var reservation = await db.Reservations.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("Reservation not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("הזמנת המקום לא נמצאה.", StatusCodes.Status404NotFound);
         reservation.Status = ReservationStatus.Cancelled;
         reservation.RestaurantNotes = string.IsNullOrWhiteSpace(reservation.RestaurantNotes)
-            ? "Reservation cancelled by restaurant."
+            ? "בוטל על ידי המסעדה."
             : reservation.RestaurantNotes;
         await db.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Reservation {ReservationId} cancelled", reservation.Id);
@@ -121,7 +121,7 @@ public sealed class ReservationsService(
     {
         var reservation = await db.Reservations.AsNoTracking()
             .SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, cancellationToken)
-            ?? throw new ApiException("Reservation not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("הזמנת המקום לא נמצאה.", StatusCodes.Status404NotFound);
 
         return reservation.ToReservationResponse();
     }
@@ -130,7 +130,7 @@ public sealed class ReservationsService(
     {
         var reservation = await db.Reservations
             .SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, cancellationToken)
-            ?? throw new ApiException("Reservation not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("הזמנת המקום לא נמצאה.", StatusCodes.Status404NotFound);
 
         if (reservation.Status is not (ReservationStatus.Pending or ReservationStatus.Approved))
         {
@@ -156,7 +156,7 @@ public sealed class ReservationsService(
 
         if (!exists)
         {
-            throw new ApiException("User not found.", StatusCodes.Status404NotFound);
+            throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
         }
     }
 }

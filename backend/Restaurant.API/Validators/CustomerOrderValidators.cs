@@ -12,7 +12,7 @@ public sealed class CreateCustomerOrderDtoValidator : AbstractValidator<CreateCu
         RuleFor(x => x.TableId)
             .GreaterThan(0)
             .When(x => x.OrderType == OrderType.DineIn)
-            .WithMessage("Dine-in orders require a table.");
+            .WithMessage("להזמנה במסעדה יש לבחור שולחן.");
         RuleFor(x => x.Notes).MaximumLength(1000);
         RuleFor(x => x.Items).NotEmpty();
         RuleForEach(x => x.Items).SetValidator(new CustomerOrderItemInputDtoValidator());
@@ -27,7 +27,7 @@ public sealed class UpdateCustomerOrderDtoValidator : AbstractValidator<UpdateCu
         RuleFor(x => x.TableId)
             .GreaterThan(0)
             .When(x => x.OrderType == OrderType.DineIn)
-            .WithMessage("Dine-in orders require a table.");
+            .WithMessage("להזמנה במסעדה יש לבחור שולחן.");
         RuleFor(x => x.Notes).MaximumLength(1000);
     }
 }

@@ -18,7 +18,7 @@ public sealed class TablesService(AppDbContext db, ILogger<TablesService> logger
         var name = dto.Name.Trim();
         if (await db.Tables.AnyAsync(x => x.Name == name, cancellationToken))
         {
-            throw new ApiException("A table with this name already exists.", StatusCodes.Status409Conflict);
+            throw new ApiException("כבר קיים שולחן בשם הזה.", StatusCodes.Status409Conflict);
         }
 
         var table = new Table
@@ -37,12 +37,12 @@ public sealed class TablesService(AppDbContext db, ILogger<TablesService> logger
     public async Task<TableResponseDto> UpdateAsync(int id, UpdateTableDto dto, CancellationToken cancellationToken)
     {
         var table = await db.Tables.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("Table not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("השולחן לא נמצא.", StatusCodes.Status404NotFound);
 
         var name = dto.Name.Trim();
         if (await db.Tables.AnyAsync(x => x.Id != id && x.Name == name, cancellationToken))
         {
-            throw new ApiException("A table with this name already exists.", StatusCodes.Status409Conflict);
+            throw new ApiException("כבר קיים שולחן בשם הזה.", StatusCodes.Status409Conflict);
         }
 
         await EnsureStatusChangeIsSafeAsync(table, dto.Status, cancellationToken);
@@ -59,7 +59,7 @@ public sealed class TablesService(AppDbContext db, ILogger<TablesService> logger
     public async Task<TableResponseDto> UpdateStatusAsync(int id, UpdateTableStatusDto dto, CancellationToken cancellationToken)
     {
         var table = await db.Tables.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("Table not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("השולחן לא נמצא.", StatusCodes.Status404NotFound);
 
         await EnsureStatusChangeIsSafeAsync(table, dto.Status, cancellationToken);
 
@@ -83,7 +83,7 @@ public sealed class TablesService(AppDbContext db, ILogger<TablesService> logger
 
         if (hasActiveOrder && requestedStatus != TableStatus.Occupied)
         {
-            throw new ApiException("Table is assigned to an active order and cannot be marked available or reserved.", StatusCodes.Status409Conflict);
+            throw new ApiException("השולחן משויך להזמנה פעילה ולא ניתן לסמן אותו כפנוי או שמור.", StatusCodes.Status409Conflict);
         }
     }
 

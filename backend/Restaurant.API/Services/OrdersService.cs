@@ -70,7 +70,7 @@ public sealed class OrdersService(
         }
         if (from.HasValue && to.HasValue && from.Value > to.Value)
         {
-            throw new ApiException("The start date must be before or equal to the end date.");
+            throw new ApiException("תאריך ההתחלה חייב להיות לפני תאריך הסיום או זהה לו.");
         }
         if (from.HasValue)
         {
@@ -93,7 +93,7 @@ public sealed class OrdersService(
         if (activeOnly) query = query.Where(x => x.Status == OrderStatus.InSalads || x.Status == OrderStatus.InMain);
 
         var order = await query.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("Order not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("ההזמנה לא נמצאה.", StatusCodes.Status404NotFound);
         return order.ToOrderResponse();
     }
 
@@ -139,7 +139,7 @@ public sealed class OrdersService(
         var order = await LoadTrackedOrderAsync(id, cancellationToken);
         EnsureStaffEditable(order);
         var menuItem = await LoadAvailableMenuItemAsync(dto.MenuItemId, cancellationToken)
-            ?? throw new ApiException("Menu item not found or unavailable.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("המנה לא נמצאה או אינה זמינה.", StatusCodes.Status404NotFound);
         order.Items.Add(new OrderItem { MenuItemId = menuItem.Id, Quantity = dto.Quantity, UnitPrice = menuItem.Price, Notes = dto.Notes?.Trim() });
         RecalculateTotal(order);
         await UpdatePaymentStatusAsync(order, cancellationToken);
@@ -153,7 +153,7 @@ public sealed class OrdersService(
         var order = await LoadTrackedOrderAsync(id, cancellationToken);
         EnsureStaffEditable(order);
         var item = order.Items.SingleOrDefault(x => x.Id == itemId)
-            ?? throw new ApiException("Order item not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("פריט ההזמנה לא נמצא.", StatusCodes.Status404NotFound);
         item.Quantity = dto.Quantity;
         item.Notes = dto.Notes?.Trim();
         RecalculateTotal(order);
@@ -167,11 +167,11 @@ public sealed class OrdersService(
         var order = await LoadTrackedOrderAsync(id, cancellationToken);
         EnsureStaffEditable(order);
         var item = order.Items.SingleOrDefault(x => x.Id == itemId)
-            ?? throw new ApiException("Order item not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("פריט ההזמנה לא נמצא.", StatusCodes.Status404NotFound);
 
         if (order.Items.Count <= 1)
         {
-            throw new ApiException("An order must contain at least one item.");
+            throw new ApiException("הזמנה חייבת לכלול לפחות מנה אחת.");
         }
 
         order.Items.Remove(item);
@@ -212,7 +212,7 @@ public sealed class OrdersService(
 
     private async Task<Order> LoadTrackedOrderAsync(int id, CancellationToken cancellationToken) =>
         await IncludeOrderGraph(db.Orders).Include(x => x.Payments).SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("Order not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("ההזמנה לא נמצאה.", StatusCodes.Status404NotFound);
 
     private async Task ReloadOrderAsync(Order order, CancellationToken cancellationToken)
     {
@@ -234,7 +234,7 @@ public sealed class OrdersService(
         var availableItems = items.Where(x => activeCategorySet.Contains(x.Category)).ToDictionary(x => x.Id);
         if (availableItems.Count != distinctIds.Length)
         {
-            throw new ApiException("One or more menu items were not found or are unavailable.");
+            throw new ApiException("אחת או יותר מהמנות לא נמצאו או אינן זמינות.");
         }
         return availableItems;
     }
@@ -246,7 +246,7 @@ public sealed class OrdersService(
     {
         if (orderType == OrderType.DineIn && (tableIds is null || tableIds.Count == 0))
         {
-            throw new ApiException("Dine-in orders require at least one table.");
+            throw new ApiException("להזמנה במסעדה יש לבחור לפחות שולחן אחד.");
         }
     }
 
@@ -266,14 +266,14 @@ public sealed class OrdersService(
 
         if (tableIds is not null && distinctTableIds.Length != tableIds.Count)
         {
-            throw new ApiException("Table IDs must be positive and unique.");
+            throw new ApiException("רשימת השולחנות אינה תקינה.");
         }
 
         var tables = await db.Tables.Where(x => distinctTableIds.Contains(x.Id)).ToArrayAsync(cancellationToken);
         var missingTableIds = distinctTableIds.Except(tables.Select(x => x.Id)).ToArray();
         if (missingTableIds.Length > 0)
         {
-            throw new ApiException($"Table IDs were not found: {string.Join(", ", missingTableIds)}.", StatusCodes.Status404NotFound);
+            throw new ApiException("אחד או יותר מהשולחנות לא נמצאו.", StatusCodes.Status404NotFound);
         }
 
         var currentIds = currentlyAssignedTableIds.ToHashSet();
@@ -284,7 +284,7 @@ public sealed class OrdersService(
 
         if (unavailableTables.Length > 0)
         {
-            throw new ApiException($"Only available tables can be assigned. Unavailable table(s): {string.Join(", ", unavailableTables)}.", StatusCodes.Status409Conflict);
+            throw new ApiException("ניתן לשייך רק שולחנות פנויים.", StatusCodes.Status409Conflict);
         }
 
         return tables;
@@ -330,17 +330,17 @@ public sealed class OrdersService(
     {
         if (HasPaidStatus(order))
         {
-            throw new ApiException("Paid orders cannot be modified.", StatusCodes.Status409Conflict);
+            throw new ApiException("לא ניתן לעדכן הזמנה ששולמה.", StatusCodes.Status409Conflict);
         }
 
         if (IsClosedStatus(order.Status))
         {
-            throw new ApiException("Completed or cancelled orders cannot be modified.", StatusCodes.Status409Conflict);
+            throw new ApiException("לא ניתן לעדכן הזמנה שהושלמה או בוטלה.", StatusCodes.Status409Conflict);
         }
 
         if (HasAnyPayment(order))
         {
-            throw new ApiException("Orders with payments cannot be modified.", StatusCodes.Status409Conflict);
+            throw new ApiException("לא ניתן לעדכן הזמנה שכבר בוצע עבורה תשלום.", StatusCodes.Status409Conflict);
         }
     }
 
@@ -353,12 +353,12 @@ public sealed class OrdersService(
 
         if (IsClosedStatus(order.Status))
         {
-            throw new ApiException("Completed or cancelled orders are terminal and cannot be reopened.", StatusCodes.Status409Conflict);
+            throw new ApiException("לא ניתן לפתוח מחדש הזמנה שהושלמה או בוטלה.", StatusCodes.Status409Conflict);
         }
 
         if (nextStatus == OrderStatus.Cancelled && HasAnyPayment(order))
         {
-            throw new ApiException("Orders with payments cannot be cancelled.", StatusCodes.Status409Conflict);
+            throw new ApiException("לא ניתן לבטל הזמנה שכבר בוצע עבורה תשלום.", StatusCodes.Status409Conflict);
         }
     }
 

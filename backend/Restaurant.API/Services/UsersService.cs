@@ -23,7 +23,7 @@ public sealed class UsersService(
     public async Task<UserResponseDto> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
         var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("User not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
         return user.ToUserResponse();
     }
 
@@ -50,7 +50,7 @@ public sealed class UsersService(
     public async Task<UserResponseDto> UpdateAsync(int id, UpdateUserDto dto, CancellationToken cancellationToken)
     {
         var user = await db.Users.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("User not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
         await EnsureEmailAvailableAsync(dto.Email, id, cancellationToken);
 
         user.FirstName = dto.FirstName.Trim();
@@ -65,11 +65,11 @@ public sealed class UsersService(
     public async Task<UserResponseDto> UpdateRoleAsync(int currentUserId, int id, UpdateUserRoleDto dto, CancellationToken cancellationToken)
     {
         var user = await db.Users.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("User not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
 
         if (currentUserId == id)
         {
-            throw new ApiException("You cannot change your own role while signed in.", StatusCodes.Status409Conflict);
+            throw new ApiException("לא ניתן לשנות את התפקיד של החשבון הפעיל.", StatusCodes.Status409Conflict);
         }
 
         if (user.Role == UserRole.Admin && dto.Role != UserRole.Admin)
@@ -77,7 +77,7 @@ public sealed class UsersService(
             var adminCount = await db.Users.CountAsync(x => x.Role == UserRole.Admin, cancellationToken);
             if (adminCount <= 1)
             {
-                throw new ApiException("At least one admin user must remain.", StatusCodes.Status409Conflict);
+                throw new ApiException("חייב להישאר לפחות מנהל אחד.", StatusCodes.Status409Conflict);
             }
         }
 
@@ -90,7 +90,7 @@ public sealed class UsersService(
     public async Task ResetPasswordAsync(int id, ResetUserPasswordDto dto, CancellationToken cancellationToken)
     {
         var user = await db.Users.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("User not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
 
         user.PasswordHash = passwordHasher.HashPassword(dto.NewPassword);
         await db.SaveChangesAsync(cancellationToken);
@@ -105,7 +105,7 @@ public sealed class UsersService(
         }
 
         var user = await db.Users.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("User not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
 
         if (user.Role == UserRole.Admin)
         {
@@ -130,7 +130,7 @@ public sealed class UsersService(
 
         if (exists)
         {
-            throw new ApiException("Email is already in use.", StatusCodes.Status409Conflict);
+            throw new ApiException("האימייל כבר נמצא בשימוש.", StatusCodes.Status409Conflict);
         }
     }
 }

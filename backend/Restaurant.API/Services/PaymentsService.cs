@@ -19,25 +19,25 @@ public sealed class PaymentsService(
             .Include(x => x.Payments)
             .Include(x => x.User)
             .SingleOrDefaultAsync(x => x.Id == dto.OrderId, cancellationToken)
-            ?? throw new ApiException("Order not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("ההזמנה לא נמצאה.", StatusCodes.Status404NotFound);
 
         EnsurePaymentAllowed(order);
 
         if (dto.Amount <= 0)
         {
-            throw new ApiException("Payment amount must be greater than zero.");
+            throw new ApiException("סכום התשלום חייב להיות גדול מאפס.");
         }
 
         var totalPaidBeforePayment = order.Payments.Sum(x => x.Amount);
         var remainingBalance = order.TotalPrice - totalPaidBeforePayment;
         if (remainingBalance <= 0)
         {
-            throw new ApiException("Order is already fully paid.", StatusCodes.Status409Conflict);
+            throw new ApiException("ההזמנה כבר שולמה במלואה.", StatusCodes.Status409Conflict);
         }
 
         if (dto.Amount > remainingBalance)
         {
-            throw new ApiException($"Payment amount exceeds the remaining balance of {remainingBalance:0.00}.", StatusCodes.Status409Conflict);
+            throw new ApiException($"סכום התשלום גבוה מהיתרה שנותרה: {remainingBalance:0.00}.", StatusCodes.Status409Conflict);
         }
 
         var payment = new Payment { OrderId = dto.OrderId, Amount = dto.Amount, Method = dto.Method, PaidAt = DateTime.UtcNow };
@@ -89,7 +89,7 @@ public sealed class PaymentsService(
     {
         if (!await db.Orders.AnyAsync(x => x.Id == orderId, cancellationToken))
         {
-            throw new ApiException("Order not found.", StatusCodes.Status404NotFound);
+            throw new ApiException("ההזמנה לא נמצאה.", StatusCodes.Status404NotFound);
         }
 
         return await db.Payments.AsNoTracking()
@@ -106,12 +106,12 @@ public sealed class PaymentsService(
     {
         if (order.Status == OrderStatus.Cancelled)
         {
-            throw new ApiException("Cancelled orders cannot receive payments.", StatusCodes.Status409Conflict);
+            throw new ApiException("לא ניתן להוסיף תשלום להזמנה שבוטלה.", StatusCodes.Status409Conflict);
         }
 
         if (order.PaymentStatus == PaymentStatus.Paid)
         {
-            throw new ApiException("Order is already fully paid.", StatusCodes.Status409Conflict);
+            throw new ApiException("ההזמנה כבר שולמה במלואה.", StatusCodes.Status409Conflict);
         }
     }
 }

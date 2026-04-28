@@ -18,7 +18,7 @@ public sealed class AuthService(
     {
         if (await db.Users.AnyAsync(x => x.Email == dto.Email, cancellationToken))
         {
-            throw new ApiException("A user with this email already exists.", StatusCodes.Status409Conflict);
+            throw new ApiException("כבר קיים משתמש עם האימייל הזה.", StatusCodes.Status409Conflict);
         }
 
         var user = new User
@@ -45,7 +45,7 @@ public sealed class AuthService(
 
         if (user is null || !passwordHasher.VerifyPassword(dto.Password, user.PasswordHash))
         {
-            throw new ApiException("Invalid email or password.", StatusCodes.Status401Unauthorized);
+            throw new ApiException("האימייל או הסיסמה אינם תקינים.", StatusCodes.Status401Unauthorized);
         }
 
         return CreateAuthResponse(user);
@@ -54,14 +54,14 @@ public sealed class AuthService(
     public async Task<CurrentUserDto> GetCurrentUserAsync(int userId, CancellationToken cancellationToken)
     {
         var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.Id == userId, cancellationToken)
-            ?? throw new ApiException("User not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
         return user.ToCurrentUser();
     }
 
     public async Task<CurrentUserDto> UpdateCurrentUserAsync(int userId, UpdateCurrentUserDto dto, CancellationToken cancellationToken)
     {
         var user = await db.Users.SingleOrDefaultAsync(x => x.Id == userId, cancellationToken)
-            ?? throw new ApiException("User not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
 
         user.FirstName = dto.FirstName.Trim();
         user.LastName = dto.LastName.Trim();
@@ -74,11 +74,11 @@ public sealed class AuthService(
     public async Task ChangePasswordAsync(int userId, ChangePasswordDto dto, CancellationToken cancellationToken)
     {
         var user = await db.Users.SingleOrDefaultAsync(x => x.Id == userId, cancellationToken)
-            ?? throw new ApiException("User not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
 
         if (!passwordHasher.VerifyPassword(dto.CurrentPassword, user.PasswordHash))
         {
-            throw new ApiException("Current password is incorrect.", StatusCodes.Status400BadRequest);
+            throw new ApiException("הסיסמה הנוכחית אינה נכונה.", StatusCodes.Status400BadRequest);
         }
 
         user.PasswordHash = passwordHasher.HashPassword(dto.NewPassword);

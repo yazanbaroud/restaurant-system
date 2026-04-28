@@ -14,7 +14,7 @@ public sealed class CreateOrderDtoValidator : AbstractValidator<CreateOrderDto>
         RuleFor(x => x.TableIds)
             .Must(ids => ids is not null && ids.Count > 0)
             .When(x => x.OrderType == OrderType.DineIn)
-            .WithMessage("Dine-in orders require at least one table.");
+            .WithMessage("להזמנה במסעדה יש לבחור לפחות שולחן אחד.");
     }
 }
 

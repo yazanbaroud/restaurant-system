@@ -27,7 +27,7 @@ public sealed class CustomerOrdersService(
     {
         var order = await IncludeOrderGraph(db.Orders.AsNoTracking())
             .SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, cancellationToken)
-            ?? throw new ApiException("Order not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("ההזמנה לא נמצאה.", StatusCodes.Status404NotFound);
 
         return order.ToOrderResponse();
     }
@@ -35,7 +35,7 @@ public sealed class CustomerOrdersService(
     public async Task<OrderResponseDto> CreateAsync(int userId, CreateCustomerOrderDto dto, CancellationToken cancellationToken)
     {
         var customer = await db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.Id == userId, cancellationToken)
-            ?? throw new ApiException("User not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
         var assignedTables = await ValidateAndLoadCustomerTablesAsync(dto.OrderType, dto.TableId, Array.Empty<int>(), cancellationToken);
         var menuItems = await LoadAvailableMenuItemsAsync(dto.Items.Select(x => x.MenuItemId), cancellationToken);
         var now = DateTime.UtcNow;
@@ -142,7 +142,7 @@ public sealed class CustomerOrdersService(
         var order = await LoadOwnedTrackedOrderAsync(userId, id, cancellationToken);
         EnsureEditable(order);
         var item = order.Items.SingleOrDefault(x => x.Id == itemId)
-            ?? throw new ApiException("Order item not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("פריט ההזמנה לא נמצא.", StatusCodes.Status404NotFound);
 
         item.Quantity = dto.Quantity;
         item.Notes = dto.Notes?.Trim();
@@ -158,11 +158,11 @@ public sealed class CustomerOrdersService(
         var order = await LoadOwnedTrackedOrderAsync(userId, id, cancellationToken);
         EnsureEditable(order);
         var item = order.Items.SingleOrDefault(x => x.Id == itemId)
-            ?? throw new ApiException("Order item not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("פריט ההזמנה לא נמצא.", StatusCodes.Status404NotFound);
 
         if (order.Items.Count <= 1)
         {
-            throw new ApiException("An order must contain at least one item.");
+            throw new ApiException("הזמנה חייבת לכלול לפחות מנה אחת.");
         }
 
         order.Items.Remove(item);
@@ -187,7 +187,7 @@ public sealed class CustomerOrdersService(
     private async Task<Order> LoadOwnedTrackedOrderAsync(int userId, int id, CancellationToken cancellationToken) =>
         await IncludeOrderGraph(db.Orders).Include(x => x.Payments)
             .SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, cancellationToken)
-            ?? throw new ApiException("Order not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("ההזמנה לא נמצאה.", StatusCodes.Status404NotFound);
 
     private async Task ReloadOrderAsync(Order order, CancellationToken cancellationToken)
     {
@@ -210,7 +210,7 @@ public sealed class CustomerOrdersService(
 
         if (availableItems.Count != distinctIds.Length)
         {
-            throw new ApiException("One or more menu items were not found or are unavailable.");
+            throw new ApiException("אחת או יותר מהמנות לא נמצאו או אינן זמינות.");
         }
 
         return availableItems;
@@ -232,15 +232,15 @@ public sealed class CustomerOrdersService(
 
         if (tableId is null or <= 0)
         {
-            throw new ApiException("Dine-in orders require a table.");
+            throw new ApiException("להזמנה במסעדה יש לבחור שולחן.");
         }
 
         var table = await db.Tables.SingleOrDefaultAsync(x => x.Id == tableId.Value, cancellationToken)
-            ?? throw new ApiException("Table not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("השולחן לא נמצא.", StatusCodes.Status404NotFound);
 
         if (!currentlyAssignedTableIds.Contains(table.Id) && table.Status != TableStatus.Available)
         {
-            throw new ApiException("Only available tables can be assigned.", StatusCodes.Status409Conflict);
+            throw new ApiException("ניתן לבחור רק שולחן פנוי.", StatusCodes.Status409Conflict);
         }
 
         return [table];
@@ -250,17 +250,17 @@ public sealed class CustomerOrdersService(
     {
         if (order.PaymentStatus == PaymentStatus.Paid)
         {
-            throw new ApiException("Paid orders cannot be modified.", StatusCodes.Status409Conflict);
+            throw new ApiException("לא ניתן לעדכן הזמנה ששולמה.", StatusCodes.Status409Conflict);
         }
 
         if (order.Status is OrderStatus.Cancelled or OrderStatus.Completed)
         {
-            throw new ApiException("Completed or cancelled orders cannot be modified.", StatusCodes.Status409Conflict);
+            throw new ApiException("לא ניתן לעדכן הזמנה שהושלמה או בוטלה.", StatusCodes.Status409Conflict);
         }
 
         if (order.Payments.Count > 0)
         {
-            throw new ApiException("Orders with payments cannot be modified.", StatusCodes.Status409Conflict);
+            throw new ApiException("לא ניתן לעדכן הזמנה שכבר בוצע עבורה תשלום.", StatusCodes.Status409Conflict);
         }
     }
 

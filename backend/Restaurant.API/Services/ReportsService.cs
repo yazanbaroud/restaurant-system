@@ -44,7 +44,7 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
         ValidateYear(y);
         if (m is < 1 or > 12)
         {
-            throw new ApiException("Month must be between 1 and 12.");
+            throw new ApiException("החודש חייב להיות בין 1 ל־12.");
         }
 
         var start = new DateTime(y, m, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -206,7 +206,7 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
     {
         if (from > to)
         {
-            throw new ApiException("The start date must be before or equal to the end date.");
+            throw new ApiException("תאריך ההתחלה חייב להיות לפני תאריך הסיום או זהה לו.");
         }
     }
 
@@ -214,7 +214,7 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
     {
         if (year is < 1 or > 9999)
         {
-            throw new ApiException("Year must be between 1 and 9999.");
+            throw new ApiException("השנה אינה תקינה.");
         }
     }
 

@@ -46,7 +46,7 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
         }
 
         var item = await query.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("Menu item not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("המנה לא נמצאה.", StatusCodes.Status404NotFound);
         var categoryNames = await GetCategoryNamesAsync(cancellationToken);
         return item.ToMenuItemResponse(CategoryName(categoryNames, item.Category));
     }
@@ -56,13 +56,13 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
         var name = dto.Name.Trim();
         if (await db.MenuItems.AnyAsync(x => x.Name == name, cancellationToken))
         {
-            throw new ApiException("A menu item with this name already exists.", StatusCodes.Status409Conflict);
+            throw new ApiException("כבר קיימת מנה בשם הזה.", StatusCodes.Status409Conflict);
         }
 
         var category = await GetCategoryAsync(dto.Category, cancellationToken);
         if (!category.IsActive)
         {
-            throw new ApiException("Menu category is inactive.", StatusCodes.Status400BadRequest);
+            throw new ApiException("הקטגוריה אינה פעילה.", StatusCodes.Status400BadRequest);
         }
 
         var item = new MenuItem
@@ -82,12 +82,12 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
     public async Task<MenuItemResponseDto> UpdateAsync(int id, UpdateMenuItemDto dto, CancellationToken cancellationToken)
     {
         var item = await db.MenuItems.Include(x => x.Images).SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("Menu item not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("המנה לא נמצאה.", StatusCodes.Status404NotFound);
 
         var name = dto.Name.Trim();
         if (await db.MenuItems.AnyAsync(x => x.Id != id && x.Name == name, cancellationToken))
         {
-            throw new ApiException("A menu item with this name already exists.", StatusCodes.Status409Conflict);
+            throw new ApiException("כבר קיימת מנה בשם הזה.", StatusCodes.Status409Conflict);
         }
 
         var category = await GetCategoryAsync(dto.Category, cancellationToken);
@@ -104,7 +104,7 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
     public async Task DeleteAsync(int id, CancellationToken cancellationToken)
     {
         var item = await db.MenuItems.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("Menu item not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("המנה לא נמצאה.", StatusCodes.Status404NotFound);
         item.IsAvailable = false;
         await db.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Menu item {MenuItemId} marked unavailable", item.Id);
@@ -113,7 +113,7 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
     public async Task<MenuItemImageResponseDto> AddImageAsync(int id, AddMenuItemImageDto dto, CancellationToken cancellationToken)
     {
         var item = await db.MenuItems.Include(x => x.Images).SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("Menu item not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("המנה לא נמצאה.", StatusCodes.Status404NotFound);
 
         if (dto.IsMainImage)
         {
@@ -129,7 +129,7 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
     public async Task DeleteImageAsync(int id, int imageId, CancellationToken cancellationToken)
     {
         var image = await db.MenuItemImages.SingleOrDefaultAsync(x => x.Id == imageId && x.MenuItemId == id, cancellationToken)
-            ?? throw new ApiException("Menu item image not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("תמונת המנה לא נמצאה.", StatusCodes.Status404NotFound);
         db.MenuItemImages.Remove(image);
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -151,7 +151,7 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
         var name = dto.Name.Trim();
         if (await db.MenuCategories.AnyAsync(x => x.Name == name, cancellationToken))
         {
-            throw new ApiException("A menu category with this name already exists.", StatusCodes.Status409Conflict);
+            throw new ApiException("כבר קיימת קטגוריה בשם הזה.", StatusCodes.Status409Conflict);
         }
 
         var sortOrder = await db.MenuCategories.MaxAsync(x => (int?)x.SortOrder, cancellationToken) ?? 0;
@@ -170,12 +170,12 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
     public async Task<MenuCategoryResponseDto> UpdateCategoryAsync(int id, UpdateMenuCategoryDto dto, CancellationToken cancellationToken)
     {
         var category = await db.MenuCategories.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("Menu category not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("הקטגוריה לא נמצאה.", StatusCodes.Status404NotFound);
 
         var name = dto.Name.Trim();
         if (await db.MenuCategories.AnyAsync(x => x.Id != id && x.Name == name, cancellationToken))
         {
-            throw new ApiException("A menu category with this name already exists.", StatusCodes.Status409Conflict);
+            throw new ApiException("כבר קיימת קטגוריה בשם הזה.", StatusCodes.Status409Conflict);
         }
 
         category.Name = name;
@@ -187,7 +187,7 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
     public async Task DeleteCategoryAsync(int id, CancellationToken cancellationToken)
     {
         var category = await db.MenuCategories.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("Menu category not found.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("הקטגוריה לא נמצאה.", StatusCodes.Status404NotFound);
 
         if (await db.MenuItems.AnyAsync(x => x.Category == id, cancellationToken))
         {
@@ -201,7 +201,7 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
 
     private async Task<MenuCategoryRecord> GetCategoryAsync(int id, CancellationToken cancellationToken) =>
         await db.MenuCategories.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("Menu category not found.", StatusCodes.Status400BadRequest);
+            ?? throw new ApiException("הקטגוריה לא נמצאה.", StatusCodes.Status400BadRequest);
 
     private async Task<Dictionary<int, string>> GetCategoryNamesAsync(CancellationToken cancellationToken) =>
         await db.MenuCategories.AsNoTracking().ToDictionaryAsync(x => x.Id, x => x.Name, cancellationToken);

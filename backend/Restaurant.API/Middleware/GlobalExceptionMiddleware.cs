@@ -41,7 +41,7 @@ public sealed class GlobalExceptionMiddleware(RequestDelegate next, ILogger<Glob
             ? new
             {
                 status = statusCode,
-                title = "Validation failed",
+                title = "שגיאת אימות",
                 errors = validationException.Errors
                     .GroupBy(x => x.PropertyName)
                     .ToDictionary(x => x.Key, x => x.Select(e => e.ErrorMessage).ToArray())
@@ -49,7 +49,7 @@ public sealed class GlobalExceptionMiddleware(RequestDelegate next, ILogger<Glob
             : new
             {
                 status = statusCode,
-                title = statusCode == (int)HttpStatusCode.InternalServerError ? "An unexpected error occurred." : exception.Message
+                title = statusCode == (int)HttpStatusCode.InternalServerError ? "אירעה שגיאה, נסו שוב." : exception.Message
             };
 
         context.Response.ContentType = "application/json";

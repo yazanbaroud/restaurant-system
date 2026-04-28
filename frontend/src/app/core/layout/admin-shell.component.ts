@@ -1,8 +1,10 @@
 import { AsyncPipe } from '@angular/common';
-import { Component, inject } from '@angular/core';
+import { Component, DestroyRef, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { AuthService } from '../services/auth.service';
+import { RealtimeEventName, RealtimeService } from '../services/realtime.service';
 
 @Component({
   selector: 'app-admin-shell',
@@ -43,17 +45,70 @@ import { AuthService } from '../services/auth.service';
             </div>
           }
         </header>
+        @if (realtimeNotice) {
+          <div class="realtime-notice" role="status">{{ realtimeNotice }}</div>
+        }
         <router-outlet />
       </section>
     </div>
-  `
+  `,
+  styles: [`
+    .realtime-notice {
+      margin-bottom: 0.85rem;
+      padding: 10px 12px;
+      border: 1px solid rgba(102, 112, 68, 0.26);
+      border-radius: var(--radius);
+      background: rgba(102, 112, 68, 0.12);
+      color: var(--olive-dark);
+      font-weight: 850;
+    }
+  `]
 })
 export class AdminShellComponent {
   readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly realtime = inject(RealtimeService);
+  private readonly destroyRef = inject(DestroyRef);
+  private noticeTimer = 0;
+
+  realtimeNotice = '';
+
+  constructor() {
+    this.realtime.events$.pipe(
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe((event) => this.showRealtimeNotice(event.name));
+  }
 
   logout(): void {
     this.auth.logout();
     void this.router.navigateByUrl('/login');
+  }
+
+  private showRealtimeNotice(eventName: RealtimeEventName): void {
+    const message = this.realtimeNoticeFor(eventName);
+    if (!message) {
+      return;
+    }
+
+    this.realtimeNotice = message;
+    if (typeof window !== 'undefined') {
+      window.clearTimeout(this.noticeTimer);
+      this.noticeTimer = window.setTimeout(() => {
+        this.realtimeNotice = '';
+      }, 4500);
+    }
+  }
+
+  private realtimeNoticeFor(eventName: RealtimeEventName): string {
+    const messages: Record<RealtimeEventName, string> = {
+      orderCreated: 'התקבלה הזמנה חדשה.',
+      orderUpdated: 'הזמנה עודכנה.',
+      orderStatusUpdated: 'סטטוס הזמנה עודכן.',
+      paymentAdded: 'תשלום חדש התקבל.',
+      reservationCreated: 'התקבלה הזמנת מקום חדשה.',
+      reservationStatusUpdated: 'סטטוס הזמנת מקום עודכן.'
+    };
+
+    return messages[eventName];
   }
 }

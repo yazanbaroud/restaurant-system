@@ -12,11 +12,14 @@ import {
   of,
   shareReplay,
   skip,
-  startWith
+  startWith,
+  Subject,
+  switchMap
 } from 'rxjs';
 
 import { Order, OrderStatus, OrderType, PaymentStatus } from '../../core/models';
 import { CustomerOrdersService } from '../../core/services/customer-orders.service';
+import { RealtimeEventName, RealtimeService } from '../../core/services/realtime.service';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
 import {
@@ -140,6 +143,10 @@ interface CustomerOrdersLoadState {
           <button type="button" class="btn btn-ghost" (click)="showAllDates()">הצג את כל התאריכים</button>
         </div>
       </section>
+
+      @if (realtimeMessage) {
+        <p class="success-note">{{ realtimeMessage }}</p>
+      }
 
       @if (vm$ | async; as vm) {
         @if (vm.isLoading) {
@@ -373,10 +380,12 @@ interface CustomerOrdersLoadState {
 })
 export class CustomerOrdersPageComponent {
   private readonly customerOrders = inject(CustomerOrdersService);
+  private readonly realtime = inject(RealtimeService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly today = this.localDate();
+  private readonly refreshOrders$ = new Subject<void>();
 
   readonly OrderStatus = OrderStatus;
   readonly OrderType = OrderType;
@@ -431,22 +440,27 @@ export class CustomerOrdersPageComponent {
   readonly toDateControl = new FormControl(this.initialDateQuery('to'), { nonNullable: true });
   readonly sortControl = new FormControl<OrderSortOption>(this.initialSortQuery(), { nonNullable: true });
 
-  private readonly ordersState$ = this.customerOrders.getOrders().pipe(
-    map((orders): CustomerOrdersLoadState => ({
-      orders,
-      isLoading: false,
-      hasError: false
-    })),
-    catchError(() => of({
-      orders: [],
-      isLoading: false,
-      hasError: true
-    } satisfies CustomerOrdersLoadState)),
-    startWith({
-      orders: [],
-      isLoading: true,
-      hasError: false
-    } satisfies CustomerOrdersLoadState),
+  realtimeMessage = '';
+
+  private readonly ordersState$ = this.refreshOrders$.pipe(
+    startWith(void 0),
+    switchMap(() => this.customerOrders.getOrders().pipe(
+      map((orders): CustomerOrdersLoadState => ({
+        orders,
+        isLoading: false,
+        hasError: false
+      })),
+      catchError(() => of({
+        orders: [],
+        isLoading: false,
+        hasError: true
+      } satisfies CustomerOrdersLoadState)),
+      startWith({
+        orders: [],
+        isLoading: true,
+        hasError: false
+      } satisfies CustomerOrdersLoadState)
+    )),
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
@@ -484,6 +498,17 @@ export class CustomerOrdersPageComponent {
         queryParams: this.toQueryParams(filters),
         replaceUrl: true
       });
+    });
+
+    this.realtime.events$.pipe(
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe((event) => {
+      if (!this.isCustomerOrderRealtimeEvent(event.name)) {
+        return;
+      }
+
+      this.realtimeMessage = this.realtimeNotice(event.name);
+      this.refreshOrders$.next();
     });
   }
 
@@ -673,5 +698,24 @@ export class CustomerOrdersPageComponent {
     const now = new Date();
     const localDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
     return localDate.toISOString().slice(0, 10);
+  }
+
+  private isCustomerOrderRealtimeEvent(eventName: RealtimeEventName): boolean {
+    return eventName === 'orderCreated' ||
+      eventName === 'orderUpdated' ||
+      eventName === 'orderStatusUpdated' ||
+      eventName === 'paymentAdded';
+  }
+
+  private realtimeNotice(eventName: RealtimeEventName): string {
+    if (eventName === 'orderStatusUpdated') {
+      return 'סטטוס ההזמנה עודכן.';
+    }
+
+    if (eventName === 'paymentAdded') {
+      return 'סטטוס התשלום עודכן.';
+    }
+
+    return 'רשימת ההזמנות עודכנה.';
   }
 }

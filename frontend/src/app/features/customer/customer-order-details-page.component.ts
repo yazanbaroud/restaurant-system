@@ -1,10 +1,12 @@
 import { AsyncPipe, CurrencyPipe, DatePipe } from '@angular/common';
-import { Component, inject } from '@angular/core';
+import { Component, DestroyRef, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { catchError, of } from 'rxjs';
+import { catchError, of, shareReplay, startWith, Subject, switchMap } from 'rxjs';
 
 import { Order } from '../../core/models';
 import { CustomerOrdersService } from '../../core/services/customer-orders.service';
+import { RealtimeEventName, RealtimeService } from '../../core/services/realtime.service';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
 import {
@@ -30,6 +32,10 @@ import {
           >
             <a class="btn btn-ghost" routerLink="/orders">חזרה להזמנות</a>
           </app-page-header>
+
+          @if (realtimeMessage) {
+            <p class="success-note">{{ realtimeMessage }}</p>
+          }
 
           <section class="panel customer-order-hero">
             <div>
@@ -219,7 +225,10 @@ import {
 export class CustomerOrderDetailsPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly customerOrders = inject(CustomerOrdersService);
+  private readonly realtime = inject(RealtimeService);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly id = Number(this.route.snapshot.paramMap.get('id'));
+  private readonly refreshOrder$ = new Subject<void>();
 
   readonly orderStatusLabels = orderStatusLabels;
   readonly orderStatusTones = orderStatusTones;
@@ -227,11 +236,49 @@ export class CustomerOrderDetailsPageComponent {
   readonly paymentStatusLabels = paymentStatusLabels;
   readonly paymentStatusTones = paymentStatusTones;
 
-  readonly order$ = this.customerOrders.getOrder(this.id).pipe(
-    catchError(() => of(null))
+  realtimeMessage = '';
+
+  readonly order$ = this.refreshOrder$.pipe(
+    startWith(void 0),
+    switchMap(() => this.customerOrders.getOrder(this.id).pipe(
+      catchError(() => of(null))
+    )),
+    shareReplay({ bufferSize: 1, refCount: true })
   );
+
+  constructor() {
+    this.realtime.events$.pipe(
+      takeUntilDestroyed(this.destroyRef)
+    ).subscribe((event) => {
+      if (!this.isCustomerOrderRealtimeEvent(event.name)) {
+        return;
+      }
+
+      this.realtimeMessage = this.realtimeNotice(event.name);
+      this.refreshOrder$.next();
+    });
+  }
 
   tableNames(order: Order): string {
     return order.tables.length ? order.tables.map((table) => table.name).join(', ') : 'ללא שולחן';
+  }
+
+  private isCustomerOrderRealtimeEvent(eventName: RealtimeEventName): boolean {
+    return eventName === 'orderCreated' ||
+      eventName === 'orderUpdated' ||
+      eventName === 'orderStatusUpdated' ||
+      eventName === 'paymentAdded';
+  }
+
+  private realtimeNotice(eventName: RealtimeEventName): string {
+    if (eventName === 'orderStatusUpdated') {
+      return 'סטטוס ההזמנה עודכן.';
+    }
+
+    if (eventName === 'paymentAdded') {
+      return 'סטטוס התשלום עודכן.';
+    }
+
+    return 'פרטי ההזמנה עודכנו.';
   }
 }

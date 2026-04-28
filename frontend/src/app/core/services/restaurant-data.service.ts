@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject, Observable, catchError, forkJoin, map, of, switchMap, tap, throwError } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
+import { RealtimeEvent, RealtimeService } from './realtime.service';
 import {
   MOCK_DASHBOARD,
   MOCK_MENU_ITEMS,
@@ -56,6 +57,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class RestaurantDataService {
   private readonly http = inject(HttpClient);
+  private readonly realtime = inject(RealtimeService);
   private readonly apiBaseUrl = environment.apiBaseUrl;
   private readonly menuSubject = new BehaviorSubject<MenuItem[]>(structuredClone(MOCK_MENU_ITEMS));
   private readonly menuCategoriesSubject = new BehaviorSubject<MenuCategoryRecord[]>(this.defaultMenuCategories());
@@ -72,6 +74,53 @@ export class RestaurantDataService {
   readonly reservations$ = this.reservationsSubject.asObservable();
   readonly payments$ = this.paymentsSubject.asObservable();
   readonly users$ = this.usersSubject.asObservable();
+
+  constructor() {
+    this.registerRealtimeUpdates();
+  }
+
+  private registerRealtimeUpdates(): void {
+    this.realtime.events$.subscribe((event) => {
+      this.applyRealtimeEvent(event);
+    });
+  }
+
+  private applyRealtimeEvent(event: RealtimeEvent): void {
+    if (event.name === 'paymentAdded') {
+      this.applyRealtimePayment(event.payload);
+      return;
+    }
+
+    if (event.name === 'reservationCreated' || event.name === 'reservationStatusUpdated') {
+      const reservation = this.normalizeReservation(event.payload);
+      if (reservation.id > 0) {
+        this.upsertReservation(reservation);
+      }
+      return;
+    }
+
+    const order = this.normalizeOrder(event.payload);
+    if (order.id > 0) {
+      this.upsertOrder(order);
+      this.syncTablesFromOrder(order);
+    }
+  }
+
+  private applyRealtimePayment(payload: unknown): void {
+    const payment = this.normalizePayment(payload);
+    if (payment.id > 0) {
+      this.upsertPayment(payment);
+    }
+
+    const orderPayload = this.extractNestedObject(payload, ['order']);
+    if (orderPayload) {
+      const order = this.normalizeOrder(orderPayload);
+      if (order.id > 0) {
+        this.upsertOrder(order);
+        this.syncTablesFromOrder(order);
+      }
+    }
+  }
 
   getMenuItems(): Observable<MenuItem[]> {
     return this.fetchMenuItemsFromApi().pipe(switchMap(() => this.menuItems$));

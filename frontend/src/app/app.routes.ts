@@ -5,53 +5,24 @@ import { PublicShellComponent } from './core/layout/public-shell.component';
 import { WaiterShellComponent } from './core/layout/waiter-shell.component';
 import { roleGuard } from './core/guards/role.guard';
 import { UserRole } from './core/models';
-import { LoginPageComponent } from './features/auth/login-page.component';
-import { RegisterPageComponent } from './features/auth/register-page.component';
-import { CartPageComponent } from './features/customer/cart-page.component';
-import { CustomerOrderDetailsPageComponent } from './features/customer/customer-order-details-page.component';
-import { CustomerOrdersPageComponent } from './features/customer/customer-orders-page.component';
-import { CustomerReservationDetailsPageComponent } from './features/customer/customer-reservation-details-page.component';
-import { CustomerReservationsPageComponent } from './features/customer/customer-reservations-page.component';
-import { AccountPageComponent } from './features/account/account-page.component';
-import { AdminDashboardPageComponent } from './features/admin/admin-dashboard-page.component';
-import { BusinessHoursPageComponent } from './features/admin/business-hours-page.component';
-import { MenuItemFormPageComponent } from './features/admin/menu-item-form-page.component';
-import { MenuManagementPageComponent } from './features/admin/menu-management-page.component';
-import { OrdersManagementPageComponent } from './features/admin/orders-management-page.component';
-import { PaymentsTrackingPageComponent } from './features/admin/payments-tracking-page.component';
-import { ReportsPageComponent } from './features/admin/reports-page.component';
-import { ReservationsManagementPageComponent } from './features/admin/reservations-management-page.component';
-import { TableFormPageComponent } from './features/admin/table-form-page.component';
-import { TablesManagementPageComponent } from './features/admin/tables-management-page.component';
-import { UserFormPageComponent } from './features/admin/user-form-page.component';
-import { UsersManagementPageComponent } from './features/admin/users-management-page.component';
-import { DishDetailsPageComponent } from './features/public/dish-details-page.component';
-import { LandingPageComponent } from './features/public/landing-page.component';
-import { MenuPageComponent } from './features/public/menu-page.component';
-import { ReservationPageComponent } from './features/public/reservation-page.component';
-import { ActiveOrdersPageComponent } from './features/waiter/active-orders-page.component';
-import { AddPaymentPageComponent } from './features/waiter/add-payment-page.component';
-import { CreateOrderPageComponent } from './features/waiter/create-order-page.component';
-import { OrderDetailsPageComponent } from './features/waiter/order-details-page.component';
-import { WaiterReservationsPageComponent } from './features/waiter/waiter-reservations-page.component';
 
 export const routes: Routes = [
   {
     path: '',
     component: PublicShellComponent,
     children: [
-      { path: '', component: LandingPageComponent },
-      { path: 'menu', component: MenuPageComponent },
-      { path: 'menu/:id', component: DishDetailsPageComponent },
-      { path: 'reservation', component: ReservationPageComponent },
-      { path: 'account', component: AccountPageComponent, canActivate: [roleGuard] },
-      { path: 'cart', component: CartPageComponent, canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
-      { path: 'orders', component: CustomerOrdersPageComponent, canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
-      { path: 'orders/:id', component: CustomerOrderDetailsPageComponent, canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
-      { path: 'reservations', component: CustomerReservationsPageComponent, canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
-      { path: 'reservations/:id', component: CustomerReservationDetailsPageComponent, canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
-      { path: 'login', component: LoginPageComponent },
-      { path: 'register', component: RegisterPageComponent }
+      { path: '', loadComponent: () => import('./features/public/landing-page.component').then((m) => m.LandingPageComponent) },
+      { path: 'menu', loadComponent: () => import('./features/public/menu-page.component').then((m) => m.MenuPageComponent) },
+      { path: 'menu/:id', loadComponent: () => import('./features/public/dish-details-page.component').then((m) => m.DishDetailsPageComponent) },
+      { path: 'reservation', loadComponent: () => import('./features/public/reservation-page.component').then((m) => m.ReservationPageComponent) },
+      { path: 'account', loadComponent: () => import('./features/account/account-page.component').then((m) => m.AccountPageComponent), canActivate: [roleGuard] },
+      { path: 'cart', loadComponent: () => import('./features/customer/cart-page.component').then((m) => m.CartPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
+      { path: 'orders', loadComponent: () => import('./features/customer/customer-orders-page.component').then((m) => m.CustomerOrdersPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
+      { path: 'orders/:id', loadComponent: () => import('./features/customer/customer-order-details-page.component').then((m) => m.CustomerOrderDetailsPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
+      { path: 'reservations', loadComponent: () => import('./features/customer/customer-reservations-page.component').then((m) => m.CustomerReservationsPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
+      { path: 'reservations/:id', loadComponent: () => import('./features/customer/customer-reservation-details-page.component').then((m) => m.CustomerReservationDetailsPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
+      { path: 'login', loadComponent: () => import('./features/auth/login-page.component').then((m) => m.LoginPageComponent) },
+      { path: 'register', loadComponent: () => import('./features/auth/register-page.component').then((m) => m.RegisterPageComponent) }
     ]
   },
   {
@@ -60,11 +31,11 @@ export const routes: Routes = [
     canActivate: [roleGuard],
     data: { roles: [UserRole.Waiter] },
     children: [
-      { path: '', component: ActiveOrdersPageComponent },
-      { path: 'create-order', component: CreateOrderPageComponent },
-      { path: 'orders/:id', component: OrderDetailsPageComponent },
-      { path: 'orders/:id/payment', component: AddPaymentPageComponent },
-      { path: 'reservations', component: WaiterReservationsPageComponent }
+      { path: '', loadComponent: () => import('./features/waiter/active-orders-page.component').then((m) => m.ActiveOrdersPageComponent) },
+      { path: 'create-order', loadComponent: () => import('./features/waiter/create-order-page.component').then((m) => m.CreateOrderPageComponent) },
+      { path: 'orders/:id', loadComponent: () => import('./features/waiter/order-details-page.component').then((m) => m.OrderDetailsPageComponent) },
+      { path: 'orders/:id/payment', loadComponent: () => import('./features/waiter/add-payment-page.component').then((m) => m.AddPaymentPageComponent) },
+      { path: 'reservations', loadComponent: () => import('./features/waiter/waiter-reservations-page.component').then((m) => m.WaiterReservationsPageComponent) }
     ]
   },
   {
@@ -73,24 +44,24 @@ export const routes: Routes = [
     canActivate: [roleGuard],
     data: { roles: [UserRole.Admin] },
     children: [
-      { path: '', component: AdminDashboardPageComponent },
-      { path: 'orders', component: OrdersManagementPageComponent },
-      { path: 'orders/new', component: CreateOrderPageComponent },
-      { path: 'orders/:id', component: OrderDetailsPageComponent },
-      { path: 'orders/:id/payment', component: AddPaymentPageComponent },
-      { path: 'reservations', component: ReservationsManagementPageComponent },
-      { path: 'menu/new', component: MenuItemFormPageComponent },
-      { path: 'menu/:id/edit', component: MenuItemFormPageComponent },
-      { path: 'menu', component: MenuManagementPageComponent },
-      { path: 'tables/new', component: TableFormPageComponent },
-      { path: 'tables/:id/edit', component: TableFormPageComponent },
-      { path: 'tables', component: TablesManagementPageComponent },
-      { path: 'users/new', component: UserFormPageComponent },
-      { path: 'users/:id/edit', component: UserFormPageComponent },
-      { path: 'users', component: UsersManagementPageComponent },
-      { path: 'payments', component: PaymentsTrackingPageComponent },
-      { path: 'business-hours', component: BusinessHoursPageComponent },
-      { path: 'reports', component: ReportsPageComponent }
+      { path: '', loadComponent: () => import('./features/admin/admin-dashboard-page.component').then((m) => m.AdminDashboardPageComponent) },
+      { path: 'orders', loadComponent: () => import('./features/admin/orders-management-page.component').then((m) => m.OrdersManagementPageComponent) },
+      { path: 'orders/new', loadComponent: () => import('./features/waiter/create-order-page.component').then((m) => m.CreateOrderPageComponent) },
+      { path: 'orders/:id', loadComponent: () => import('./features/waiter/order-details-page.component').then((m) => m.OrderDetailsPageComponent) },
+      { path: 'orders/:id/payment', loadComponent: () => import('./features/waiter/add-payment-page.component').then((m) => m.AddPaymentPageComponent) },
+      { path: 'reservations', loadComponent: () => import('./features/admin/reservations-management-page.component').then((m) => m.ReservationsManagementPageComponent) },
+      { path: 'menu/new', loadComponent: () => import('./features/admin/menu-item-form-page.component').then((m) => m.MenuItemFormPageComponent) },
+      { path: 'menu/:id/edit', loadComponent: () => import('./features/admin/menu-item-form-page.component').then((m) => m.MenuItemFormPageComponent) },
+      { path: 'menu', loadComponent: () => import('./features/admin/menu-management-page.component').then((m) => m.MenuManagementPageComponent) },
+      { path: 'tables/new', loadComponent: () => import('./features/admin/table-form-page.component').then((m) => m.TableFormPageComponent) },
+      { path: 'tables/:id/edit', loadComponent: () => import('./features/admin/table-form-page.component').then((m) => m.TableFormPageComponent) },
+      { path: 'tables', loadComponent: () => import('./features/admin/tables-management-page.component').then((m) => m.TablesManagementPageComponent) },
+      { path: 'users/new', loadComponent: () => import('./features/admin/user-form-page.component').then((m) => m.UserFormPageComponent) },
+      { path: 'users/:id/edit', loadComponent: () => import('./features/admin/user-form-page.component').then((m) => m.UserFormPageComponent) },
+      { path: 'users', loadComponent: () => import('./features/admin/users-management-page.component').then((m) => m.UsersManagementPageComponent) },
+      { path: 'payments', loadComponent: () => import('./features/admin/payments-tracking-page.component').then((m) => m.PaymentsTrackingPageComponent) },
+      { path: 'business-hours', loadComponent: () => import('./features/admin/business-hours-page.component').then((m) => m.BusinessHoursPageComponent) },
+      { path: 'reports', loadComponent: () => import('./features/admin/reports-page.component').then((m) => m.ReportsPageComponent) }
     ]
   },
   { path: '**', redirectTo: '' }

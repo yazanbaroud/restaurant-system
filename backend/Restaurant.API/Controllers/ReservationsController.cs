@@ -14,7 +14,7 @@ public sealed class ReservationsController(IReservationsService reservationsServ
     [HttpPost]
     [AllowAnonymous]
     public async Task<ActionResult<ReservationResponseDto>> Create(CreateReservationDto dto, CancellationToken cancellationToken) =>
-        Created(string.Empty, await reservationsService.CreateAsync(dto, cancellationToken));
+        Created(string.Empty, await reservationsService.CreateAsync(dto, GetAuthenticatedCustomerUserId(), cancellationToken));
 
     [HttpGet]
     [Authorize(Roles = AppRoles.AdminOrWaiter)]
@@ -48,5 +48,15 @@ public sealed class ReservationsController(IReservationsService reservationsServ
     {
         await reservationsService.DeleteAsync(id, cancellationToken);
         return NoContent();
+    }
+
+    private int? GetAuthenticatedCustomerUserId()
+    {
+        if (User.Identity?.IsAuthenticated == true && User.IsInRole(AppRoles.Customer))
+        {
+            return User.GetUserId();
+        }
+
+        return null;
     }
 }

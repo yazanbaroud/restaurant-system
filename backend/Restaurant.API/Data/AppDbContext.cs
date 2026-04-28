@@ -120,12 +120,17 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
         modelBuilder.Entity<Reservation>(entity =>
         {
+            entity.HasIndex(x => x.UserId);
             entity.Property(x => x.FirstName).HasMaxLength(100).IsRequired();
             entity.Property(x => x.LastName).HasMaxLength(100).IsRequired();
             entity.Property(x => x.PhoneNumber).HasMaxLength(40).IsRequired();
             entity.Property(x => x.CustomerNotes).HasMaxLength(1000);
             entity.Property(x => x.RestaurantNotes).HasMaxLength(1000);
             entity.Property(x => x.Status).HasConversion<int>().IsRequired();
+            entity.HasOne(x => x.User)
+                .WithMany(x => x.Reservations)
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

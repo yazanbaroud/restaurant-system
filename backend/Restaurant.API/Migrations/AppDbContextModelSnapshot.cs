@@ -302,7 +302,12 @@ namespace Restaurant.API.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
+                    b.Property<int?>("UserId")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("UserId");
 
                     b.ToTable("Reservations");
                 });
@@ -456,6 +461,16 @@ namespace Restaurant.API.Migrations
                     b.Navigation("Order");
                 });
 
+            modelBuilder.Entity("Restaurant.API.Models.Reservation", b =>
+                {
+                    b.HasOne("Restaurant.API.Models.User", "User")
+                        .WithMany("Reservations")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Restaurant.API.Models.MenuItem", b =>
                 {
                     b.Navigation("Images");
@@ -480,6 +495,8 @@ namespace Restaurant.API.Migrations
             modelBuilder.Entity("Restaurant.API.Models.User", b =>
                 {
                     b.Navigation("Orders");
+
+                    b.Navigation("Reservations");
                 });
 #pragma warning restore 612, 618
         }

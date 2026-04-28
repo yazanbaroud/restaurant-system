@@ -88,7 +88,6 @@ export class RestaurantDataService {
   createMenuCategory(input: CreateMenuCategoryInput): Observable<MenuCategoryRecord> {
     return this.http.post<unknown>(`${this.apiBaseUrl}/api/Menu/categories`, input).pipe(
       map((response) => this.normalizeMenuCategoryRecord(response, input)),
-      catchError(() => of(this.createMockMenuCategory(input))),
       tap((category) => this.upsertMenuCategory(category))
     );
   }
@@ -99,7 +98,6 @@ export class RestaurantDataService {
 
     return this.http.put<unknown>(`${this.apiBaseUrl}/api/Menu/categories/${id}`, input).pipe(
       map((response) => this.normalizeMenuCategoryRecord(response, fallbackCategory)),
-      catchError(() => of(this.updateMockMenuCategory(id, input))),
       tap((category) => this.upsertMenuCategory(category))
     );
   }
@@ -133,12 +131,10 @@ export class RestaurantDataService {
       switchMap(({ item, backendAlreadyReturnedImage }) =>
         imageUrl && !backendAlreadyReturnedImage
           ? this.postMenuItemImage(item.id, imageUrl, true).pipe(
-              switchMap(() => this.fetchMenuItemFromApi(item.id).pipe(catchError(() => of(this.withMenuImage(item, imageUrl))))),
-              catchError(() => of(item))
+              switchMap(() => this.fetchMenuItemFromApi(item.id).pipe(catchError(() => of(this.withMenuImage(item, imageUrl)))))
             )
           : of(item)
       ),
-      catchError(() => of(this.createMockMenuItem(input))),
       tap((item) => this.upsertMenuItem(item))
     );
   }
@@ -156,19 +152,16 @@ export class RestaurantDataService {
       switchMap(({ item, backendAlreadyReturnedImage }) =>
         imageUrl && !backendAlreadyReturnedImage
           ? this.postMenuItemImage(item.id, imageUrl, !item.images.length).pipe(
-              switchMap(() => this.fetchMenuItemFromApi(item.id).pipe(catchError(() => of(this.withMenuImage(item, imageUrl))))),
-              catchError(() => of(item))
+              switchMap(() => this.fetchMenuItemFromApi(item.id).pipe(catchError(() => of(this.withMenuImage(item, imageUrl)))))
             )
           : of(item)
       ),
-      catchError(() => of(this.updateMockMenuItem(id, input))),
       tap((item) => this.upsertMenuItem(item))
     );
   }
 
   deleteMenuItem(id: number): Observable<void> {
     return this.http.delete<void>(`${this.apiBaseUrl}/api/Menu/${id}`).pipe(
-      catchError(() => of(void 0)),
       tap(() => this.removeMenuItem(id))
     );
   }
@@ -178,7 +171,6 @@ export class RestaurantDataService {
 
     return this.postMenuItemImage(id, imageUrl, isMainImage).pipe(
       switchMap(() => this.fetchMenuItemFromApi(id).pipe(catchError(() => of(existingItem ? this.withMenuImage(existingItem, imageUrl) : this.createMissingMenuItem(id, imageUrl))))),
-      catchError(() => of(existingItem ? this.withMenuImage(existingItem, imageUrl) : this.createMissingMenuItem(id, imageUrl))),
       tap((item) => this.upsertMenuItem(item))
     );
   }
@@ -188,7 +180,6 @@ export class RestaurantDataService {
 
     return this.http.delete<void>(`${this.apiBaseUrl}/api/Menu/${menuItemId}/images/${imageId}`).pipe(
       switchMap(() => this.fetchMenuItemFromApi(menuItemId).pipe(catchError(() => of(existingItem ? this.withoutMenuImage(existingItem, imageId) : this.createMissingMenuItem(menuItemId))))),
-      catchError(() => of(existingItem ? this.withoutMenuImage(existingItem, imageId) : this.createMissingMenuItem(menuItemId))),
       tap((item) => this.upsertMenuItem(item))
     );
   }
@@ -262,7 +253,6 @@ export class RestaurantDataService {
   createTable(input: CreateTableInput): Observable<Table> {
     return this.http.post<unknown>(`${this.apiBaseUrl}/api/Tables`, this.createTablePayload(input)).pipe(
       map((response) => this.normalizeTable(response, input)),
-      catchError(() => of(this.createMockTable(input))),
       tap((table) => this.upsertTable(table))
     );
   }
@@ -273,7 +263,6 @@ export class RestaurantDataService {
 
     return this.http.put<unknown>(`${this.apiBaseUrl}/api/Tables/${id}`, this.updateTablePayload(input)).pipe(
       map((response) => this.normalizeTable(response, fallbackTable)),
-      catchError(() => of(this.updateMockTable(id, input))),
       tap((table) => this.upsertTable(table))
     );
   }
@@ -284,7 +273,6 @@ export class RestaurantDataService {
 
     return this.http.put<unknown>(`${this.apiBaseUrl}/api/Tables/${id}/status`, { status }).pipe(
       map((response) => this.normalizeTable(response, fallbackTable)),
-      catchError(() => of(this.updateMockTableStatus(id, status))),
       tap((table) => this.upsertTable(table))
     );
   }
@@ -341,7 +329,6 @@ export class RestaurantDataService {
   createOrder(input: CreateOrderInput): Observable<Order> {
     return this.http.post<unknown>(`${this.apiBaseUrl}/api/Orders`, this.createOrderPayload(input)).pipe(
       map((response) => this.normalizeOrder(response, input)),
-      catchError(() => of(this.createMockOrder(input))),
       tap((order) => {
         this.upsertOrder(order);
         this.markOrderTablesOccupied(order, input.tableIds);
@@ -396,34 +383,20 @@ export class RestaurantDataService {
     const existingLocalOrder = this.ordersSubject.value.find((candidate) => candidate.id === id);
 
     return this.http.put<unknown>(`${this.apiBaseUrl}/api/Orders/${id}/status`, { status }).pipe(
-      map((response) => ({
-        order: this.normalizeOrder(response),
-        isFallback: false
-      })),
-      catchError(() =>
-        of({
-          order: this.updateMockOrderStatus(id, status),
-          isFallback: true
-        })
-      ),
-      tap((result) => {
-        this.upsertOrder(result.order);
+      map((response) => this.normalizeOrder(response)),
+      tap((order) => {
+        this.upsertOrder(order);
 
-        if (result.isFallback) {
-          return;
-        }
-
-        this.syncTablesFromOrder(result.order);
+        this.syncTablesFromOrder(order);
 
         if (
           existingLocalOrder &&
           this.shouldReleaseTables(status) &&
-          this.hasMissingReleasedTableState(result.order, existingLocalOrder)
+          this.hasMissingReleasedTableState(order, existingLocalOrder)
         ) {
           this.releaseOrderTables(existingLocalOrder);
         }
-      }),
-      map((result) => result.order)
+      })
     );
   }
 
@@ -466,35 +439,21 @@ export class RestaurantDataService {
         const orderPayload = this.extractNestedObject(response, ['order']);
         return {
           payment: this.normalizePayment(response, { orderId, amount, method }),
-          backendOrder: orderPayload ? this.normalizeOrder(orderPayload) : null,
-          isFallback: false
+          backendOrder: orderPayload ? this.normalizeOrder(orderPayload) : null
         };
       }),
-      catchError(() =>
-        of({
-          payment: this.addMockPayment(orderId, amount, method),
-          backendOrder: null,
-          isFallback: true
-        })
-      ),
       tap((result) => {
         if (result.backendOrder) {
           this.upsertOrder(result.backendOrder);
         }
 
         this.upsertPayment(result.payment);
-
-        if (result.isFallback) {
-          this.updateMockOrderPaymentStatus(orderId);
-        }
       }),
       switchMap((result) =>
-        result.isFallback
-          ? of(result.payment)
-          : forkJoin({
-              payments: this.fetchPaymentsForOrderFromApi(orderId).pipe(catchError(() => of(this.paymentsSubject.value))),
-              order: this.fetchOrderFromApi(orderId).pipe(catchError(() => this.refreshOrderFromList(orderId)))
-            }).pipe(map(() => result.payment))
+        forkJoin({
+          payments: this.fetchPaymentsForOrderFromApi(orderId).pipe(catchError(() => of(this.paymentsSubject.value))),
+          order: this.fetchOrderFromApi(orderId).pipe(catchError(() => this.refreshOrderFromList(orderId)))
+        }).pipe(map(() => result.payment))
       )
     );
   }
@@ -560,7 +519,6 @@ export class RestaurantDataService {
       switchMap((reservation) =>
         this.fetchReservationFromApi(reservation.id).pipe(catchError(() => of(reservation)))
       ),
-      catchError(() => of(this.updateMockReservationStatus(id, status, restaurantNotes))),
       tap((reservation) => this.upsertReservation(reservation))
     );
   }
@@ -624,7 +582,6 @@ export class RestaurantDataService {
   createUser(input: CreateUserInput): Observable<User> {
     return this.http.post<unknown>(`${this.apiBaseUrl}/api/Users`, this.createUserPayload(input)).pipe(
       map((response) => this.normalizeUser(response, input)),
-      catchError(() => of(this.createMockUser(input))),
       tap((user) => this.upsertUser(user))
     );
   }
@@ -635,7 +592,6 @@ export class RestaurantDataService {
 
     return this.http.put<unknown>(`${this.apiBaseUrl}/api/Users/${id}`, input).pipe(
       map((response) => this.normalizeUser(response, fallbackUser)),
-      catchError(() => of(this.updateMockUser(id, input))),
       tap((user) => this.upsertUser(user))
     );
   }
@@ -646,7 +602,6 @@ export class RestaurantDataService {
 
     return this.http.put<unknown>(`${this.apiBaseUrl}/api/Users/${id}/role`, { role }).pipe(
       map((response) => this.normalizeUser(response, fallbackUser)),
-      catchError(() => of(this.updateMockUserRole(id, role))),
       tap((user) => this.upsertUser(user))
     );
   }

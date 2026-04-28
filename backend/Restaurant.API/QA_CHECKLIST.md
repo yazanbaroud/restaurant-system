@@ -2,6 +2,12 @@
 
 Use this checklist before demo or release when automated backend tests are not available.
 
+## Automated Test Status
+
+- No backend test project is currently configured.
+- Adding integration tests is recommended after deployment hardening, but was deferred here to avoid introducing a new database/test-host architecture during the final stabilization pass.
+- Until automated tests exist, run the critical manual cases below against a temporary/local database with separate Admin, Waiter, and at least two Customer accounts.
+
 ## Authentication and Authorization
 
 - Guest calls to `/api/customer/orders` return `401`.
@@ -17,6 +23,7 @@ Use this checklist before demo or release when automated backend tests are not a
 
 - Customer can list only their own orders through `GET /api/customer/orders`.
 - Customer gets `404` when requesting another customer's order by id.
+- Customer gets `404` when updating or deleting an item on another customer's order.
 - Customer order creation ignores client-supplied user id, prices, totals, order status, and payment status.
 - Customer order creation calculates totals from current menu prices.
 - Customer cannot order unavailable menu items.
@@ -45,6 +52,7 @@ Use this checklist before demo or release when automated backend tests are not a
 - Overpayment is blocked.
 - Payment status is recalculated from server-side payment totals.
 - Payment creation ignores client-side totals.
+- Customer role cannot call staff payment endpoints.
 
 ## Reservations
 
@@ -70,6 +78,8 @@ Use this checklist before demo or release when automated backend tests are not a
 - Open time must be before close time.
 - Startup seeds all seven days as open from `10:00` to `23:00` when no business-hour rows exist.
 - Business-hours seeding still runs when an admin user already exists.
+- Closing today in Admin business hours immediately causes public reservation creation for today to fail with a clear Hebrew validation message.
+- Restoring today to open hours allows public reservation creation inside the configured range again.
 
 ## Table Data
 

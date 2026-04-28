@@ -16,7 +16,7 @@ public sealed class CreateReservationDtoValidator : AbstractValidator<CreateRese
             .Matches(ValidationPatterns.IsraeliPhone).WithMessage("מספר הטלפון אינו תקין");
         RuleFor(x => x.GuestsCount).GreaterThan(0);
         RuleFor(x => x.CustomerNotes).MaximumLength(1000);
-        RuleFor(x => x.ReservationDate).Must(x => x >= DateOnly.FromDateTime(DateTime.UtcNow.Date)).WithMessage("Reservation date cannot be in the past.");
+        RuleFor(x => x.ReservationDate).Must(x => x >= DateOnly.FromDateTime(DateTime.Today)).WithMessage("לא ניתן לבחור תאריך שכבר עבר.");
     }
 }
 
@@ -33,7 +33,7 @@ public sealed class UpdateReservationDtoValidator : AbstractValidator<UpdateRese
         RuleFor(x => x.GuestsCount).GreaterThan(0);
         RuleFor(x => x.CustomerNotes).MaximumLength(1000);
         RuleFor(x => x.RestaurantNotes).MaximumLength(1000);
-        RuleFor(x => x.ReservationDate).Must(x => x >= DateOnly.FromDateTime(DateTime.UtcNow.Date)).WithMessage("Reservation date cannot be in the past.");
+        RuleFor(x => x.ReservationDate).Must(x => x >= DateOnly.FromDateTime(DateTime.Today)).WithMessage("לא ניתן לבחור תאריך שכבר עבר.");
     }
 }
 

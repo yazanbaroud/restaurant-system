@@ -28,6 +28,9 @@ public static class DtoMapper
     public static MenuCategoryResponseDto ToMenuCategoryResponse(this MenuCategoryRecord category) =>
         new(category.Id, category.Name, category.IsActive, category.SortOrder);
 
+    public static BusinessHourResponseDto ToBusinessHourResponse(this RestaurantBusinessHour businessHour) =>
+        new(businessHour.Id, businessHour.DayOfWeek, businessHour.IsOpen, businessHour.OpenTime, businessHour.CloseTime);
+
     public static TableResponseDto ToTableResponse(this Table table) =>
         new(table.Id, table.Name, table.Capacity, table.Status, table.Location, table.Notes);
 

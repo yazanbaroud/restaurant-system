@@ -18,6 +18,9 @@ public sealed class SeedAdminOptions
 
 public static class AdminSeeder
 {
+    private static readonly TimeOnly DefaultBusinessOpenTime = new(10, 0);
+    private static readonly TimeOnly DefaultBusinessCloseTime = new(23, 0);
+
     public static async Task SeedAsync(IServiceProvider services)
     {
         using var scope = services.CreateScope();
@@ -35,6 +38,8 @@ public static class AdminSeeder
         {
             await db.Database.EnsureCreatedAsync();
         }
+
+        await SeedBusinessHoursAsync(db, logger);
 
         var email = options.Email.Trim().ToLowerInvariant();
         if (await db.Users.AnyAsync(x => x.Role == UserRole.Admin))
@@ -54,5 +59,30 @@ public static class AdminSeeder
 
         await db.SaveChangesAsync();
         logger.LogInformation("Seeded initial admin account {Email}", email);
+    }
+
+    private static async Task SeedBusinessHoursAsync(AppDbContext db, ILogger logger)
+    {
+        if (await db.BusinessHours.AnyAsync())
+        {
+            return;
+        }
+
+        var now = DateTime.UtcNow;
+        for (var day = 0; day < 7; day++)
+        {
+            db.BusinessHours.Add(new RestaurantBusinessHour
+            {
+                DayOfWeek = day,
+                IsOpen = true,
+                OpenTime = DefaultBusinessOpenTime,
+                CloseTime = DefaultBusinessCloseTime,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        }
+
+        await db.SaveChangesAsync();
+        logger.LogInformation("Seeded default restaurant business hours.");
     }
 }

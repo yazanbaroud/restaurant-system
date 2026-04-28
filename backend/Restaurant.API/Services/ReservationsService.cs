@@ -10,11 +10,14 @@ namespace Restaurant.API.Services;
 
 public sealed class ReservationsService(
     AppDbContext db,
+    IBusinessHoursService businessHoursService,
     IRestaurantRealtimeNotifier realtimeNotifier,
     ILogger<ReservationsService> logger) : IReservationsService
 {
     public async Task<ReservationResponseDto> CreateAsync(CreateReservationDto dto, int? userId, CancellationToken cancellationToken)
     {
+        await businessHoursService.EnsureReservationTimeAllowedAsync(dto.ReservationDate, dto.ReservationTime, cancellationToken);
+
         if (userId.HasValue)
         {
             await EnsureCustomerExistsAsync(userId.Value, cancellationToken);

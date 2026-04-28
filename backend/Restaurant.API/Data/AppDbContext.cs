@@ -15,6 +15,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<OrderTable> OrderTables => Set<OrderTable>();
     public DbSet<Reservation> Reservations => Set<Reservation>();
+    public DbSet<RestaurantBusinessHour> BusinessHours => Set<RestaurantBusinessHour>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,6 +53,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.HasIndex(x => x.Name).IsUnique();
             entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
+        });
+
+        modelBuilder.Entity<RestaurantBusinessHour>(entity =>
+        {
+            entity.ToTable("BusinessHours");
+            entity.HasIndex(x => x.DayOfWeek).IsUnique();
+            entity.Property(x => x.OpenTime).HasColumnType("time");
+            entity.Property(x => x.CloseTime).HasColumnType("time");
         });
 
         modelBuilder.Entity<MenuItemImage>(entity =>

@@ -256,6 +256,40 @@ namespace Restaurant.API.Migrations
                     b.ToTable("Payments");
                 });
 
+            modelBuilder.Entity("Restaurant.API.Models.RestaurantBusinessHour", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<TimeOnly?>("CloseTime")
+                        .HasColumnType("time");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("DayOfWeek")
+                        .HasColumnType("int");
+
+                    b.Property<bool>("IsOpen")
+                        .HasColumnType("bit");
+
+                    b.Property<TimeOnly?>("OpenTime")
+                        .HasColumnType("time");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DayOfWeek")
+                        .IsUnique();
+
+                    b.ToTable("BusinessHours");
+                });
+
             modelBuilder.Entity("Restaurant.API.Models.Reservation", b =>
                 {
                     b.Property<int>("Id")

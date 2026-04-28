@@ -5,6 +5,7 @@ import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/rou
 import { roleLabels } from '../../shared/ui-labels';
 import { UserRole } from '../models';
 import { AuthService } from '../services/auth.service';
+import { CustomerCartService } from '../services/customer-cart.service';
 
 @Component({
   selector: 'app-public-shell',
@@ -24,6 +25,22 @@ import { AuthService } from '../services/auth.service';
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">בית</a>
           <a routerLink="/menu" routerLinkActive="active">תפריט</a>
           <a routerLink="/reservation" routerLinkActive="active">הזמנת מקום</a>
+          @if (auth.currentUser$ | async; as navUser) {
+            @if (navUser.role === UserRole.Customer) {
+              <a routerLink="/cart" routerLinkActive="active">
+                עגלה
+                @if (cart.itemCount$ | async; as cartCount) {
+                  @if (cartCount) {
+                    <span>({{ cartCount }})</span>
+                  }
+                }
+              </a>
+              <a routerLink="/orders" routerLinkActive="active">ההזמנות שלי</a>
+            }
+          } @else {
+            <a routerLink="/cart" routerLinkActive="active">עגלה</a>
+            <a routerLink="/orders" routerLinkActive="active">ההזמנות שלי</a>
+          }
         </nav>
         <div class="role-switch">
           @if (auth.currentUser$ | async; as user) {
@@ -49,6 +66,7 @@ import { AuthService } from '../services/auth.service';
 })
 export class PublicShellComponent {
   readonly auth = inject(AuthService);
+  readonly cart = inject(CustomerCartService);
   readonly router = inject(Router);
   readonly roleLabels = roleLabels;
   readonly UserRole = UserRole;

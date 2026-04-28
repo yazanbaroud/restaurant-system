@@ -140,7 +140,11 @@ export class LoginPageComponent {
       return this.isRouteSection(path, '/waiter') ? returnUrl : null;
     }
 
-    return path === '/' || this.isRouteSection(path, '/menu') || this.isRouteSection(path, '/reservation')
+    return path === '/' ||
+      this.isRouteSection(path, '/menu') ||
+      this.isRouteSection(path, '/reservation') ||
+      this.isRouteSection(path, '/cart') ||
+      this.isRouteSection(path, '/orders')
       ? returnUrl
       : null;
   }

@@ -42,11 +42,22 @@ public static class ServiceCollectionExtensions
         services.AddDbContext<AppDbContext>(options =>
             options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
 
+        var allowedOrigins = configuration.GetSection("Cors:AllowedOrigins")
+            .Get<string[]>()
+            ?.Where(origin => !string.IsNullOrWhiteSpace(origin))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (allowedOrigins is null || allowedOrigins.Length == 0)
+        {
+            allowedOrigins = ["http://localhost:4200", "http://127.0.0.1:4200"];
+        }
+
         services.AddCors(options =>
         {
             options.AddPolicy(AppCorsPolicies.DefaultCors, policy =>
             {
-                policy.WithOrigins("http://localhost:4200", "http://127.0.0.1:4200")
+                policy.WithOrigins(allowedOrigins)
                     .AllowAnyHeader()
                     .AllowAnyMethod()
                     .AllowCredentials();

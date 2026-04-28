@@ -242,8 +242,8 @@ Backend URL mismatch:
 
 CORS errors:
 
-- Backend CORS currently allows `http://localhost:4200` and `http://127.0.0.1:4200`.
-- Add the actual frontend origin in the backend CORS policy for network or deployed environments.
+- Backend CORS reads allowed origins from `Cors:AllowedOrigins`.
+- Add the actual frontend origin in backend configuration for network or deployed environments.
 
 `ng` not found:
 

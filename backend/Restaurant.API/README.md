@@ -287,14 +287,14 @@ SignalR:
 
 ## CORS
 
-The default CORS policy allows:
+The default CORS policy reads `Cors:AllowedOrigins` from configuration. The checked-in local values allow:
 
 ```text
 http://localhost:4200
 http://127.0.0.1:4200
 ```
 
-It allows credentials for SignalR. Add real frontend origins before testing from a network IP or deploying.
+It allows credentials for SignalR. Override `Cors:AllowedOrigins` with the real frontend origins before testing from a network IP or deploying.
 
 ## Troubleshooting
 
@@ -310,7 +310,7 @@ JWT startup failure:
 
 CORS:
 
-- If the Angular app runs from another origin, add that origin to `AppCorsPolicies.DefaultCors` configuration in `ServiceCollectionExtensions.cs`.
+- If the Angular app runs from another origin, add that origin to `Cors:AllowedOrigins` in backend configuration.
 
 Running on a network:
 

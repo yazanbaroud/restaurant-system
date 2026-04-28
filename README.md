@@ -186,10 +186,9 @@ The frontend is organized by role and feature area. Public, customer, waiter, an
 ## Known Limitations / Next Steps
 
 - Customer payment flow is not implemented; payment is currently handled by admin/waiter pages.
-- Backend emits SignalR events, but the frontend does not currently include a SignalR client integration.
 - Some list endpoints and pages still rely on full-list loading rather than pagination.
 - Refresh tokens and token revocation are not implemented.
-- Production deployment profiles and environment-specific CORS configuration still need to be formalized.
+- Production deployment profiles still need to be formalized.
 - Automated test coverage is not documented here and appears to need verification.
 
 ## Documentation

@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { BehaviorSubject, Observable, catchError, forkJoin, map, of, switchMap, tap } from 'rxjs';
+import { BehaviorSubject, Observable, catchError, forkJoin, map, of, switchMap, tap, throwError } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import {
@@ -538,7 +538,7 @@ export class RestaurantDataService {
       switchMap((reservation) =>
         this.fetchReservationFromApi(reservation.id).pipe(catchError(() => of(reservation)))
       ),
-      catchError(() => of(this.createMockReservation(input))),
+      catchError((error) => throwError(() => error)),
       tap((reservation) => this.upsertReservation(reservation))
     );
   }

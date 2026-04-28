@@ -35,7 +35,7 @@ import { RealtimeEventName, RealtimeService } from '../services/realtime.service
       <section class="staff-main">
         <header class="staff-topline">
           <div>
-            <p class="eyebrow">Luxury Druze Restaurant Experience</p>
+            <p class="eyebrow">ניהול מסעדת הכבש</p>
             <strong>ממשק מנהל</strong>
           </div>
           @if (auth.currentUser$ | async; as user) {

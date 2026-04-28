@@ -59,7 +59,7 @@ import { MenuItemCardComponent } from '../../shared/components/menu-item-card.co
         <img src="https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80" alt="שולחן מסעדה עם אוכל מסורתי" loading="lazy" />
       </div>
       <div class="story-band__content">
-        <p class="eyebrow">Hakeves Restaurant</p>
+        <p class="eyebrow">מסעדת הכבש</p>
         <h2>מסעדה שמרגישה כמו בית פתוח בכרמל</h2>
         <p>
           אצלנו כל ארוחה נפתחת בשפע סלטים, ממשיכה בגריל כבש על גחלים,

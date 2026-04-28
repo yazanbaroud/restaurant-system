@@ -18,7 +18,7 @@ import { controlError, israeliPhoneValidator, strongPasswordValidator } from '..
       <div class="auth-card">
         <p class="eyebrow">לקוח חדש</p>
         <h1>יצירת פרופיל להזמנות עתידיות</h1>
-        <p class="muted">הרשמה מחוברת כעת לשרת ושומרת JWT אם השרת מחזיר טוקן.</p>
+        <p class="muted">פתחו חשבון כדי להזמין מנות, לעקוב אחרי הזמנות ולנהל הזמנות מקום.</p>
 
         @if (errorMessage) {
           <div class="validation-note">{{ errorMessage }}</div>

@@ -253,9 +253,14 @@ public sealed class CustomerOrdersService(
             throw new ApiException("Paid orders cannot be modified.", StatusCodes.Status409Conflict);
         }
 
-        if (order.Status == OrderStatus.Cancelled)
+        if (order.Status is OrderStatus.Cancelled or OrderStatus.Completed)
         {
-            throw new ApiException("Cancelled orders cannot be modified.", StatusCodes.Status409Conflict);
+            throw new ApiException("Completed or cancelled orders cannot be modified.", StatusCodes.Status409Conflict);
+        }
+
+        if (order.Payments.Count > 0)
+        {
+            throw new ApiException("Orders with payments cannot be modified.", StatusCodes.Status409Conflict);
         }
     }
 

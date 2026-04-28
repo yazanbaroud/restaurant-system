@@ -21,6 +21,8 @@ public sealed class PaymentsService(
             .SingleOrDefaultAsync(x => x.Id == dto.OrderId, cancellationToken)
             ?? throw new ApiException("Order not found.", StatusCodes.Status404NotFound);
 
+        EnsurePaymentAllowed(order);
+
         if (dto.Amount <= 0)
         {
             throw new ApiException("Payment amount must be greater than zero.");
@@ -99,4 +101,17 @@ public sealed class PaymentsService(
 
     private static int? CustomerUserId(Order order) =>
         order.User?.Role == UserRole.Customer ? order.UserId : null;
+
+    private static void EnsurePaymentAllowed(Order order)
+    {
+        if (order.Status == OrderStatus.Cancelled)
+        {
+            throw new ApiException("Cancelled orders cannot receive payments.", StatusCodes.Status409Conflict);
+        }
+
+        if (order.PaymentStatus == PaymentStatus.Paid)
+        {
+            throw new ApiException("Order is already fully paid.", StatusCodes.Status409Conflict);
+        }
+    }
 }

@@ -100,6 +100,7 @@ public sealed class OrdersService(
     public async Task<OrderResponseDto> UpdateAsync(int id, UpdateOrderDto dto, CancellationToken cancellationToken)
     {
         var order = await LoadTrackedOrderAsync(id, cancellationToken);
+        EnsureStaffEditable(order);
         await ValidateAndLoadAssignableTablesAsync(dto.OrderType, order.OrderTables.Select(x => x.TableId).ToArray(), order.OrderTables.Select(x => x.TableId).ToArray(), cancellationToken);
         order.CustomerFirstName = dto.CustomerFirstName?.Trim() ?? string.Empty;
         order.CustomerLastName = dto.CustomerLastName?.Trim() ?? string.Empty;
@@ -112,6 +113,7 @@ public sealed class OrdersService(
     public async Task<OrderResponseDto> UpdateStatusAsync(int id, UpdateOrderStatusDto dto, CancellationToken cancellationToken)
     {
         var order = await LoadTrackedOrderAsync(id, cancellationToken);
+        EnsureStatusTransitionAllowed(order, dto.Status);
         var previousStatus = order.Status;
         order.Status = dto.Status;
 
@@ -135,7 +137,8 @@ public sealed class OrdersService(
     public async Task<OrderResponseDto> AddItemAsync(int id, AddOrderItemDto dto, CancellationToken cancellationToken)
     {
         var order = await LoadTrackedOrderAsync(id, cancellationToken);
-        var menuItem = await db.MenuItems.SingleOrDefaultAsync(x => x.Id == dto.MenuItemId && x.IsAvailable, cancellationToken)
+        EnsureStaffEditable(order);
+        var menuItem = await LoadAvailableMenuItemAsync(dto.MenuItemId, cancellationToken)
             ?? throw new ApiException("Menu item not found or unavailable.", StatusCodes.Status404NotFound);
         order.Items.Add(new OrderItem { MenuItemId = menuItem.Id, Quantity = dto.Quantity, UnitPrice = menuItem.Price, Notes = dto.Notes?.Trim() });
         RecalculateTotal(order);
@@ -148,6 +151,7 @@ public sealed class OrdersService(
     public async Task<OrderResponseDto> UpdateItemAsync(int id, int itemId, UpdateOrderItemDto dto, CancellationToken cancellationToken)
     {
         var order = await LoadTrackedOrderAsync(id, cancellationToken);
+        EnsureStaffEditable(order);
         var item = order.Items.SingleOrDefault(x => x.Id == itemId)
             ?? throw new ApiException("Order item not found.", StatusCodes.Status404NotFound);
         item.Quantity = dto.Quantity;
@@ -161,6 +165,7 @@ public sealed class OrdersService(
     public async Task<OrderResponseDto> DeleteItemAsync(int id, int itemId, CancellationToken cancellationToken)
     {
         var order = await LoadTrackedOrderAsync(id, cancellationToken);
+        EnsureStaffEditable(order);
         var item = order.Items.SingleOrDefault(x => x.Id == itemId)
             ?? throw new ApiException("Order item not found.", StatusCodes.Status404NotFound);
 
@@ -179,6 +184,7 @@ public sealed class OrdersService(
     public async Task<OrderResponseDto> UpdateTablesAsync(int id, UpdateOrderTablesDto dto, CancellationToken cancellationToken)
     {
         var order = await LoadTrackedOrderAsync(id, cancellationToken);
+        EnsureStaffEditable(order);
         var currentTableIds = order.OrderTables.Select(x => x.TableId).ToArray();
         var assignedTables = await ValidateAndLoadAssignableTablesAsync(order.OrderType, dto.TableIds, currentTableIds, cancellationToken);
         var newTableIds = assignedTables.Select(x => x.Id).ToHashSet();
@@ -217,13 +223,24 @@ public sealed class OrdersService(
     private async Task<Dictionary<int, MenuItem>> LoadMenuItemsAsync(IEnumerable<int> ids, CancellationToken cancellationToken)
     {
         var distinctIds = ids.Distinct().ToArray();
-        var items = await db.MenuItems.Where(x => distinctIds.Contains(x.Id) && x.IsAvailable).ToDictionaryAsync(x => x.Id, cancellationToken);
-        if (items.Count != distinctIds.Length)
+        var activeCategoryIds = await db.MenuCategories.AsNoTracking()
+            .Where(x => x.IsActive)
+            .Select(x => x.Id)
+            .ToArrayAsync(cancellationToken);
+        var activeCategorySet = activeCategoryIds.ToHashSet();
+        var items = await db.MenuItems
+            .Where(x => distinctIds.Contains(x.Id) && x.IsAvailable)
+            .ToArrayAsync(cancellationToken);
+        var availableItems = items.Where(x => activeCategorySet.Contains(x.Category)).ToDictionary(x => x.Id);
+        if (availableItems.Count != distinctIds.Length)
         {
             throw new ApiException("One or more menu items were not found or are unavailable.");
         }
-        return items;
+        return availableItems;
     }
+
+    private async Task<MenuItem> LoadAvailableMenuItemAsync(int id, CancellationToken cancellationToken) =>
+        (await LoadMenuItemsAsync([id], cancellationToken))[id];
 
     private static void ValidateTablesForOrder(OrderType orderType, IReadOnlyCollection<int>? tableIds)
     {
@@ -302,6 +319,48 @@ public sealed class OrdersService(
 
     private static bool IsClosedStatus(OrderStatus status) =>
         status is OrderStatus.Completed or OrderStatus.Cancelled;
+
+    private static bool HasAnyPayment(Order order) =>
+        order.Payments.Count > 0;
+
+    private static bool HasPaidStatus(Order order) =>
+        order.PaymentStatus == PaymentStatus.Paid;
+
+    private static void EnsureStaffEditable(Order order)
+    {
+        if (HasPaidStatus(order))
+        {
+            throw new ApiException("Paid orders cannot be modified.", StatusCodes.Status409Conflict);
+        }
+
+        if (IsClosedStatus(order.Status))
+        {
+            throw new ApiException("Completed or cancelled orders cannot be modified.", StatusCodes.Status409Conflict);
+        }
+
+        if (HasAnyPayment(order))
+        {
+            throw new ApiException("Orders with payments cannot be modified.", StatusCodes.Status409Conflict);
+        }
+    }
+
+    private static void EnsureStatusTransitionAllowed(Order order, OrderStatus nextStatus)
+    {
+        if (order.Status == nextStatus)
+        {
+            return;
+        }
+
+        if (IsClosedStatus(order.Status))
+        {
+            throw new ApiException("Completed or cancelled orders are terminal and cannot be reopened.", StatusCodes.Status409Conflict);
+        }
+
+        if (nextStatus == OrderStatus.Cancelled && HasAnyPayment(order))
+        {
+            throw new ApiException("Orders with payments cannot be cancelled.", StatusCodes.Status409Conflict);
+        }
+    }
 
     private static int? CustomerUserId(Order order) =>
         order.User?.Role == UserRole.Customer ? order.UserId : null;

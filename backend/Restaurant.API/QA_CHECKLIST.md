@@ -55,6 +55,21 @@ Use this checklist before demo or release when automated backend tests are not a
 - Customer can cancel only `Pending` or `Approved` reservations.
 - Customer cancel is blocked for `Cancelled`, `Rejected`, `Arrived`, and `NoShow`.
 - Admin/Waiter reservation approval, rejection, arrival, no-show, and cancellation flows remain unchanged.
+- Reservation creation is blocked when the selected date is in the past.
+- Reservation creation is blocked when the selected day is closed in business hours.
+- Reservation creation is blocked when the selected time is before opening or after closing.
+- Reservation creation succeeds when the selected time is inside the configured business hours.
+
+## Business Hours
+
+- Anonymous users can read `GET /api/business-hours`.
+- Admin can read and bulk update `GET /api/admin/business-hours` and `PUT /api/admin/business-hours`.
+- Non-admin users cannot update business hours.
+- Bulk update requires exactly seven unique days, Sunday through Saturday.
+- Open days require both open and close times.
+- Open time must be before close time.
+- Startup seeds all seven days as open from `10:00` to `23:00` when no business-hour rows exist.
+- Business-hours seeding still runs when an admin user already exists.
 
 ## Table Data
 
@@ -64,6 +79,17 @@ Use this checklist before demo or release when automated backend tests are not a
 - `Location` rejects values longer than 100 characters.
 - `Notes` rejects values longer than 500 characters.
 - Table responses include `Location` and `Notes`.
+
+## Database and Migrations
+
+- `dotnet build backend\Restaurant.API\Restaurant.API.csproj -c Release` succeeds with all migration files compiled.
+- `AppDbContextModelSnapshot` includes `BusinessHours` with a unique `DayOfWeek` index and nullable `OpenTime` / `CloseTime` `time` columns.
+- `AppDbContextModelSnapshot` includes nullable table `Location` max length 100 and `Notes` max length 500.
+- `AddBusinessHours.Up()` creates `BusinessHours`, adds the unique day index, and inserts default rows for all seven days.
+- `AddBusinessHours.Down()` drops `BusinessHours`.
+- `AddReservationUserOwnership` preserves existing anonymous reservations by keeping `Reservation.UserId` nullable.
+- Fresh database creation from migrations should be verified against a temporary database before deployment.
+- Existing production data must not be deleted during migration verification.
 
 ## Build Checks
 

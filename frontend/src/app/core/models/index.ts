@@ -1,4 +1,5 @@
 export * from './dashboard.model';
+export * from './business-hour.model';
 export * from './customer-order.model';
 export * from './enums';
 export * from './menu.model';

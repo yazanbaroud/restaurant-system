@@ -14,6 +14,7 @@ import { CustomerReservationDetailsPageComponent } from './features/customer/cus
 import { CustomerReservationsPageComponent } from './features/customer/customer-reservations-page.component';
 import { AccountPageComponent } from './features/account/account-page.component';
 import { AdminDashboardPageComponent } from './features/admin/admin-dashboard-page.component';
+import { BusinessHoursPageComponent } from './features/admin/business-hours-page.component';
 import { MenuItemFormPageComponent } from './features/admin/menu-item-form-page.component';
 import { MenuManagementPageComponent } from './features/admin/menu-management-page.component';
 import { OrdersManagementPageComponent } from './features/admin/orders-management-page.component';
@@ -88,6 +89,7 @@ export const routes: Routes = [
       { path: 'users/:id/edit', component: UserFormPageComponent },
       { path: 'users', component: UsersManagementPageComponent },
       { path: 'payments', component: PaymentsTrackingPageComponent },
+      { path: 'business-hours', component: BusinessHoursPageComponent },
       { path: 'reports', component: ReportsPageComponent }
     ]
   },

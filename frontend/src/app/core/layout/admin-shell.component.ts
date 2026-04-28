@@ -28,6 +28,7 @@ import { RealtimeEventName, RealtimeService } from '../services/realtime.service
           <a routerLink="/admin/tables" routerLinkActive="active">שולחנות</a>
           <a routerLink="/admin/users" routerLinkActive="active">צוות ומשתמשים</a>
           <a routerLink="/admin/payments" routerLinkActive="active">תשלומים</a>
+          <a routerLink="/admin/business-hours" routerLinkActive="active">שעות פעילות</a>
           <a routerLink="/admin/reports" routerLinkActive="active">דוחות</a>
         </nav>
       </aside>

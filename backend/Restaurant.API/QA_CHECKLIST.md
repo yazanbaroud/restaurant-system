@@ -101,6 +101,38 @@ Use this checklist before demo or release when automated backend tests are not a
 - Fresh database creation from migrations should be verified against a temporary database before deployment.
 - Existing production data must not be deleted during migration verification.
 
+## Final Migration Readiness Notes
+
+Last local verification pass: 2026-04-29.
+
+Verified:
+
+- Release backend build succeeded, proving all migration files compile.
+- Migration list is linear and ordered:
+  - `20260423220135_InitialCreate`
+  - `20260425183000_MenuCategoriesAndAccountSecurity`
+  - `20260428212500_AddTableLocationAndNotes`
+  - `20260428224500_AddReservationUserOwnership`
+  - `20260429010000_AddBusinessHours`
+- `AppDbContextModelSnapshot` contains:
+  - `BusinessHours` table with unique `DayOfWeek`.
+  - nullable `Reservation.UserId` with `DeleteBehavior.SetNull`.
+  - nullable table `Location` max length 100.
+  - nullable table `Notes` max length 500.
+- Startup seeding code calls business-hours seeding before the early return for an existing admin user.
+
+Not fully verified in this local environment:
+
+- A complete fresh LocalDB migration run could not be confirmed here because `dotnet-ef` is not installed and the local SQL client failed to open the automatic LocalDB instance.
+
+Required before production deployment:
+
+- Run a fresh migration against a disposable staging database.
+- Confirm `__EFMigrationsHistory` contains all migrations above.
+- Confirm `BusinessHours` contains seven default rows after startup.
+- Confirm the seed admin is created only when no admin exists.
+- Run the reservation business-hours checks in this file against the staging database.
+
 ## Build Checks
 
 - Run `dotnet build backend\Restaurant.API\Restaurant.API.csproj -c Release`.

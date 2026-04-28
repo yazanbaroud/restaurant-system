@@ -5,6 +5,7 @@ import { finalize, map } from 'rxjs';
 
 import { Order, OrderStatus } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
+import { apiErrorMessage } from '../../shared/api-error-message';
 import { OrderCardComponent } from '../../shared/components/order-card.component';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 
@@ -251,8 +252,8 @@ export class ActiveOrdersPageComponent {
         this.updatingOrderId = null;
       })
     ).subscribe({
-      error: () => {
-        this.errorMessage = 'לא הצלחנו לעדכן את סטטוס ההזמנה. נסו שוב בעוד רגע.';
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את סטטוס ההזמנה. נסו שוב בעוד רגע.');
       }
     });
   }

@@ -5,6 +5,7 @@ import { finalize } from 'rxjs';
 
 import { Table, TableStatus } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
+import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { TableCardComponent } from '../../shared/components/table-card.component';
 
@@ -174,8 +175,8 @@ export class TablesManagementPageComponent {
         this.updatingTableId = null;
       })
     ).subscribe({
-      error: () => {
-        this.errorMessage = 'לא הצלחנו לעדכן את מצב השולחן. נסו שוב בעוד רגע.';
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את מצב השולחן. נסו שוב בעוד רגע.');
       }
     });
   }

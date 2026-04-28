@@ -5,6 +5,7 @@ import { finalize } from 'rxjs';
 
 import { User, UserRole } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
+import { apiErrorMessage } from '../../shared/api-error-message';
 import { controlError } from '../../shared/form-validation';
 import { roleLabels } from '../../shared/ui-labels';
 
@@ -97,8 +98,8 @@ export class LoginPageComponent {
       })
     ).subscribe({
       next: (user) => this.navigateAfterLogin(user),
-      error: () => {
-        this.errorMessage = 'ההתחברות נכשלה. בדקו אימייל וסיסמה ונסו שוב.';
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'ההתחברות נכשלה. בדקו אימייל וסיסמה ונסו שוב.');
       }
     });
   }

@@ -5,6 +5,7 @@ import { finalize } from 'rxjs';
 
 import { UserRole } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
+import { apiErrorMessage } from '../../shared/api-error-message';
 import { controlError, israeliPhoneValidator, strongPasswordValidator } from '../../shared/form-validation';
 
 @Component({
@@ -103,8 +104,8 @@ export class RegisterPageComponent {
       })
     ).subscribe({
       next: () => void this.router.navigateByUrl('/reservation'),
-      error: () => {
-        this.errorMessage = 'ההרשמה נכשלה. בדקו את הפרטים ונסו שוב.';
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'ההרשמה נכשלה. בדקו את הפרטים ונסו שוב.');
       }
     });
   }

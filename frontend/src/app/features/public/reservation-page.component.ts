@@ -3,6 +3,7 @@ import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, Va
 import { finalize } from 'rxjs';
 
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
+import { apiErrorMessage } from '../../shared/api-error-message';
 import { israeliPhoneValidator } from '../../shared/form-validation';
 
 const MIN_RESERVATION_TIME = '10:00';
@@ -490,8 +491,8 @@ export class ReservationPageComponent {
         this.submitted = false;
         this.form.reset(this.defaultFormValue());
       },
-      error: () => {
-        this.errorMessage = 'לא הצלחנו לשלוח את הבקשה. בדקו את הפרטים ונסו שוב.';
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לשלוח את הבקשה. בדקו את הפרטים ונסו שוב.');
       }
     });
   }

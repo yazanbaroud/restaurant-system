@@ -7,6 +7,7 @@ import { finalize, of, switchMap } from 'rxjs';
 import { User, UserRole } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
+import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
 import { controlError, israeliPhoneValidator, strongPasswordValidator } from '../../shared/form-validation';
@@ -308,8 +309,8 @@ export class UserFormPageComponent implements OnInit {
       next: () => {
         void this.router.navigate(['/admin/users']);
       },
-      error: () => {
-        this.errorMessage = 'לא הצלחנו לשמור את המשתמש. בדקו את הפרטים ונסו שוב.';
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לשמור את המשתמש. בדקו את הפרטים ונסו שוב.');
       }
     });
   }
@@ -359,8 +360,8 @@ export class UserFormPageComponent implements OnInit {
         this.passwordMessage = 'הסיסמה עודכנה בהצלחה';
         this.cancelPasswordReset();
       },
-      error: () => {
-        this.passwordError = 'לא הצלחנו לעדכן את הסיסמה';
+      error: (error: unknown) => {
+        this.passwordError = apiErrorMessage(error, 'לא הצלחנו לעדכן את הסיסמה');
       }
     });
   }

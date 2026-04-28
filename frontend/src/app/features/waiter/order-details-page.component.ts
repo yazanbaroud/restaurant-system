@@ -5,6 +5,7 @@ import { Observable, catchError, finalize, map, of, startWith } from 'rxjs';
 
 import { Order, OrderItem, OrderStatus, PaymentStatus } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
+import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
 import {
@@ -564,8 +565,8 @@ export class OrderDetailsPageComponent {
         this.isUpdating = false;
       })
     ).subscribe({
-      error: () => {
-        this.errorMessage = 'לא הצלחנו לעדכן את סטטוס ההזמנה. נסו שוב בעוד רגע.';
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את סטטוס ההזמנה. נסו שוב בעוד רגע.');
       }
     });
   }

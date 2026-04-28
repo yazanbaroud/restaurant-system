@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 
 import { AuthService } from '../../core/services/auth.service';
+import { apiErrorMessage } from '../../shared/api-error-message';
 import { controlError, israeliPhoneValidator, strongPasswordValidator } from '../../shared/form-validation';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { roleLabels } from '../../shared/ui-labels';
@@ -157,8 +158,8 @@ export class AccountPageComponent {
         this.profileForm.markAsPristine();
         this.profileMessage = 'הפרטים עודכנו בהצלחה.';
       },
-      error: () => {
-        this.profileErrorMessage = 'לא הצלחנו לעדכן את הפרטים.';
+      error: (error: unknown) => {
+        this.profileErrorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את הפרטים.');
       }
     });
   }
@@ -191,8 +192,8 @@ export class AccountPageComponent {
         this.passwordSubmitted = false;
         this.passwordMessage = 'הסיסמה עודכנה בהצלחה';
       },
-      error: () => {
-        this.passwordErrorMessage = 'לא הצלחנו לעדכן את הסיסמה';
+      error: (error: unknown) => {
+        this.passwordErrorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את הסיסמה');
       }
     });
   }

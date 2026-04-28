@@ -7,6 +7,7 @@ import { finalize, shareReplay, tap } from 'rxjs';
 
 import { MenuCategory, MenuCategoryRecord, MenuItem } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
+import { apiErrorMessage } from '../../shared/api-error-message';
 import { controlError } from '../../shared/form-validation';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
@@ -558,8 +559,8 @@ export class MenuManagementPageComponent {
         this.resetCategoryForm();
         this.categorySuccessMessage = wasEditing ? 'הקטגוריה עודכנה בהצלחה' : 'הקטגוריה נוצרה בהצלחה';
       },
-      error: () => {
-        this.categoryErrorMessage = 'לא הצלחנו לשמור את הקטגוריה. נסו שוב בעוד רגע.';
+      error: (error: unknown) => {
+        this.categoryErrorMessage = apiErrorMessage(error, 'לא הצלחנו לשמור את הקטגוריה. נסו שוב בעוד רגע.');
       }
     });
   }
@@ -627,8 +628,8 @@ export class MenuManagementPageComponent {
         this.actingItemId = null;
       })
     ).subscribe({
-      error: () => {
-        this.errorMessage = 'לא הצלחנו לעדכן את זמינות המנה. נסו שוב בעוד רגע.';
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את זמינות המנה. נסו שוב בעוד רגע.');
       }
     });
   }
@@ -645,8 +646,8 @@ export class MenuManagementPageComponent {
         this.actingItemId = null;
       })
     ).subscribe({
-      error: () => {
-        this.errorMessage = 'לא הצלחנו למחוק את המנה. נסו שוב בעוד רגע.';
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו למחוק את המנה. נסו שוב בעוד רגע.');
       }
     });
   }
@@ -727,6 +728,6 @@ export class MenuManagementPageComponent {
       return 'לא ניתן למחוק קטגוריה שיש בה מנות. ניתן להפוך אותה ללא פעילה.';
     }
 
-    return 'לא הצלחנו למחוק את הקטגוריה';
+    return apiErrorMessage(error, 'לא הצלחנו למחוק את הקטגוריה');
   }
 }

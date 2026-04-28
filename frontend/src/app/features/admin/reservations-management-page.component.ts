@@ -4,6 +4,7 @@ import { BehaviorSubject, Observable, catchError, finalize, of, switchMap, tap }
 
 import { Reservation, ReservationStatus } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
+import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { ReservationCardComponent, ReservationStatusChange } from '../../shared/components/reservation-card.component';
 import { reservationStatusLabels } from '../../shared/ui-labels';
@@ -328,8 +329,8 @@ export class ReservationsManagementPageComponent {
         this.updatingReservationId = null;
       })
     ).subscribe({
-      error: () => {
-        this.errorMessage = 'לא הצלחנו לעדכן את סטטוס ההזמנה. נסו שוב בעוד רגע.';
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את סטטוס ההזמנה. נסו שוב בעוד רגע.');
       }
     });
   }

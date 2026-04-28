@@ -6,6 +6,7 @@ import { finalize, map, switchMap } from 'rxjs';
 
 import { Table, TableStatus } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
+import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { controlError } from '../../shared/form-validation';
 
@@ -176,8 +177,8 @@ export class TableFormPageComponent implements OnInit {
       next: () => {
         void this.router.navigate(['/admin/tables']);
       },
-      error: () => {
-        this.errorMessage = 'לא הצלחנו לשמור את השולחן. נסו שוב בעוד רגע.';
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לשמור את השולחן. נסו שוב בעוד רגע.');
       }
     });
   }

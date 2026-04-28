@@ -7,6 +7,7 @@ import { finalize } from 'rxjs';
 import { MenuItem, OrderType, Table, TableStatus } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
+import { apiErrorMessage } from '../../shared/api-error-message';
 import { MenuItemCardComponent } from '../../shared/components/menu-item-card.component';
 import { controlError } from '../../shared/form-validation';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
@@ -501,8 +502,8 @@ export class CreateOrderPageComponent implements OnInit {
       })
     ).subscribe({
       next: (order) => void this.router.navigate([this.orderDetailsBaseLink, order.id]),
-      error: () => {
-        this.errorMessage = 'לא הצלחנו לפתוח את ההזמנה. נסו שוב בעוד רגע.';
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לפתוח את ההזמנה. נסו שוב בעוד רגע.');
       }
     });
   }

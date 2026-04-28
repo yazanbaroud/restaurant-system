@@ -6,6 +6,7 @@ import { Observable, catchError, combineLatest, finalize, map, of, startWith, ta
 
 import { Order, Payment, PaymentMethod, PaymentStatus } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
+import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
 import { paymentMethodLabels, paymentStatusLabels, paymentStatusTones } from '../../shared/ui-labels';
@@ -535,8 +536,8 @@ export class AddPaymentPageComponent {
         const remainingBalance = this.latestViewModel?.remainingBalance ?? 0;
         this.form.controls.amount.setValue(remainingBalance, { emitEvent: false });
       },
-      error: () => {
-        this.errorMessage = 'לא הצלחנו לשמור את התשלום. נסו שוב בעוד רגע.';
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לשמור את התשלום. נסו שוב בעוד רגע.');
       }
     });
   }

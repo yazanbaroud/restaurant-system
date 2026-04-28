@@ -4,6 +4,7 @@ import { finalize } from 'rxjs';
 
 import { Reservation, ReservationStatus } from '../../core/models';
 import { CustomerReservationsService } from '../../core/services/customer-reservations.service';
+import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
 import { reservationStatusLabels, reservationStatusTones } from '../../shared/ui-labels';
@@ -301,8 +302,8 @@ export class CustomerReservationDetailsPageComponent {
         this.successMessage = 'הזמנת המקום בוטלה בהצלחה.';
         this.cdr.detectChanges();
       },
-      error: (error) => {
-        this.errorMessage = this.extractErrorMessage(error) || 'לא הצלחנו לבטל את הזמנת המקום. נסו שוב בעוד רגע.';
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לבטל את הזמנת המקום. נסו שוב בעוד רגע.');
         this.cdr.detectChanges();
       }
     });
@@ -323,22 +324,5 @@ export class CustomerReservationDetailsPageComponent {
 
   timeLabel(time: string): string {
     return time ? time.slice(0, 5) : 'שעה לא זמינה';
-  }
-
-  private extractErrorMessage(error: unknown): string {
-    const record = error && typeof error === 'object' ? error as Record<string, unknown> : null;
-    const errorPayload = record?.['error'];
-    if (typeof errorPayload === 'string') {
-      return errorPayload;
-    }
-
-    if (errorPayload && typeof errorPayload === 'object') {
-      const errorRecord = errorPayload as Record<string, unknown>;
-      const message = errorRecord['message'];
-      const title = errorRecord['title'];
-      return typeof message === 'string' ? message : typeof title === 'string' ? title : '';
-    }
-
-    return '';
   }
 }

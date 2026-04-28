@@ -7,6 +7,7 @@ import { finalize } from 'rxjs';
 import { CustomerCartLine, CustomerCartService } from '../../core/services/customer-cart.service';
 import { CustomerOrdersService } from '../../core/services/customer-orders.service';
 import { OrderType } from '../../core/models';
+import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { orderTypeLabels } from '../../shared/ui-labels';
 
@@ -362,8 +363,8 @@ export class CartPageComponent {
         this.cart.clear();
         void this.router.navigate(['/orders', order.id]);
       },
-      error: () => {
-        this.errorMessage = 'לא הצלחנו לשלוח את ההזמנה. בדקו את הפרטים ונסו שוב.';
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לשלוח את ההזמנה. בדקו את הפרטים ונסו שוב.');
       }
     });
   }

@@ -61,6 +61,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IMenuService, MenuService>();
         services.AddScoped<ITablesService, TablesService>();
         services.AddScoped<IOrdersService, OrdersService>();
+        services.AddScoped<ICustomerOrdersService, CustomerOrdersService>();
         services.AddScoped<IPaymentsService, PaymentsService>();
         services.AddScoped<IReservationsService, ReservationsService>();
         services.AddScoped<IReportsService, ReportsService>();

@@ -116,8 +116,29 @@ Important sections:
 - `ConnectionStrings:DefaultConnection`
 - `Jwt`
 - `SeedAdmin`
+- `Cors:AllowedOrigins`
 
 Do not put production secrets in source control. Use environment variables, user secrets, or deployment platform secrets for shared environments.
+
+## Production Configuration Checklist
+
+The checked-in configuration is for local development only. Before deployment, configure these values outside source control:
+
+- `ConnectionStrings__DefaultConnection`
+- `Jwt__Issuer`
+- `Jwt__Audience`
+- `Jwt__Secret`
+- `Jwt__ExpirationMinutes`
+- `SeedAdmin__Email`
+- `SeedAdmin__Password`
+- `SeedAdmin__FirstName`
+- `SeedAdmin__LastName`
+- `SeedAdmin__PhoneNumber`
+- `Cors__AllowedOrigins__0`, `Cors__AllowedOrigins__1`, and so on for every frontend origin
+
+Frontend production builds currently use `apiBaseUrl: ''`, which means API calls are same-origin (`/api/...`). Deploy the frontend and API behind the same domain or reverse proxy, or add a production environment replacement with the real API origin.
+
+Swagger is only enabled when the backend runs in `Development`.
 
 ## Roles
 
@@ -188,8 +209,7 @@ The frontend is organized by role and feature area. Public, customer, waiter, an
 - Customer payment flow is not implemented; payment is currently handled by admin/waiter pages.
 - Some list endpoints and pages still rely on full-list loading rather than pagination.
 - Refresh tokens and token revocation are not implemented.
-- Production deployment profiles still need to be formalized.
-- Automated test coverage is not documented here and appears to need verification.
+- Automated test coverage is not present; use the backend manual QA checklist until tests are added.
 
 ## Documentation
 

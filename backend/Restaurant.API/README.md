@@ -52,6 +52,7 @@ Important sections:
 - `Jwt`
 - `SeedAdmin`
 - `Logging`
+- `Cors:AllowedOrigins`
 
 Use placeholders in documentation and secure values outside source control for shared environments:
 
@@ -77,6 +78,31 @@ Use placeholders in documentation and secure values outside source control for s
 ```
 
 The application validates JWT settings at startup. The secret must be at least 32 UTF-8 bytes and must not be a placeholder.
+
+## Production Environment Variables
+
+Do not commit production secrets. Configure production values through environment variables, user secrets, or the deployment platform secret store.
+
+Common ASP.NET Core environment variable names:
+
+```text
+ASPNETCORE_ENVIRONMENT=Production
+ConnectionStrings__DefaultConnection=<production-sql-server-connection-string>
+Jwt__Issuer=<production-issuer>
+Jwt__Audience=<production-audience>
+Jwt__Secret=<strong-random-secret-at-least-32-utf8-bytes>
+Jwt__ExpirationMinutes=120
+SeedAdmin__Email=<initial-admin-email>
+SeedAdmin__Password=<initial-admin-password>
+SeedAdmin__FirstName=<initial-admin-first-name>
+SeedAdmin__LastName=<initial-admin-last-name>
+SeedAdmin__PhoneNumber=<initial-admin-phone>
+Cors__AllowedOrigins__0=https://your-frontend.example
+```
+
+Add additional CORS origins with `Cors__AllowedOrigins__1`, `Cors__AllowedOrigins__2`, and so on. The CORS policy allows credentials because SignalR uses authenticated connections.
+
+Swagger is enabled only when `ASPNETCORE_ENVIRONMENT` is `Development`.
 
 ## Database Setup
 
@@ -246,9 +272,17 @@ Payments:
 Reservations:
 
 - public reservation creation
+- authenticated customer public reservation creation links ownership to the customer account
+- customer-only own reservation list, details, and cancel endpoints
 - admin/waiter reads with date/status/phone filters
 - admin update/status/delete
 - delete marks reservations cancelled
+
+Business hours:
+
+- anonymous read endpoint for public reservation validation
+- admin-only bulk read/update endpoint
+- startup seeds all seven days as open from 10:00 to 23:00 when no rows exist
 
 Reports and dashboard:
 
@@ -267,6 +301,9 @@ SignalR:
 - hub path: `/hubs/restaurant`
 - emitted events include `orderCreated`, `orderUpdated`, `orderStatusUpdated`, `paymentAdded`, `reservationCreated`, and `reservationStatusUpdated`
 - JWT can be supplied with the `access_token` query parameter for hub clients
+- the hub requires authentication
+- operational events are sent to Admin/Waiter groups
+- customer order events are also sent to the owning `user:{id}` group
 
 ## Important Business Rules
 
@@ -284,6 +321,7 @@ SignalR:
 - User deletion blocks deleting the active admin account and blocks deleting the last admin.
 - Menu category deletion blocks categories that still have menu items.
 - Reservation creation is a request; final approval is managed by staff.
+- Reservation creation is blocked for past dates, closed days, and times outside configured business hours.
 
 ## CORS
 
@@ -338,4 +376,5 @@ Swagger 401/403:
 ## Needs Verification
 
 - Automated backend test project is not present in this repository snapshot.
-- Frontend SignalR client integration is not currently visible; the backend emits events, but the frontend appears to rely on HTTP refresh flows.
+- Fresh database creation from migrations should be verified against a temporary database before production deployment.
+- End-to-end SignalR behavior should be verified with at least two browser sessions before production deployment.

@@ -104,6 +104,13 @@ apiBaseUrl: ''
 
 That makes calls resolve to `/api/...`, which fits deployments where the frontend and backend are served behind the same reverse proxy. If production uses a separate API host, add a deployment-specific environment replacement instead of hardcoding URLs in services.
 
+For production deployments:
+
+- Same-origin deployment: keep `apiBaseUrl: ''` and route `/api` plus `/hubs/restaurant` to the backend through the reverse proxy.
+- Separate frontend/API domains: create a production environment replacement with the API origin, for example `https://api.example.com`.
+- Update backend `Cors:AllowedOrigins` to include the exact frontend origin.
+- Keep `enableMockFallbacks: false`; production must not silently show mock data when API reads fail.
+
 For network-device testing, use a reachable backend URL instead of `localhost`. Example:
 
 ```ts
@@ -183,6 +190,8 @@ Authenticated customer routes:
 - `/cart`
 - `/orders`
 - `/orders/:id`
+- `/reservations`
+- `/reservations/:id`
 
 Waiter routes:
 
@@ -210,6 +219,7 @@ Admin routes:
 - `/admin/users/new`
 - `/admin/users/:id/edit`
 - `/admin/payments`
+- `/admin/business-hours`
 - `/admin/reports`
 
 Route access is enforced by `roleGuard` in `src/app/core/guards/role.guard.ts`. JWTs are attached by `authInterceptor` from `src/app/core/interceptors/auth.interceptor.ts`.
@@ -229,6 +239,9 @@ Route access is enforced by `roleGuard` in `src/app/core/guards/role.guard.ts`. 
 - Public users can submit reservation requests from `/reservation`.
 - The page communicates with `POST /api/Reservations`.
 - The UI presents the request as pending final confirmation. It does not promise automatic approval.
+- The page reads public business hours from `GET /api/business-hours` and blocks closed days or out-of-hours times in the UI.
+- Backend reservation validation remains the source of truth for business hours.
+- Logged-in customers can view and cancel their own reservations from `/reservations`.
 - Admins manage reservation status and restaurant notes from admin pages.
 - Waiters can view reservations for operational awareness.
 

@@ -2,13 +2,13 @@ import { Component, inject } from '@angular/core';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 
+import { BusinessHour } from '../../core/models';
+import { BusinessHoursService } from '../../core/services/business-hours.service';
 import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { israeliPhoneValidator } from '../../shared/form-validation';
 
-const MIN_RESERVATION_TIME = '10:00';
-const MAX_RESERVATION_TIME = '23:00';
 const DEFAULT_RESERVATION_TIME = '19:30';
 const DEFAULT_GUEST_COUNT = 2;
 const MAX_GUEST_COUNT = 30;
@@ -89,8 +89,8 @@ const MAX_GUEST_COUNT = 30;
                 class="date-time-input"
                 type="time"
                 formControlName="reservationTime"
-                [min]="minTime"
-                [max]="maxTime"
+                [min]="selectedOpenTime()"
+                [max]="selectedCloseTime()"
                 step="900"
               />
               @if (fieldError('reservationTime')) {
@@ -123,6 +123,12 @@ const MAX_GUEST_COUNT = 30;
               }
             </label>
           </div>
+
+          @if (businessHoursNotice(); as notice) {
+            <div class="business-hours-notice" [class.business-hours-notice--blocked]="businessHoursValidationMessage()">
+              {{ notice }}
+            </div>
+          }
 
           <button class="btn btn-gold full reservation-submit" type="submit" [disabled]="isSubmitting">
             {{ isSubmitting ? 'שולחים בקשה...' : 'שליחת בקשה לאישור' }}
@@ -265,6 +271,21 @@ const MAX_GUEST_COUNT = 30;
 
     .reservation-error {
       border: 1px solid rgba(124, 38, 48, 0.22);
+      background: rgba(124, 38, 48, 0.08);
+      color: var(--burgundy);
+    }
+
+    .business-hours-notice {
+      padding: 11px 12px;
+      border: 1px solid rgba(102, 112, 68, 0.24);
+      border-radius: var(--radius);
+      background: rgba(102, 112, 68, 0.1);
+      color: var(--olive-dark);
+      font-weight: 850;
+    }
+
+    .business-hours-notice--blocked {
+      border-color: rgba(124, 38, 48, 0.24);
       background: rgba(124, 38, 48, 0.08);
       color: var(--burgundy);
     }
@@ -446,11 +467,10 @@ const MAX_GUEST_COUNT = 30;
 export class ReservationPageComponent {
   private readonly fb = inject(FormBuilder);
   private readonly data = inject(RestaurantDataService);
+  private readonly businessHoursService = inject(BusinessHoursService);
   private readonly feedback = inject(FeedbackService);
 
   readonly minDate = this.todayDate();
-  readonly minTime = MIN_RESERVATION_TIME;
-  readonly maxTime = MAX_RESERVATION_TIME;
   readonly maxGuests = MAX_GUEST_COUNT;
 
   readonly form = this.fb.nonNullable.group({
@@ -458,15 +478,22 @@ export class ReservationPageComponent {
     customerLastName: ['', Validators.required],
     phoneNumber: ['', [Validators.required, israeliPhoneValidator()]],
     reservationDate: [this.minDate, [Validators.required, notPastDateValidator(() => this.todayDate())]],
-    reservationTime: [DEFAULT_RESERVATION_TIME, [Validators.required, timeRangeValidator(MIN_RESERVATION_TIME, MAX_RESERVATION_TIME)]],
+    reservationTime: [DEFAULT_RESERVATION_TIME, Validators.required],
     guestCount: [DEFAULT_GUEST_COUNT, [Validators.required, Validators.min(1), Validators.max(MAX_GUEST_COUNT)]],
     notes: ['', Validators.maxLength(1000)]
   });
 
+  businessHours: BusinessHour[] = [];
+  businessHoursLoadFailed = false;
+  isLoadingBusinessHours = true;
   successMessage = '';
   errorMessage = '';
   isSubmitting = false;
   submitted = false;
+
+  constructor() {
+    this.loadBusinessHours();
+  }
 
   submit(): void {
     this.submitted = true;
@@ -481,6 +508,13 @@ export class ReservationPageComponent {
       this.form.markAllAsTouched();
       this.errorMessage = 'בדקו את השדות המסומנים ונסו שוב.';
       this.feedback.error(null, this.errorMessage);
+      return;
+    }
+
+    const businessHoursMessage = this.businessHoursValidationMessage();
+    if (businessHoursMessage) {
+      this.errorMessage = businessHoursMessage;
+      this.feedback.error(null, businessHoursMessage);
       return;
     }
 
@@ -542,9 +576,6 @@ export class ReservationPageComponent {
       if (control.hasError('required')) {
         return 'שעת הזמנה היא שדה חובה';
       }
-      if (control.hasError('timeRange')) {
-        return `בחרו שעה בין ${MIN_RESERVATION_TIME} ל-${MAX_RESERVATION_TIME}`;
-      }
     }
     if (controlName === 'guestCount') {
       if (control.hasError('required') || control.hasError('min')) {
@@ -581,6 +612,88 @@ export class ReservationPageComponent {
     }).format(new Date(`${value}T12:00:00`));
   }
 
+  selectedOpenTime(): string | null {
+    const businessHour = this.selectedBusinessHour();
+    return businessHour?.isOpen ? businessHour.openTime : null;
+  }
+
+  selectedCloseTime(): string | null {
+    const businessHour = this.selectedBusinessHour();
+    return businessHour?.isOpen ? businessHour.closeTime : null;
+  }
+
+  businessHoursNotice(): string {
+    if (this.isLoadingBusinessHours) {
+      return 'בודקים את שעות הפעילות...';
+    }
+    if (this.businessHoursLoadFailed) {
+      return 'לא הצלחנו לטעון את שעות הפעילות. ננסה לאמת את הבקשה בשליחה.';
+    }
+
+    const businessHour = this.selectedBusinessHour();
+    if (!businessHour) {
+      return '';
+    }
+    if (!businessHour.isOpen) {
+      return 'המסעדה סגורה ביום שנבחר.';
+    }
+    if (businessHour.openTime && businessHour.closeTime) {
+      return `המסעדה פתוחה ביום זה בין ${businessHour.openTime} ל־${businessHour.closeTime}`;
+    }
+
+    return '';
+  }
+
+  businessHoursValidationMessage(): string {
+    if (this.isLoadingBusinessHours || this.businessHoursLoadFailed || !this.businessHours.length) {
+      return '';
+    }
+
+    const businessHour = this.selectedBusinessHour();
+    if (!businessHour) {
+      return '';
+    }
+    if (!businessHour.isOpen) {
+      return 'המסעדה סגורה ביום שנבחר.';
+    }
+
+    const reservationTime = this.form.controls.reservationTime.value;
+    if (!businessHour.openTime || !businessHour.closeTime || reservationTime < businessHour.openTime || reservationTime > businessHour.closeTime) {
+      return 'המסעדה סגורה בשעה שנבחרה. אנא בחר שעה אחרת.';
+    }
+
+    return '';
+  }
+
+  private loadBusinessHours(): void {
+    this.isLoadingBusinessHours = true;
+    this.businessHoursLoadFailed = false;
+
+    this.businessHoursService.getBusinessHours().pipe(
+      finalize(() => {
+        this.isLoadingBusinessHours = false;
+      })
+    ).subscribe({
+      next: (businessHours) => {
+        this.businessHours = businessHours;
+      },
+      error: () => {
+        this.businessHoursLoadFailed = true;
+        this.businessHours = [];
+      }
+    });
+  }
+
+  private selectedBusinessHour(): BusinessHour | null {
+    const reservationDate = this.form.controls.reservationDate.value;
+    if (!reservationDate) {
+      return null;
+    }
+
+    const dayOfWeek = new Date(`${reservationDate}T12:00:00`).getDay();
+    return this.businessHours.find((businessHour) => businessHour.dayOfWeek === dayOfWeek) ?? null;
+  }
+
   private defaultFormValue(): typeof this.form.value {
     return {
       customerFirstName: '',
@@ -610,16 +723,5 @@ function notPastDateValidator(todayProvider: () => string): ValidatorFn {
     }
 
     return value >= todayProvider() ? null : { pastDate: true };
-  };
-}
-
-function timeRangeValidator(minTime: string, maxTime: string): ValidatorFn {
-  return (control: AbstractControl): ValidationErrors | null => {
-    const value = String(control.value ?? '').trim();
-    if (!value) {
-      return null;
-    }
-
-    return value >= minTime && value <= maxTime ? null : { timeRange: true };
   };
 }

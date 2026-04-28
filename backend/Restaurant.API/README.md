@@ -102,6 +102,12 @@ Cors__AllowedOrigins__0=https://your-frontend.example
 
 Add additional CORS origins with `Cors__AllowedOrigins__1`, `Cors__AllowedOrigins__2`, and so on. The CORS policy allows credentials because SignalR uses authenticated connections.
 
+Production startup fails fast when:
+
+- `Jwt__Secret` still uses the checked-in local development marker.
+- `Cors__AllowedOrigins` is missing.
+- the first admin would be seeded with the local development password.
+
 Swagger is enabled only when `ASPNETCORE_ENVIRONMENT` is `Development`.
 
 ## Database Setup

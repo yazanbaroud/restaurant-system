@@ -6,7 +6,7 @@ using Restaurant.API.Seed;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddRestaurantBackend(builder.Configuration);
+builder.Services.AddRestaurantBackend(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
 

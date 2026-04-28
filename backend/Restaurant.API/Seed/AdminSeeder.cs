@@ -9,11 +9,11 @@ namespace Restaurant.API.Seed;
 
 public sealed class SeedAdminOptions
 {
-    public string Email { get; set; } = "admin@restaurant.local";
-    public string Password { get; set; } = "Admin123!";
-    public string FirstName { get; set; } = "System";
-    public string LastName { get; set; } = "Admin";
-    public string PhoneNumber { get; set; } = "0000000000";
+    public string Email { get; set; } = string.Empty;
+    public string Password { get; set; } = string.Empty;
+    public string FirstName { get; set; } = string.Empty;
+    public string LastName { get; set; } = string.Empty;
+    public string PhoneNumber { get; set; } = string.Empty;
 }
 
 public static class AdminSeeder
@@ -27,6 +27,7 @@ public static class AdminSeeder
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var hasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
         var options = scope.ServiceProvider.GetRequiredService<IOptions<SeedAdminOptions>>().Value;
+        var environment = scope.ServiceProvider.GetRequiredService<IHostEnvironment>();
         var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AdminSeeder");
 
         var migrations = db.Database.GetMigrations();
@@ -41,11 +42,13 @@ public static class AdminSeeder
 
         await SeedBusinessHoursAsync(db, logger);
 
-        var email = options.Email.Trim().ToLowerInvariant();
         if (await db.Users.AnyAsync(x => x.Role == UserRole.Admin))
         {
             return;
         }
+
+        ValidateSeedAdminOptions(options, environment);
+        var email = options.Email.Trim().ToLowerInvariant();
 
         db.Users.Add(new User
         {
@@ -59,6 +62,24 @@ public static class AdminSeeder
 
         await db.SaveChangesAsync();
         logger.LogInformation("Seeded initial admin account {Email}", email);
+    }
+
+    private static void ValidateSeedAdminOptions(SeedAdminOptions options, IHostEnvironment environment)
+    {
+        if (string.IsNullOrWhiteSpace(options.Email)
+            || string.IsNullOrWhiteSpace(options.Password)
+            || string.IsNullOrWhiteSpace(options.FirstName)
+            || string.IsNullOrWhiteSpace(options.LastName)
+            || string.IsNullOrWhiteSpace(options.PhoneNumber))
+        {
+            throw new InvalidOperationException("Seed admin configuration is invalid: configure SeedAdmin email, password, name, and phone before creating the first admin.");
+        }
+
+        if (!environment.IsDevelopment()
+            && string.Equals(options.Password, "Admin123!", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Seed admin configuration is invalid: production must not use the local development admin password.");
+        }
     }
 
     private static async Task SeedBusinessHoursAsync(AppDbContext db, ILogger logger)

@@ -16,10 +16,10 @@ namespace Restaurant.API.Extensions;
 
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddRestaurantBackend(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddRestaurantBackend(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
         var jwt = configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings();
-        ValidateJwtSettings(jwt);
+        ValidateJwtSettings(jwt, environment);
 
         services.AddOptions<JwtSettings>()
             .Bind(configuration.GetSection("Jwt"))
@@ -27,7 +27,7 @@ public static class ServiceCollectionExtensions
             {
                 try
                 {
-                    ValidateJwtSettings(settings);
+                    ValidateJwtSettings(settings, environment);
                     return true;
                 }
                 catch
@@ -50,6 +50,11 @@ public static class ServiceCollectionExtensions
 
         if (allowedOrigins is null || allowedOrigins.Length == 0)
         {
+            if (!environment.IsDevelopment())
+            {
+                throw new InvalidOperationException("CORS configuration is invalid: configure Cors:AllowedOrigins for production.");
+            }
+
             allowedOrigins = ["http://localhost:4200", "http://127.0.0.1:4200"];
         }
 
@@ -152,7 +157,7 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    private static void ValidateJwtSettings(JwtSettings settings)
+    private static void ValidateJwtSettings(JwtSettings settings, IHostEnvironment environment)
     {
         if (string.IsNullOrWhiteSpace(settings.Issuer))
         {
@@ -178,6 +183,13 @@ public static class ServiceCollectionExtensions
             || settings.Secret.Contains("PLACEHOLDER", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("JWT configuration is invalid: Jwt:Secret must not use a placeholder value.");
+        }
+
+        if (!environment.IsDevelopment()
+            && (settings.Secret.Contains("LOCAL_DEV_ONLY", StringComparison.OrdinalIgnoreCase)
+                || settings.Secret.Contains("NotForProduction", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException("JWT configuration is invalid: production must use a deployment-specific Jwt:Secret.");
         }
 
         if (settings.ExpirationMinutes <= 0)

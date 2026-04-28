@@ -1,5 +1,6 @@
 import { AsyncPipe, CurrencyPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
@@ -12,7 +13,7 @@ import { orderTypeLabels } from '../../shared/ui-labels';
 @Component({
   selector: 'app-cart-page',
   standalone: true,
-  imports: [AsyncPipe, CurrencyPipe, PageHeaderComponent, RouterLink],
+  imports: [AsyncPipe, CurrencyPipe, FormsModule, PageHeaderComponent, RouterLink],
   template: `
     <section class="page-surface customer-cart-page">
       <app-page-header

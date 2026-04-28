@@ -36,6 +36,7 @@ import { CustomerCartService } from '../services/customer-cart.service';
                 }
               </a>
               <a routerLink="/orders" routerLinkActive="active">ההזמנות שלי</a>
+              <a routerLink="/reservations" routerLinkActive="active">הזמנות מקום שלי</a>
             }
           } @else {
             <a routerLink="/cart" routerLinkActive="active">עגלה</a>

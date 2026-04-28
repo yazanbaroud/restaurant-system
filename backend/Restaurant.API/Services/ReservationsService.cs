@@ -1,10 +1,8 @@
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Restaurant.API.Data;
 using Restaurant.API.DTOs;
 using Restaurant.API.Enums;
 using Restaurant.API.Helpers;
-using Restaurant.API.Hubs;
 using Restaurant.API.Interfaces;
 using Restaurant.API.Models;
 
@@ -12,7 +10,7 @@ namespace Restaurant.API.Services;
 
 public sealed class ReservationsService(
     AppDbContext db,
-    IHubContext<RestaurantHub> hub,
+    IRestaurantRealtimeNotifier realtimeNotifier,
     ILogger<ReservationsService> logger) : IReservationsService
 {
     public async Task<ReservationResponseDto> CreateAsync(CreateReservationDto dto, CancellationToken cancellationToken)
@@ -34,7 +32,7 @@ public sealed class ReservationsService(
         await db.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Reservation {ReservationId} created for {ReservationDate} at {ReservationTime}", reservation.Id, reservation.ReservationDate, reservation.ReservationTime);
         var response = reservation.ToReservationResponse();
-        await hub.Clients.All.SendAsync("reservationCreated", response, cancellationToken);
+        await realtimeNotifier.ReservationCreatedAsync(response, cancellationToken);
         return response;
     }
 
@@ -81,7 +79,7 @@ public sealed class ReservationsService(
         await db.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Reservation {ReservationId} status updated to {Status}", reservation.Id, reservation.Status);
         var response = reservation.ToReservationResponse();
-        await hub.Clients.All.SendAsync("reservationStatusUpdated", response, cancellationToken);
+        await realtimeNotifier.ReservationStatusUpdatedAsync(response, cancellationToken);
         return response;
     }
 
@@ -95,6 +93,6 @@ public sealed class ReservationsService(
             : reservation.RestaurantNotes;
         await db.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Reservation {ReservationId} cancelled", reservation.Id);
-        await hub.Clients.All.SendAsync("reservationStatusUpdated", reservation.ToReservationResponse(), cancellationToken);
+        await realtimeNotifier.ReservationStatusUpdatedAsync(reservation.ToReservationResponse(), cancellationToken);
     }
 }

@@ -66,6 +66,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IReservationsService, ReservationsService>();
         services.AddScoped<IReportsService, ReportsService>();
         services.AddScoped<IDashboardService, DashboardService>();
+        services.AddScoped<IRestaurantRealtimeNotifier, RestaurantRealtimeNotifier>();
 
         services.AddControllers();
         services.AddFluentValidationAutoValidation();

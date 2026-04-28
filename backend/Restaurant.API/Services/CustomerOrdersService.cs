@@ -1,10 +1,8 @@
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Restaurant.API.Data;
 using Restaurant.API.DTOs;
 using Restaurant.API.Enums;
 using Restaurant.API.Helpers;
-using Restaurant.API.Hubs;
 using Restaurant.API.Interfaces;
 using Restaurant.API.Models;
 
@@ -12,7 +10,7 @@ namespace Restaurant.API.Services;
 
 public sealed class CustomerOrdersService(
     AppDbContext db,
-    IHubContext<RestaurantHub> hub,
+    IRestaurantRealtimeNotifier realtimeNotifier,
     ILogger<CustomerOrdersService> logger) : ICustomerOrdersService
 {
     public async Task<IReadOnlyCollection<OrderResponseDto>> GetAllAsync(int userId, CancellationToken cancellationToken)
@@ -75,7 +73,7 @@ public sealed class CustomerOrdersService(
 
         var response = order.ToOrderResponse();
         logger.LogInformation("Customer {UserId} created order {OrderId}", userId, order.Id);
-        await hub.Clients.All.SendAsync("orderCreated", response, cancellationToken);
+        await realtimeNotifier.OrderCreatedAsync(response, userId, cancellationToken);
         return response;
     }
 
@@ -305,7 +303,7 @@ public sealed class CustomerOrdersService(
     private async Task<OrderResponseDto> SendOrderUpdatedAsync(Order order, CancellationToken cancellationToken)
     {
         var response = order.ToOrderResponse();
-        await hub.Clients.All.SendAsync("orderUpdated", response, cancellationToken);
+        await realtimeNotifier.OrderUpdatedAsync(response, order.UserId, cancellationToken);
         return response;
     }
 }

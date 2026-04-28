@@ -1,10 +1,8 @@
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Restaurant.API.Data;
 using Restaurant.API.DTOs;
 using Restaurant.API.Enums;
 using Restaurant.API.Helpers;
-using Restaurant.API.Hubs;
 using Restaurant.API.Interfaces;
 using Restaurant.API.Models;
 
@@ -12,12 +10,15 @@ namespace Restaurant.API.Services;
 
 public sealed class PaymentsService(
     AppDbContext db,
-    IHubContext<RestaurantHub> hub,
+    IRestaurantRealtimeNotifier realtimeNotifier,
     ILogger<PaymentsService> logger) : IPaymentsService
 {
     public async Task<PaymentResponseDto> CreateAsync(CreatePaymentDto dto, CancellationToken cancellationToken)
     {
-        var order = await db.Orders.Include(x => x.Payments).SingleOrDefaultAsync(x => x.Id == dto.OrderId, cancellationToken)
+        var order = await db.Orders
+            .Include(x => x.Payments)
+            .Include(x => x.User)
+            .SingleOrDefaultAsync(x => x.Id == dto.OrderId, cancellationToken)
             ?? throw new ApiException("Order not found.", StatusCodes.Status404NotFound);
 
         if (dto.Amount <= 0)
@@ -45,7 +46,7 @@ public sealed class PaymentsService(
 
         logger.LogInformation("Payment {PaymentId} added to order {OrderId}", payment.Id, order.Id);
         var response = payment.ToPaymentResponse();
-        await hub.Clients.All.SendAsync("paymentAdded", response, cancellationToken);
+        await realtimeNotifier.PaymentAddedAsync(response, CustomerUserId(order), cancellationToken);
         return response;
     }
 
@@ -95,4 +96,7 @@ public sealed class PaymentsService(
             .Select(x => x.ToPaymentResponse())
             .ToArrayAsync(cancellationToken);
     }
+
+    private static int? CustomerUserId(Order order) =>
+        order.User?.Role == UserRole.Customer ? order.UserId : null;
 }

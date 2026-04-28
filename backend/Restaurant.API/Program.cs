@@ -23,7 +23,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
-app.MapHub<RestaurantHub>("/hubs/restaurant");
+app.MapHub<RestaurantHub>("/hubs/restaurant").RequireAuthorization();
 
 await AdminSeeder.SeedAsync(app.Services);
 

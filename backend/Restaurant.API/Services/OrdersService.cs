@@ -1,10 +1,8 @@
-using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Restaurant.API.Data;
 using Restaurant.API.DTOs;
 using Restaurant.API.Enums;
 using Restaurant.API.Helpers;
-using Restaurant.API.Hubs;
 using Restaurant.API.Interfaces;
 using Restaurant.API.Models;
 
@@ -12,7 +10,7 @@ namespace Restaurant.API.Services;
 
 public sealed class OrdersService(
     AppDbContext db,
-    IHubContext<RestaurantHub> hub,
+    IRestaurantRealtimeNotifier realtimeNotifier,
     ILogger<OrdersService> logger) : IOrdersService
 {
     public async Task<OrderResponseDto> CreateAsync(CreateOrderDto dto, CancellationToken cancellationToken)
@@ -52,8 +50,9 @@ public sealed class OrdersService(
         await db.SaveChangesAsync(cancellationToken);
         await ReloadOrderAsync(order, cancellationToken);
         logger.LogInformation("Order created with id {OrderId} and number {OrderNumber}", order.Id, order.OrderNumber);
-        await hub.Clients.All.SendAsync("orderCreated", order.ToOrderResponse(), cancellationToken);
-        return order.ToOrderResponse();
+        var response = order.ToOrderResponse();
+        await realtimeNotifier.OrderCreatedAsync(response, CustomerUserId(order), cancellationToken);
+        return response;
     }
 
     public async Task<IReadOnlyCollection<OrderResponseDto>> GetAllAsync(OrderStatus? status, DateOnly? date, DateOnly? from, DateOnly? to, PaymentStatus? paymentStatus, OrderType? orderType, bool activeOnly, CancellationToken cancellationToken)
@@ -129,7 +128,7 @@ public sealed class OrdersService(
         await db.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Order {OrderId} status updated to {Status}", order.Id, order.Status);
         var response = order.ToOrderResponse();
-        await hub.Clients.All.SendAsync("orderStatusUpdated", response, cancellationToken);
+        await realtimeNotifier.OrderStatusUpdatedAsync(response, CustomerUserId(order), cancellationToken);
         return response;
     }
 
@@ -202,7 +201,8 @@ public sealed class OrdersService(
 
     private static IQueryable<Order> IncludeOrderGraph(IQueryable<Order> query) =>
         query.Include(x => x.Items).ThenInclude(x => x.MenuItem)
-            .Include(x => x.OrderTables).ThenInclude(x => x.Table);
+            .Include(x => x.OrderTables).ThenInclude(x => x.Table)
+            .Include(x => x.User);
 
     private async Task<Order> LoadTrackedOrderAsync(int id, CancellationToken cancellationToken) =>
         await IncludeOrderGraph(db.Orders).Include(x => x.Payments).SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
@@ -302,6 +302,9 @@ public sealed class OrdersService(
 
     private static bool IsClosedStatus(OrderStatus status) =>
         status is OrderStatus.Completed or OrderStatus.Cancelled;
+
+    private static int? CustomerUserId(Order order) =>
+        order.User?.Role == UserRole.Customer ? order.UserId : null;
 
     private static void RecalculateTotal(Order order) =>
         order.TotalPrice = order.Items.Sum(x => x.UnitPrice * x.Quantity);

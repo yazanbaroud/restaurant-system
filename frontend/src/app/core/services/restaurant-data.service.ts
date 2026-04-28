@@ -59,13 +59,14 @@ export class RestaurantDataService {
   private readonly http = inject(HttpClient);
   private readonly realtime = inject(RealtimeService);
   private readonly apiBaseUrl = environment.apiBaseUrl;
-  private readonly menuSubject = new BehaviorSubject<MenuItem[]>(structuredClone(MOCK_MENU_ITEMS));
-  private readonly menuCategoriesSubject = new BehaviorSubject<MenuCategoryRecord[]>(this.defaultMenuCategories());
-  private readonly tablesSubject = new BehaviorSubject<Table[]>(structuredClone(MOCK_TABLES));
-  private readonly ordersSubject = new BehaviorSubject<Order[]>(structuredClone(MOCK_ORDERS));
-  private readonly reservationsSubject = new BehaviorSubject<Reservation[]>(structuredClone(MOCK_RESERVATIONS));
-  private readonly paymentsSubject = new BehaviorSubject<Payment[]>(structuredClone(MOCK_PAYMENTS));
-  private readonly usersSubject = new BehaviorSubject<User[]>(structuredClone(MOCK_USERS));
+  private readonly enableMockFallbacks = environment.enableMockFallbacks === true;
+  private readonly menuSubject = new BehaviorSubject<MenuItem[]>(this.enableMockFallbacks ? structuredClone(MOCK_MENU_ITEMS) : []);
+  private readonly menuCategoriesSubject = new BehaviorSubject<MenuCategoryRecord[]>(this.enableMockFallbacks ? this.defaultMenuCategories() : []);
+  private readonly tablesSubject = new BehaviorSubject<Table[]>(this.enableMockFallbacks ? structuredClone(MOCK_TABLES) : []);
+  private readonly ordersSubject = new BehaviorSubject<Order[]>(this.enableMockFallbacks ? structuredClone(MOCK_ORDERS) : []);
+  private readonly reservationsSubject = new BehaviorSubject<Reservation[]>(this.enableMockFallbacks ? structuredClone(MOCK_RESERVATIONS) : []);
+  private readonly paymentsSubject = new BehaviorSubject<Payment[]>(this.enableMockFallbacks ? structuredClone(MOCK_PAYMENTS) : []);
+  private readonly usersSubject = new BehaviorSubject<User[]>(this.enableMockFallbacks ? structuredClone(MOCK_USERS) : []);
 
   readonly menuItems$ = this.menuSubject.asObservable();
   readonly menuCategories$ = this.menuCategoriesSubject.asObservable();
@@ -160,7 +161,7 @@ export class RestaurantDataService {
   getMenuItem(id: number): Observable<MenuItem | undefined> {
     return this.fetchMenuItemFromApi(id).pipe(
       tap((item) => this.upsertMenuItem(item)),
-      catchError(() => this.menuItems$.pipe(map((items) => items.find((item) => item.id === id))))
+      catchError((error) => this.readObservableFallback(error, this.menuItems$.pipe(map((items) => items.find((item) => item.id === id)))))
     );
   }
 
@@ -180,7 +181,7 @@ export class RestaurantDataService {
       switchMap(({ item, backendAlreadyReturnedImage }) =>
         imageUrl && !backendAlreadyReturnedImage
           ? this.postMenuItemImage(item.id, imageUrl, true).pipe(
-              switchMap(() => this.fetchMenuItemFromApi(item.id).pipe(catchError(() => of(this.withMenuImage(item, imageUrl)))))
+              switchMap(() => this.fetchMenuItemFromApi(item.id).pipe(catchError((error) => this.readFallback(error, () => this.withMenuImage(item, imageUrl)))))
             )
           : of(item)
       ),
@@ -201,7 +202,7 @@ export class RestaurantDataService {
       switchMap(({ item, backendAlreadyReturnedImage }) =>
         imageUrl && !backendAlreadyReturnedImage
           ? this.postMenuItemImage(item.id, imageUrl, !item.images.length).pipe(
-              switchMap(() => this.fetchMenuItemFromApi(item.id).pipe(catchError(() => of(this.withMenuImage(item, imageUrl)))))
+              switchMap(() => this.fetchMenuItemFromApi(item.id).pipe(catchError((error) => this.readFallback(error, () => this.withMenuImage(item, imageUrl)))))
             )
           : of(item)
       ),
@@ -219,7 +220,7 @@ export class RestaurantDataService {
     const existingItem = this.menuSubject.value.find((item) => item.id === id);
 
     return this.postMenuItemImage(id, imageUrl, isMainImage).pipe(
-      switchMap(() => this.fetchMenuItemFromApi(id).pipe(catchError(() => of(existingItem ? this.withMenuImage(existingItem, imageUrl) : this.createMissingMenuItem(id, imageUrl))))),
+      switchMap(() => this.fetchMenuItemFromApi(id).pipe(catchError((error) => this.readFallback(error, () => existingItem ? this.withMenuImage(existingItem, imageUrl) : this.createMissingMenuItem(id, imageUrl))))),
       tap((item) => this.upsertMenuItem(item))
     );
   }
@@ -228,7 +229,7 @@ export class RestaurantDataService {
     const existingItem = this.menuSubject.value.find((item) => item.id === menuItemId);
 
     return this.http.delete<void>(`${this.apiBaseUrl}/api/Menu/${menuItemId}/images/${imageId}`).pipe(
-      switchMap(() => this.fetchMenuItemFromApi(menuItemId).pipe(catchError(() => of(existingItem ? this.withoutMenuImage(existingItem, imageId) : this.createMissingMenuItem(menuItemId))))),
+      switchMap(() => this.fetchMenuItemFromApi(menuItemId).pipe(catchError((error) => this.readFallback(error, () => existingItem ? this.withoutMenuImage(existingItem, imageId) : this.createMissingMenuItem(menuItemId))))),
       tap((item) => this.upsertMenuItem(item))
     );
   }
@@ -371,7 +372,7 @@ export class RestaurantDataService {
   getOrder(id: number): Observable<Order | undefined> {
     return this.fetchOrderFromApi(id).pipe(
       switchMap(() => this.orderFromState(id)),
-      catchError(() => this.refreshOrderFromList(id).pipe(switchMap(() => this.orderFromState(id))))
+      catchError((error) => this.readObservableFallback(error, this.refreshOrderFromList(id).pipe(switchMap(() => this.orderFromState(id)))))
     );
   }
 
@@ -500,8 +501,8 @@ export class RestaurantDataService {
       }),
       switchMap((result) =>
         forkJoin({
-          payments: this.fetchPaymentsForOrderFromApi(orderId).pipe(catchError(() => of(this.paymentsSubject.value))),
-          order: this.fetchOrderFromApi(orderId).pipe(catchError(() => this.refreshOrderFromList(orderId)))
+          payments: this.fetchPaymentsForOrderFromApi(orderId).pipe(catchError((error) => this.readFallback(error, () => this.paymentsSubject.value))),
+          order: this.fetchOrderFromApi(orderId).pipe(catchError((error) => this.readObservableFallback(error, this.refreshOrderFromList(orderId))))
         }).pipe(map(() => result.payment))
       )
     );
@@ -544,7 +545,7 @@ export class RestaurantDataService {
     return this.http.post<unknown>(`${this.apiBaseUrl}/api/Reservations`, this.createReservationPayload(input)).pipe(
       map((response) => this.normalizeReservation(response, input)),
       switchMap((reservation) =>
-        this.fetchReservationFromApi(reservation.id).pipe(catchError(() => of(reservation)))
+        this.fetchReservationFromApi(reservation.id).pipe(catchError((error) => this.readFallback(error, () => reservation)))
       ),
       catchError((error) => throwError(() => error)),
       tap((reservation) => this.upsertReservation(reservation))
@@ -566,7 +567,7 @@ export class RestaurantDataService {
     }).pipe(
       map((response) => this.normalizeReservation(response, fallbackReservation)),
       switchMap((reservation) =>
-        this.fetchReservationFromApi(reservation.id).pipe(catchError(() => of(reservation)))
+        this.fetchReservationFromApi(reservation.id).pipe(catchError((error) => this.readFallback(error, () => reservation)))
       ),
       tap((reservation) => this.upsertReservation(reservation))
     );
@@ -624,7 +625,7 @@ export class RestaurantDataService {
   getUser(id: number): Observable<User | undefined> {
     return this.fetchUserFromApi(id).pipe(
       tap((user) => this.upsertUser(user)),
-      catchError(() => this.users$.pipe(map((users) => users.find((user) => user.id === id))))
+      catchError((error) => this.readObservableFallback(error, this.users$.pipe(map((users) => users.find((user) => user.id === id)))))
     );
   }
 
@@ -665,7 +666,7 @@ export class RestaurantDataService {
     return this.http.get<unknown>(`${this.apiBaseUrl}/api/Users`).pipe(
       map((response) => this.normalizeUsers(response)),
       tap((users) => this.usersSubject.next(users)),
-      catchError(() => of(this.usersSubject.value))
+      catchError((error) => this.readFallback(error, () => this.usersSubject.value))
     );
   }
 
@@ -822,14 +823,14 @@ export class RestaurantDataService {
   getPaymentsForOrder(orderId: number): Observable<Payment[]> {
     return this.fetchPaymentsForOrderFromApi(orderId).pipe(
       switchMap(() => this.orderPaymentsFromState(orderId)),
-      catchError(() => this.orderPaymentsFromState(orderId))
+      catchError((error) => this.readObservableFallback(error, this.orderPaymentsFromState(orderId)))
     );
   }
 
   getDashboardSummary(): Observable<DashboardSummary> {
     return this.http.get<unknown>(`${this.apiBaseUrl}/api/Dashboard/admin`).pipe(
       map((response) => this.normalizeDashboardSummary(response, this.calculateDashboard())),
-      catchError(() => of(this.calculateDashboard()))
+      catchError((error) => this.readFallback(error, () => this.calculateDashboard()))
     );
   }
 
@@ -858,7 +859,7 @@ export class RestaurantDataService {
       tableOccupancy: this.fetchReport('table-occupancy')
     }).pipe(
       map((reports) => this.normalizeReportsSummary(reports, this.createFallbackReportsSummary())),
-      catchError(() => of(this.createFallbackReportsSummary()))
+      catchError((error) => this.readFallback(error, () => this.createFallbackReportsSummary()))
     );
   }
 
@@ -938,7 +939,7 @@ export class RestaurantDataService {
 
   private fetchReport(pathAndQuery: string): Observable<unknown | null> {
     return this.http.get<unknown>(`${this.apiBaseUrl}/api/Reports/${pathAndQuery}`).pipe(
-      catchError(() => of(null))
+      catchError((error) => this.readFallback(error, () => null))
     );
   }
 
@@ -1276,11 +1277,19 @@ export class RestaurantDataService {
     return Math.max(0, ...items.map((item) => item.id)) + 1;
   }
 
+  private readFallback<T>(error: unknown, fallbackFactory: () => T): Observable<T> {
+    return this.enableMockFallbacks ? of(fallbackFactory()) : throwError(() => error);
+  }
+
+  private readObservableFallback<T>(error: unknown, fallback$: Observable<T>): Observable<T> {
+    return this.enableMockFallbacks ? fallback$ : throwError(() => error);
+  }
+
   private fetchTablesFromApi(): Observable<Table[]> {
     return this.http.get<unknown>(`${this.apiBaseUrl}/api/Tables`).pipe(
       map((response) => this.normalizeTables(response)),
       tap((tables) => this.tablesSubject.next(tables)),
-      catchError(() => of(this.tablesSubject.value))
+      catchError((error) => this.readFallback(error, () => this.tablesSubject.value))
     );
   }
 
@@ -1422,7 +1431,7 @@ export class RestaurantDataService {
     return this.http.get<unknown>(`${this.apiBaseUrl}/api/Reservations`, { params }).pipe(
       map((response) => this.normalizeReservations(response)),
       tap((reservations) => this.reservationsSubject.next(reservations)),
-      catchError(() => of(this.reservationsSubject.value))
+      catchError((error) => this.readFallback(error, () => this.reservationsSubject.value))
     );
   }
 
@@ -1448,7 +1457,7 @@ export class RestaurantDataService {
     return this.http.get<unknown>(`${this.apiBaseUrl}/api/Orders`, { params }).pipe(
       map((response) => this.normalizeOrders(response)),
       tap((orders) => this.ordersSubject.next(orders)),
-      catchError(() => of(this.filterOrdersByDateRange(this.ordersSubject.value, from, to)))
+      catchError((error) => this.readFallback(error, () => this.filterOrdersByDateRange(this.ordersSubject.value, from, to)))
     );
   }
 
@@ -1483,7 +1492,7 @@ export class RestaurantDataService {
           this.paymentsSubject.next(payments);
         }
       }),
-      catchError(() => of(date ? this.filterPaymentsByLocalDate(this.paymentsSubject.value, date) : this.paymentsSubject.value))
+      catchError((error) => this.readFallback(error, () => date ? this.filterPaymentsByLocalDate(this.paymentsSubject.value, date) : this.paymentsSubject.value))
     );
   }
 
@@ -1901,7 +1910,7 @@ export class RestaurantDataService {
     return this.http.get<unknown>(`${this.apiBaseUrl}/api/Menu`).pipe(
       map((response) => this.normalizeMenuItems(response)),
       tap((items) => this.menuSubject.next(items)),
-      catchError(() => of(this.menuSubject.value))
+      catchError((error) => this.readFallback(error, () => this.menuSubject.value))
     );
   }
 
@@ -1913,7 +1922,7 @@ export class RestaurantDataService {
     return this.http.get<unknown>(`${this.apiBaseUrl}/api/Menu/categories`).pipe(
       map((response) => this.normalizeMenuCategories(response)),
       tap((categories) => this.menuCategoriesSubject.next(categories)),
-      catchError(() => of(this.menuCategoriesSubject.value))
+      catchError((error) => this.readFallback(error, () => this.menuCategoriesSubject.value))
     );
   }
 

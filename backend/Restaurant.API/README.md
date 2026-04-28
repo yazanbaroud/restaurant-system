@@ -1,42 +1,20 @@
 # Restaurant.API
 
-Production-style ASP.NET Core backend for the Restaurant Management System.
-
-This service provides the restaurant domain API for authentication, users, menu management, table management, orders, payments, reservations, reporting, dashboard metrics, and real-time operational notifications.
-
-The project is intentionally kept as a single .NET backend project with a clean internal structure. It avoids unnecessary multi-project complexity while still separating concerns through controllers, services, DTOs, validators, EF Core models, middleware, helpers, and SignalR hubs.
+ASP.NET Core backend for the Restaurant Management System. The backend provides REST APIs for authentication, users, menu management, tables, orders, customer orders, payments, reservations, reports, dashboard metrics, and SignalR operational events.
 
 ## Tech Stack
 
 - .NET 8
 - ASP.NET Core Web API
-- Entity Framework Core
-- SQL Server
-- JWT Bearer authentication
+- Entity Framework Core 8
+- SQL Server / SQL Server LocalDB
+- JWT bearer authentication
 - Role-based authorization
-- SignalR
-- Swagger / OpenAPI
 - FluentValidation
-- Built-in ASP.NET Core logging
-- Global exception handling middleware
+- Swagger / OpenAPI
+- SignalR
 
-## Architecture
-
-The backend uses a practical layered architecture inside one API project:
-
-- Controllers handle HTTP routing, request binding, authorization attributes, and response codes.
-- Services contain business rules and database orchestration.
-- Interfaces define service contracts used by dependency injection.
-- DTOs define request and response payloads. EF entities are not exposed directly.
-- Validators enforce request validation through FluentValidation.
-- Models define EF Core entities and navigation properties.
-- Data contains `AppDbContext` and EF Core relationship configuration.
-- Middleware handles global exception formatting.
-- Helpers contain JWT, password hashing, role constants, mapping, and small utilities.
-- Hubs expose SignalR real-time notifications.
-- Seed initializes the first admin account.
-
-## Project Structure
+## Project Layout
 
 ```text
 Restaurant.API/
@@ -49,324 +27,315 @@ Restaurant.API/
 |-- Hubs/
 |-- Interfaces/
 |-- Middleware/
+|-- Migrations/
 |-- Models/
 |-- Seed/
 |-- Services/
 |-- Validators/
 |-- Program.cs
 |-- appsettings.json
-|-- appsettings.Development.json
 |-- NuGet.Config
 `-- Restaurant.API.csproj
 ```
 
-## Authentication and Authorization
+## Configuration
 
-Authentication uses JWT bearer tokens.
-
-The API issues tokens through:
+Main configuration file:
 
 ```text
-POST /api/auth/login
+appsettings.json
 ```
 
-Authenticated requests must include:
+Important sections:
 
-```text
-Authorization: Bearer <token>
-```
+- `ConnectionStrings:DefaultConnection`
+- `Jwt`
+- `SeedAdmin`
+- `Logging`
 
-Authorization is role-based and enforced with `[Authorize]` and `[Authorize(Roles = "...")]` attributes.
-
-Important protected areas:
-
-- `AdminController`: Admin only
-- `UsersController`: Admin only
-- `ReportsController`: Admin only
-- `DashboardController`: Admin only
-- Menu write endpoints: Admin only
-- Table creation/update endpoints: Admin only
-- Table status endpoint: Admin and Waiter
-- Orders endpoints: Admin and Waiter
-- Payments endpoints: Admin and Waiter
-- Reservation management endpoints: Admin, with limited read access for Waiter
-
-Public endpoints are intentionally limited to:
-
-- Customer registration
-- Login
-- Public menu reads
-- Reservation creation
-
-## Roles and Permissions
-
-The system supports exactly three roles.
-
-### Admin
-
-Admins have full control over restaurant management:
-
-- User and waiter account management
-- Menu and menu image management
-- Table management
-- Orders
-- Payments
-- Reservations
-- Reports
-- Dashboard metrics
-
-### Waiter
-
-Waiters are operational users created by admins. They cannot self-register.
-
-Waiters can:
-
-- Create and update orders
-- Update order status
-- Manage order items
-- Assign tables to orders
-- Add manual payments
-- View active/open orders
-- View reservations for operational awareness
-- Update table status where operationally appropriate
-
-Waiters cannot access:
-
-- User management
-- Admin account creation
-- Reports
-- Dashboard
-- Menu management
-- Restaurant-wide financial analytics
-
-### Customer
-
-Customers can self-register and log in.
-
-Customer registration never accepts a role from the client. Public registration always creates a `Customer` account.
-
-Customers can:
-
-- Register
-- Log in
-- Create reservations
-- Browse available menu items
-
-## JWT Configuration
-
-JWT settings are configured in `appsettings.json` and `appsettings.Development.json`:
-
-```json
-{
-  "Jwt": {
-    "Issuer": "Restaurant.API",
-    "Audience": "Restaurant.Client",
-    "Secret": "LOCAL_DEV_ONLY_RestaurantApiJwtSecret_NotForProduction_2026_04_24",
-    "ExpirationMinutes": 120
-  }
-}
-```
-
-The application validates JWT settings at startup. Startup fails clearly if:
-
-- issuer is missing
-- audience is missing
-- secret is missing
-- secret is shorter than 32 UTF-8 bytes
-- secret looks like a placeholder
-- expiration is not positive
-
-The checked-in secret is for local development only. Production environments must override it using environment-specific configuration, platform secrets, or a secret manager.
-
-## SQL Server Configuration
-
-The default local development connection string uses SQL Server LocalDB:
+Use placeholders in documentation and secure values outside source control for shared environments:
 
 ```json
 {
   "ConnectionStrings": {
     "DefaultConnection": "Server=(localdb)\\MSSQLLocalDB;Database=RestaurantManagementDb;Trusted_Connection=True;TrustServerCertificate=True"
+  },
+  "Jwt": {
+    "Issuer": "Restaurant.API",
+    "Audience": "Restaurant.Client",
+    "Secret": "<at-least-32-byte-secret>",
+    "ExpirationMinutes": 120
+  },
+  "SeedAdmin": {
+    "Email": "admin@example.local",
+    "Password": "<local-dev-password>",
+    "FirstName": "System",
+    "LastName": "Admin",
+    "PhoneNumber": "0500000000"
   }
 }
 ```
 
-Override `ConnectionStrings:DefaultConnection` for other SQL Server instances or cloud-hosted databases.
+The application validates JWT settings at startup. The secret must be at least 32 UTF-8 bytes and must not be a placeholder.
 
-## EF Core Migrations
+## Database Setup
 
-Install the EF Core CLI if it is not already available:
+The backend uses EF Core with SQL Server. The checked-in local connection string targets SQL Server LocalDB:
+
+```text
+Server=(localdb)\MSSQLLocalDB;Database=RestaurantManagementDb;Trusted_Connection=True;TrustServerCertificate=True
+```
+
+Install the EF Core CLI if needed:
 
 ```powershell
 dotnet tool install --global dotnet-ef
 ```
 
-From `backend/Restaurant.API`:
+Apply migrations from this folder:
 
 ```powershell
-dotnet ef migrations add InitialCreate
 dotnet ef database update
 ```
 
-The startup seed path is migration-friendly:
+Startup also runs the seed path through `AdminSeeder`. If migrations exist, startup applies `MigrateAsync`; otherwise local development can initialize with `EnsureCreatedAsync`.
 
-- If EF migrations exist, startup applies migrations with `MigrateAsync`.
-- If no migrations exist yet, local development can still initialize the database with `EnsureCreatedAsync`.
-- Admin seeding is idempotent and does not create duplicate admins.
+## Run Locally
 
-## Seeded Admin Account
+From `backend/Restaurant.API`:
 
-The backend seeds an initial admin account when no admin user exists.
-
-Default local credentials:
-
-```text
-Email: admin@restaurant.local
-Password: Admin123!
+```powershell
+dotnet restore --configfile NuGet.Config
+dotnet run --launch-profile http
 ```
 
-The password is hashed before storage. Override the seeded admin settings outside source control for shared or deployed environments.
+Default HTTP URL:
+
+```text
+http://localhost:5084
+```
+
+HTTPS launch profile:
+
+```powershell
+dotnet run --launch-profile https
+```
+
+Configured URLs:
+
+```text
+https://localhost:7066
+http://localhost:5084
+```
+
+## Build
+
+```powershell
+dotnet build
+```
+
+Release build:
+
+```powershell
+dotnet build -c Release
+```
 
 ## Swagger
 
 Swagger is enabled in development.
 
-Default access:
-
 ```text
-/swagger
+http://localhost:5084/swagger
 ```
 
-Swagger supports JWT bearer authentication:
-
-1. Log in through `POST /api/auth/login`.
-2. Copy the returned token.
-3. Use Swagger's `Authorize` button.
-4. Enter the bearer token.
-
-## SignalR Hub
-
-The real-time hub is exposed at:
+Use `POST /api/Auth/login` to obtain a JWT and authorize Swagger with:
 
 ```text
-/hubs/restaurant
+Bearer <token>
 ```
 
-Supported events:
+## Roles and Permissions
 
-- `orderCreated`
-- `orderStatusUpdated`
-- `paymentAdded`
-- `reservationCreated`
-- `reservationStatusUpdated`
+Roles:
 
-JWT bearer tokens are supported for SignalR connections through the `access_token` query parameter used by common SignalR clients.
+- `Admin`
+- `Waiter`
+- `Customer`
 
-## CORS
+Public endpoints:
 
-The backend defines a named CORS policy:
+- `POST /api/Auth/register`
+- `POST /api/Auth/login`
+- public menu reads
+- `POST /api/Reservations`
 
-```text
-DefaultCors
-```
+Authenticated user endpoints:
 
-Allowed local frontend origin:
+- `GET /api/Auth/me`
+- `PUT /api/Auth/me`
+- `PUT /api/Auth/me/password`
 
-```text
-http://localhost:4200
-```
+Customer-only endpoints:
 
-The policy allows headers, methods, and credentials so Angular and SignalR can work correctly during local development.
+- `/api/customer/orders`
+- `/api/customer/tables/available`
+
+Admin/waiter endpoints:
+
+- operational orders
+- payments create and order-payment reads
+- table reads and table status updates
+- reservation reads
+
+Admin-only endpoints:
+
+- users
+- admin account creation
+- menu writes and category writes
+- table create/update
+- reservation update/status/delete
+- reports
+- dashboard
+- all-payment tracking
+
+## Main API Areas
+
+Authentication:
+
+- `POST /api/Auth/register`
+- `POST /api/Auth/login`
+- `GET /api/Auth/me`
+- `PUT /api/Auth/me`
+- `PUT /api/Auth/me/password`
+
+Menu:
+
+- public reads from `GET /api/Menu`, `GET /api/Menu/{id}`, `GET /api/Menu/categories`
+- admin create/update/delete menu items
+- admin image management
+- admin create/update/delete categories
+
+Tables:
+
+- admin/waiter reads
+- admin create/update
+- admin/waiter status updates
+
+Orders:
+
+- admin/waiter create/update/read
+- status updates
+- item add/update/delete
+- table assignment updates
+- optional date/status/payment/order-type query filters
+
+Customer orders:
+
+- customer-only order list and details
+- customer-only create/update
+- customer-only item add/update/delete
+- customer-only available table options
+- totals and identity are calculated/derived server-side
+
+Payments:
+
+- admin/waiter create payments
+- admin/waiter get payments by order
+- admin-only payment tracking with date filters
+
+Reservations:
+
+- public reservation creation
+- admin/waiter reads with date/status/phone filters
+- admin update/status/delete
+- delete marks reservations cancelled
+
+Reports and dashboard:
+
+- admin dashboard summary
+- daily, weekly, monthly, yearly reports
+- sales report
+- top and least ordered dishes
+- payment breakdown
+- peak hours
+- waiter performance
+- reservation summary
+- table occupancy
+
+SignalR:
+
+- hub path: `/hubs/restaurant`
+- emitted events include `orderCreated`, `orderUpdated`, `orderStatusUpdated`, `paymentAdded`, `reservationCreated`, and `reservationStatusUpdated`
+- JWT can be supplied with the `access_token` query parameter for hub clients
 
 ## Important Business Rules
 
-- Public registration always creates a customer account.
-- Admin and waiter accounts are created only by admins.
-- Passwords are stored using secure hashing.
-- Entities are not returned directly from controllers.
-- Order totals are calculated server-side only.
-- Client-sent totals are ignored.
-- Dine-in orders require at least one available table.
-- Takeaway orders do not require tables.
-- Tables assigned to active orders cannot be marked available or reserved manually.
-- Newly created tables start as available.
-- Menu deletion is soft: `IsAvailable = false`.
-- Historical order data remains intact when menu items are disabled.
-- Orders must always contain at least one item.
-- Order item deletion cannot leave an order empty.
-- Split payments are supported.
-- Overpayments are rejected.
-- Additional payments against fully paid orders return a clean business error.
-- Payment status is limited to `Unpaid` and `Paid`.
-- Reservations are standalone and are not linked directly to orders.
-- Reservation deletion marks the reservation as cancelled.
-- Revenue and sales reports exclude cancelled orders.
-- Cancelled counts remain visible where operationally useful.
+- Public registration creates customers only.
+- Admin and waiter accounts are created by admins.
+- Password hashes are never returned by API responses.
+- Customers can only access their own customer orders.
+- Customer identity is derived from JWT claims, not request body data.
+- Order prices and totals are calculated server-side.
+- Dine-in customer orders require a valid available table.
+- Takeaway customer orders do not require a table.
+- Customer orders cannot be modified after payment or cancellation.
+- Menu item ordering requires the item and its category to be available/active.
+- Payments reject overpayment and paid-order duplicate payment attempts.
+- User deletion blocks deleting the active admin account and blocks deleting the last admin.
+- Menu category deletion blocks categories that still have menu items.
+- Reservation creation is a request; final approval is managed by staff.
 
-## Local Development Setup
+## CORS
 
-From the repository root:
+The default CORS policy allows:
 
-```powershell
-cd backend/Restaurant.API
+```text
+http://localhost:4200
+http://127.0.0.1:4200
 ```
 
-Restore dependencies:
+It allows credentials for SignalR. Add real frontend origins before testing from a network IP or deploying.
+
+## Troubleshooting
+
+LocalDB / SQL Server:
+
+- Confirm SQL Server LocalDB is installed if using the default connection string.
+- Override `ConnectionStrings:DefaultConnection` for SQL Server Express, Docker, or cloud SQL Server.
+
+JWT startup failure:
+
+- Ensure `Jwt:Issuer`, `Jwt:Audience`, `Jwt:Secret`, and `Jwt:ExpirationMinutes` are configured.
+- `Jwt:Secret` must be at least 32 UTF-8 bytes.
+
+CORS:
+
+- If the Angular app runs from another origin, add that origin to `AppCorsPolicies.DefaultCors` configuration in `ServiceCollectionExtensions.cs`.
+
+Running on a network:
+
+- The API can be reached by other devices only if it binds to a reachable host and firewall rules allow the port.
+- Update frontend `apiBaseUrl` away from `localhost` when testing from another device.
+- For temporary local network testing, run without a launch profile and set a reachable URL, for example:
 
 ```powershell
-dotnet restore --configfile NuGet.Config
-```
-
-Build:
-
-```powershell
-dotnet build --configfile NuGet.Config
-```
-
-Apply migrations:
-
-```powershell
-dotnet ef database update
-```
-
-Run:
-
-```powershell
+$env:ASPNETCORE_URLS = "http://0.0.0.0:5084"
 dotnet run
 ```
 
-Then open:
+- Add the matching frontend origin to CORS before testing from another machine.
 
-```text
-https://localhost:<port>/swagger
-```
+Locked executable during debug build:
 
-or the HTTP/HTTPS URLs shown by the .NET runtime.
+- Stop the running API process before rebuilding.
+- On Windows, check for running `Restaurant.API.exe` or `dotnet` processes if build output files are locked.
 
-## Production Notes
+Swagger 401/403:
 
-- Override JWT secrets through secure configuration.
-- Do not use local development credentials in production.
-- Use a managed SQL Server instance or hardened SQL Server deployment.
-- Run migrations as part of a controlled deployment process.
-- Configure CORS for real production frontend origins only.
-- Enable HTTPS termination and secure headers at the hosting boundary.
-- Use structured logging and centralized log aggregation.
-- Add health checks for readiness and database connectivity.
-- Store operational secrets outside source control.
-- Review admin seed settings before first deployment.
-- Consider disabling automatic database initialization in highly controlled production environments.
+- Log in, copy the JWT, click `Authorize`, and provide the bearer token.
+- Confirm the token role matches the endpoint being called.
 
-## Future Backend Improvements
+## Needs Verification
 
-- Refresh tokens and token revocation.
-- User deactivation and account lockout.
-- Audit logging for admin and financial actions.
-- Pagination and sorting for large list endpoints.
-- Integration tests for authorization and business rules.
-- Health check endpoints.
-- Rate limiting on public endpoints.
-- Reservation availability based on opening hours and table capacity.
-- More detailed payment reconciliation reports.
-- Background jobs for no-show detection and reservation reminders.
-- Cloud deployment profiles.
-- Observability dashboards for API performance and failures.
+- Automated backend test project is not present in this repository snapshot.
+- Frontend SignalR client integration is not currently visible; the backend emits events, but the frontend appears to rely on HTTP refresh flows.

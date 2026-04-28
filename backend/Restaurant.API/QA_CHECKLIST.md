@@ -133,6 +133,38 @@ Required before production deployment:
 - Confirm the seed admin is created only when no admin exists.
 - Run the reservation business-hours checks in this file against the staging database.
 
+## Final Manual QA Results
+
+Last closure pass: 2026-04-29.
+
+Verified in the in-app browser against the local running app:
+
+- Guest menu page loads and renders the current menu.
+- Guest add-to-cart action redirects to login with `returnUrl=/menu`.
+- Guest direct `/cart` access redirects to login with `returnUrl=/cart`.
+- Public reservation form loads with today's date and visible business-hours guidance.
+- Public reservation success flow now works after fixing the frontend service to stop refetching the created reservation through the protected admin reservation endpoint.
+
+Verified through direct local API calls:
+
+- `GET /api/business-hours` returns `200` anonymously with seven seeded days.
+- `GET /api/customer/orders` without a JWT returns `401`.
+- `GET /api/customer/reservations` without a JWT returns `401`.
+- `POST /api/Reservations` outside configured business hours returns `400` with the Hebrew message `המסעדה סגורה בשעה שנבחרה. אנא בחר שעה אחרת.`
+- A valid in-hours `POST /api/Reservations` succeeds locally.
+
+Bug found and fixed during this pass:
+
+- Public reservation creation succeeded on the backend but showed a frontend error because `RestaurantDataService.createReservation` refetched the new reservation from the protected staff endpoint after the public POST. The service now treats the successful POST response as the source of truth and updates local state from it.
+
+Still recommended before production cutover:
+
+- Run full Customer browser QA with a disposable customer account: register/login, account update, password change, cart, floating cart, take-away order, dine-in order, order details, reservation list/details/cancel.
+- Run full Waiter browser QA with a disposable waiter account: active orders, create order, order details, status updates, add payment, waiter reservations, realtime notices.
+- Run full Admin browser QA with a disposable admin account: dashboard, reports, menu/categories, tables/location/notes, users, orders/payments, reservations, business hours, realtime notices.
+- Run a two-session realtime check for order and reservation updates.
+- Run ownership checks with two separate customer accounts for customer orders and reservations.
+
 ## Build Checks
 
 - Run `dotnet build backend\Restaurant.API\Restaurant.API.csproj -c Release`.

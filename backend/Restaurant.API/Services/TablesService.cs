@@ -21,7 +21,14 @@ public sealed class TablesService(AppDbContext db, ILogger<TablesService> logger
             throw new ApiException("A table with this name already exists.", StatusCodes.Status409Conflict);
         }
 
-        var table = new Table { Name = name, Capacity = dto.Capacity, Status = TableStatus.Available };
+        var table = new Table
+        {
+            Name = name,
+            Capacity = dto.Capacity,
+            Status = TableStatus.Available,
+            Location = TrimOptional(dto.Location),
+            Notes = TrimOptional(dto.Notes)
+        };
         db.Tables.Add(table);
         await db.SaveChangesAsync(cancellationToken);
         return table.ToTableResponse();
@@ -43,6 +50,8 @@ public sealed class TablesService(AppDbContext db, ILogger<TablesService> logger
         table.Name = name;
         table.Capacity = dto.Capacity;
         table.Status = dto.Status;
+        table.Location = TrimOptional(dto.Location);
+        table.Notes = TrimOptional(dto.Notes);
         await db.SaveChangesAsync(cancellationToken);
         return table.ToTableResponse();
     }
@@ -77,4 +86,7 @@ public sealed class TablesService(AppDbContext db, ILogger<TablesService> logger
             throw new ApiException("Table is assigned to an active order and cannot be marked available or reserved.", StatusCodes.Status409Conflict);
         }
     }
+
+    private static string? TrimOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

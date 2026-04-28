@@ -8,5 +8,7 @@ public sealed class Table
     public string Name { get; set; } = string.Empty;
     public int Capacity { get; set; }
     public TableStatus Status { get; set; } = TableStatus.Available;
+    public string? Location { get; set; }
+    public string? Notes { get; set; }
     public ICollection<OrderTable> OrderTables { get; set; } = new List<OrderTable>();
 }

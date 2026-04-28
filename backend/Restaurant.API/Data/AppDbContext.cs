@@ -35,6 +35,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.HasIndex(x => x.Name).IsUnique();
             entity.Property(x => x.Name).HasMaxLength(50).IsRequired();
+            entity.Property(x => x.Location).HasMaxLength(100);
+            entity.Property(x => x.Notes).HasMaxLength(500);
             entity.Property(x => x.Status).HasConversion<int>().IsRequired();
         });
 

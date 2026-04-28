@@ -29,7 +29,7 @@ public static class DtoMapper
         new(category.Id, category.Name, category.IsActive, category.SortOrder);
 
     public static TableResponseDto ToTableResponse(this Table table) =>
-        new(table.Id, table.Name, table.Capacity, table.Status);
+        new(table.Id, table.Name, table.Capacity, table.Status, table.Location, table.Notes);
 
     public static OrderResponseDto ToOrderResponse(this Order order) =>
         new(

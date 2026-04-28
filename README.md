@@ -97,11 +97,13 @@ frontend/src/environments/environment.ts
 frontend/src/environments/environment.development.ts
 ```
 
-Both currently point to:
+Development points to:
 
 ```text
 http://localhost:5084
 ```
+
+Production uses a same-origin API base URL by default, so frontend calls resolve to `/api/...`. Use a deployment-specific environment replacement if the production API lives on a different host.
 
 Backend configuration:
 

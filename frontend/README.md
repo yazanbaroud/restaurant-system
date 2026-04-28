@@ -90,13 +90,19 @@ src/environments/environment.ts
 src/environments/environment.development.ts
 ```
 
-Current value:
+Development value:
 
 ```ts
 apiBaseUrl: 'http://localhost:5084'
 ```
 
-If the backend runs on another host or port, update both environment files or add a deployment-specific replacement.
+Production defaults to a same-origin API base URL:
+
+```ts
+apiBaseUrl: ''
+```
+
+That makes calls resolve to `/api/...`, which fits deployments where the frontend and backend are served behind the same reverse proxy. If production uses a separate API host, add a deployment-specific environment replacement instead of hardcoding URLs in services.
 
 For network-device testing, use a reachable backend URL instead of `localhost`. Example:
 

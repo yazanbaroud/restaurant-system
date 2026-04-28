@@ -42,7 +42,7 @@ public static class DtoMapper
             order.UserId,
             order.CustomerFirstName,
             order.CustomerLastName,
-            order.CreatedAt,
+            AsUtc(order.CreatedAt),
             order.Status,
             order.Notes,
             order.TotalPrice,
@@ -59,7 +59,7 @@ public static class DtoMapper
             order.OrderTables.Select(x => new OrderTableResponseDto(x.Id, x.TableId, x.Table.Name)).ToArray());
 
     public static PaymentResponseDto ToPaymentResponse(this Payment payment) =>
-        new(payment.Id, payment.OrderId, payment.Amount, payment.Method, payment.PaidAt);
+        new(payment.Id, payment.OrderId, payment.Amount, payment.Method, AsUtc(payment.PaidAt));
 
     public static ReservationResponseDto ToReservationResponse(this Reservation reservation) =>
         new(
@@ -73,5 +73,13 @@ public static class DtoMapper
             reservation.CustomerNotes,
             reservation.RestaurantNotes,
             reservation.Status,
-            reservation.CreatedAt);
+            AsUtc(reservation.CreatedAt));
+
+    private static DateTime AsUtc(DateTime value) =>
+        value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
 }

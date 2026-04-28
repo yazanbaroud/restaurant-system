@@ -544,10 +544,6 @@ export class RestaurantDataService {
   createReservation(input: CreateReservationInput): Observable<Reservation> {
     return this.http.post<unknown>(`${this.apiBaseUrl}/api/Reservations`, this.createReservationPayload(input)).pipe(
       map((response) => this.normalizeReservation(response, input)),
-      switchMap((reservation) =>
-        this.fetchReservationFromApi(reservation.id).pipe(catchError((error) => this.readFallback(error, () => reservation)))
-      ),
-      catchError((error) => throwError(() => error)),
       tap((reservation) => this.upsertReservation(reservation))
     );
   }

@@ -2,6 +2,7 @@ import { Component, inject } from '@angular/core';
 import { AbstractControl, FormBuilder, ReactiveFormsModule, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 
+import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { israeliPhoneValidator } from '../../shared/form-validation';
@@ -445,6 +446,7 @@ const MAX_GUEST_COUNT = 30;
 export class ReservationPageComponent {
   private readonly fb = inject(FormBuilder);
   private readonly data = inject(RestaurantDataService);
+  private readonly feedback = inject(FeedbackService);
 
   readonly minDate = this.todayDate();
   readonly minTime = MIN_RESERVATION_TIME;
@@ -488,11 +490,13 @@ export class ReservationPageComponent {
     ).subscribe({
       next: () => {
         this.successMessage = 'הבקשה נשלחה בהצלחה, ניצור איתך קשר לאישור סופי.';
+        this.feedback.success(this.successMessage);
         this.submitted = false;
         this.form.reset(this.defaultFormValue());
       },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לשלוח את הבקשה. בדקו את הפרטים ונסו שוב.');
+        this.feedback.error(error, this.errorMessage);
       }
     });
   }

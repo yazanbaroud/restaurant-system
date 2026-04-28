@@ -4,6 +4,7 @@ import { finalize } from 'rxjs';
 
 import { Reservation, ReservationStatus } from '../../core/models';
 import { CustomerReservationsService } from '../../core/services/customer-reservations.service';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
@@ -228,6 +229,7 @@ import { reservationStatusLabels, reservationStatusTones } from '../../shared/ui
 export class CustomerReservationDetailsPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly customerReservations = inject(CustomerReservationsService);
+  private readonly feedback = inject(FeedbackService);
   private readonly cdr = inject(ChangeDetectorRef);
   private readonly id = Number(this.route.snapshot.paramMap.get('id'));
 
@@ -300,10 +302,12 @@ export class CustomerReservationDetailsPageComponent {
       next: (reservation) => {
         this.reservation = reservation;
         this.successMessage = 'הזמנת המקום בוטלה בהצלחה.';
+        this.feedback.success(this.successMessage);
         this.cdr.detectChanges();
       },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לבטל את הזמנת המקום. נסו שוב בעוד רגע.');
+        this.feedback.error(error, this.errorMessage);
         this.cdr.detectChanges();
       }
     });

@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { finalize, map } from 'rxjs';
 
 import { Order, OrderStatus } from '../../core/models';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { OrderCardComponent } from '../../shared/components/order-card.component';
@@ -207,6 +208,7 @@ type ActiveOrderFilter = 'all' | OrderStatus.InSalads | OrderStatus.InMain;
 })
 export class ActiveOrdersPageComponent {
   private readonly data = inject(RestaurantDataService);
+  private readonly feedback = inject(FeedbackService);
   readonly OrderStatus = OrderStatus;
   updatingOrderId: number | null = null;
   errorMessage = '';
@@ -252,8 +254,12 @@ export class ActiveOrdersPageComponent {
         this.updatingOrderId = null;
       })
     ).subscribe({
+      next: () => {
+        this.feedback.success('סטטוס ההזמנה עודכן בהצלחה');
+      },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את סטטוס ההזמנה. נסו שוב בעוד רגע.');
+        this.feedback.error(error, this.errorMessage);
       }
     });
   }

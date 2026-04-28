@@ -5,6 +5,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Observable, catchError, combineLatest, finalize, map, of, startWith, tap } from 'rxjs';
 
 import { Order, Payment, PaymentMethod, PaymentStatus } from '../../core/models';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
@@ -432,6 +433,7 @@ interface PaymentViewModel {
 })
 export class AddPaymentPageComponent {
   private readonly data = inject(RestaurantDataService);
+  private readonly feedback = inject(FeedbackService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
@@ -530,6 +532,7 @@ export class AddPaymentPageComponent {
     ).subscribe({
       next: () => {
         this.successMessage = 'התשלום נוסף בהצלחה';
+        this.feedback.success(this.successMessage);
         this.submitted = false;
         this.form.markAsPristine();
         this.form.markAsUntouched();
@@ -538,6 +541,7 @@ export class AddPaymentPageComponent {
       },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לשמור את התשלום. נסו שוב בעוד רגע.');
+        this.feedback.error(error, this.errorMessage);
       }
     });
   }

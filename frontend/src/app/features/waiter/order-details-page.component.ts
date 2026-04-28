@@ -4,6 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Observable, catchError, finalize, map, of, startWith } from 'rxjs';
 
 import { Order, OrderItem, OrderStatus, PaymentStatus } from '../../core/models';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
@@ -489,6 +490,7 @@ interface OrderDetailsViewModel {
 })
 export class OrderDetailsPageComponent {
   private readonly data = inject(RestaurantDataService);
+  private readonly feedback = inject(FeedbackService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly id = Number(this.route.snapshot.paramMap.get('id'));
@@ -565,8 +567,12 @@ export class OrderDetailsPageComponent {
         this.isUpdating = false;
       })
     ).subscribe({
+      next: () => {
+        this.feedback.success('סטטוס ההזמנה עודכן בהצלחה');
+      },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את סטטוס ההזמנה. נסו שוב בעוד רגע.');
+        this.feedback.error(error, this.errorMessage);
       }
     });
   }

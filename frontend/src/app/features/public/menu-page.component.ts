@@ -7,6 +7,7 @@ import { combineLatest, debounceTime, distinctUntilChanged, map, shareReplay, st
 import { MenuCategory, MenuCategoryRecord, MenuItem, UserRole } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
 import { CustomerCartLine, CustomerCartService } from '../../core/services/customer-cart.service';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { FloatingCartComponent } from '../../shared/components/floating-cart.component';
 import { MenuItemCardComponent } from '../../shared/components/menu-item-card.component';
@@ -299,6 +300,7 @@ export class MenuPageComponent implements OnDestroy {
   private readonly data = inject(RestaurantDataService);
   private readonly auth = inject(AuthService);
   readonly cart = inject(CustomerCartService);
+  private readonly feedback = inject(FeedbackService);
   private readonly router = inject(Router);
   private feedbackTimeout: ReturnType<typeof setTimeout> | null = null;
 
@@ -483,6 +485,7 @@ export class MenuPageComponent implements OnDestroy {
   private showCartFeedback(itemId: number, message: string): void {
     this.cartMessage = message;
     this.lastChangedItemId = itemId;
+    this.feedback.success(message);
 
     if (this.feedbackTimeout) {
       clearTimeout(this.feedbackTimeout);
@@ -496,6 +499,7 @@ export class MenuPageComponent implements OnDestroy {
 
   private redirectToLogin(returnUrl = this.router.url): void {
     this.cartMessage = 'כדי להוסיף מנות לעגלה צריך להתחבר כלקוח.';
+    this.feedback.info(this.cartMessage);
     void this.router.navigate(['/login'], {
       queryParams: {
         returnUrl,

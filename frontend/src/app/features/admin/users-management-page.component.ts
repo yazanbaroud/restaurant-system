@@ -1,12 +1,13 @@
 import { AsyncPipe } from '@angular/common';
-import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { Observable, catchError, finalize, of, tap } from 'rxjs';
 
 import { User, UserRole } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
+import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
 import { roleLabels } from '../../shared/ui-labels';
@@ -205,6 +206,7 @@ import { roleLabels } from '../../shared/ui-labels';
 export class UsersManagementPageComponent {
   private readonly data = inject(RestaurantDataService);
   private readonly auth = inject(AuthService);
+  private readonly feedback = inject(FeedbackService);
 
   readonly users$: Observable<User[]>;
   readonly roleLabels = roleLabels;
@@ -249,9 +251,11 @@ export class UsersManagementPageComponent {
     ).subscribe({
       next: () => {
         this.successMessage = 'המשתמש נמחק בהצלחה';
+        this.feedback.success(this.successMessage);
       },
       error: (error: unknown) => {
         this.errorMessage = this.deleteUserErrorMessage(error);
+        this.feedback.error(error, this.errorMessage);
       }
     });
   }
@@ -300,29 +304,7 @@ export class UsersManagementPageComponent {
   }
 
   private deleteUserErrorMessage(error: unknown): string {
-    if (error instanceof HttpErrorResponse) {
-      const backendMessage = this.backendErrorMessage(error);
-      if (backendMessage) {
-        return backendMessage;
-      }
-    }
-
-    return 'לא הצלחנו למחוק את המשתמש';
-  }
-
-  private backendErrorMessage(error: HttpErrorResponse): string {
-    const payload = error.error;
-    if (typeof payload === 'string') {
-      return payload.trim();
-    }
-
-    if (payload && typeof payload === 'object') {
-      const record = payload as Record<string, unknown>;
-      const message = record['title'] ?? record['message'] ?? record['error'];
-      return typeof message === 'string' ? message.trim() : '';
-    }
-
-    return '';
+    return apiErrorMessage(error, 'לא הצלחנו למחוק את המשתמש');
   }
 
   private normalizeSearch(value: string): string {

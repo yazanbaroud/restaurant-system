@@ -3,6 +3,7 @@ import { Component, inject } from '@angular/core';
 import { BehaviorSubject, Observable, catchError, finalize, of, switchMap, tap } from 'rxjs';
 
 import { Reservation, ReservationStatus } from '../../core/models';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
@@ -202,6 +203,7 @@ interface ReservationDateRange {
 })
 export class ReservationsManagementPageComponent {
   private readonly data = inject(RestaurantDataService);
+  private readonly feedback = inject(FeedbackService);
   private readonly initialDate = this.todayLocalDate();
   private readonly dateRange$ = new BehaviorSubject<ReservationDateRange>({
     fromDate: this.initialDate,
@@ -329,8 +331,12 @@ export class ReservationsManagementPageComponent {
         this.updatingReservationId = null;
       })
     ).subscribe({
+      next: () => {
+        this.feedback.success('סטטוס הזמנת המקום עודכן בהצלחה');
+      },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את סטטוס ההזמנה. נסו שוב בעוד רגע.');
+        this.feedback.error(error, this.errorMessage);
       }
     });
   }

@@ -6,6 +6,7 @@ import { finalize } from 'rxjs';
 
 import { CustomerCartLine, CustomerCartService } from '../../core/services/customer-cart.service';
 import { CustomerOrdersService } from '../../core/services/customer-orders.service';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { OrderType } from '../../core/models';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
@@ -280,6 +281,7 @@ import { orderTypeLabels } from '../../shared/ui-labels';
 export class CartPageComponent {
   readonly cart = inject(CustomerCartService);
   private readonly customerOrders = inject(CustomerOrdersService);
+  private readonly feedback = inject(FeedbackService);
   private readonly router = inject(Router);
 
   readonly OrderType = OrderType;
@@ -361,10 +363,12 @@ export class CartPageComponent {
     ).subscribe({
       next: (order) => {
         this.cart.clear();
+        this.feedback.success('ההזמנה נשלחה בהצלחה');
         void this.router.navigate(['/orders', order.id]);
       },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לשלוח את ההזמנה. בדקו את הפרטים ונסו שוב.');
+        this.feedback.error(error, this.errorMessage);
       }
     });
   }

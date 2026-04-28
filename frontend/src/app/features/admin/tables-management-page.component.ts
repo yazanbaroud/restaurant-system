@@ -4,6 +4,7 @@ import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
 import { Table, TableStatus } from '../../core/models';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
@@ -154,6 +155,7 @@ import { TableCardComponent } from '../../shared/components/table-card.component
 })
 export class TablesManagementPageComponent {
   private readonly data = inject(RestaurantDataService);
+  private readonly feedback = inject(FeedbackService);
 
   readonly tables$ = this.data.getTables();
   readonly TableStatus = TableStatus;
@@ -175,8 +177,12 @@ export class TablesManagementPageComponent {
         this.updatingTableId = null;
       })
     ).subscribe({
+      next: () => {
+        this.feedback.success('מצב השולחן עודכן בהצלחה');
+      },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את מצב השולחן. נסו שוב בעוד רגע.');
+        this.feedback.error(error, this.errorMessage);
       }
     });
   }

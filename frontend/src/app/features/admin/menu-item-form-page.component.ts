@@ -6,6 +6,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize, shareReplay, tap } from 'rxjs';
 
 import { MenuCategoryRecord, MenuItem } from '../../core/models';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
@@ -253,6 +254,7 @@ import { controlError } from '../../shared/form-validation';
 export class MenuItemFormPageComponent implements OnInit {
   private readonly data = inject(RestaurantDataService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly feedback = inject(FeedbackService);
   private readonly fb = inject(FormBuilder);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -368,10 +370,12 @@ export class MenuItemFormPageComponent implements OnInit {
       takeUntilDestroyed(this.destroyRef)
     ).subscribe({
       next: () => {
+        this.feedback.success(this.editingItemId ? 'המנה עודכנה בהצלחה' : 'המנה נוצרה בהצלחה');
         void this.router.navigate(['/admin/menu']);
       },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לשמור את המנה. נסו שוב בעוד רגע.');
+        this.feedback.error(error, this.errorMessage);
       }
     });
   }

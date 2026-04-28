@@ -6,6 +6,7 @@ import { finalize } from 'rxjs';
 
 import { MenuItem, OrderType, Table, TableStatus } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { MenuItemCardComponent } from '../../shared/components/menu-item-card.component';
@@ -383,6 +384,7 @@ interface CartLine {
 export class CreateOrderPageComponent implements OnInit {
   private readonly data = inject(RestaurantDataService);
   private readonly auth = inject(AuthService);
+  private readonly feedback = inject(FeedbackService);
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
@@ -501,9 +503,13 @@ export class CreateOrderPageComponent implements OnInit {
         this.isSubmitting = false;
       })
     ).subscribe({
-      next: (order) => void this.router.navigate([this.orderDetailsBaseLink, order.id]),
+      next: (order) => {
+        this.feedback.success('ההזמנה נפתחה בהצלחה');
+        void this.router.navigate([this.orderDetailsBaseLink, order.id]);
+      },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לפתוח את ההזמנה. נסו שוב בעוד רגע.');
+        this.feedback.error(error, this.errorMessage);
       }
     });
   }

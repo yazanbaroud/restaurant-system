@@ -6,6 +6,7 @@ import { RouterLink } from '@angular/router';
 import { finalize, shareReplay, tap } from 'rxjs';
 
 import { MenuCategory, MenuCategoryRecord, MenuItem } from '../../core/models';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { controlError } from '../../shared/form-validation';
@@ -466,6 +467,7 @@ import { categoryLabels } from '../../shared/ui-labels';
 })
 export class MenuManagementPageComponent {
   private readonly data = inject(RestaurantDataService);
+  private readonly feedback = inject(FeedbackService);
   private readonly fb = inject(FormBuilder);
 
   readonly menuItems$ = this.data.getMenuItems();
@@ -558,9 +560,11 @@ export class MenuManagementPageComponent {
       next: () => {
         this.resetCategoryForm();
         this.categorySuccessMessage = wasEditing ? 'הקטגוריה עודכנה בהצלחה' : 'הקטגוריה נוצרה בהצלחה';
+        this.feedback.success(this.categorySuccessMessage);
       },
       error: (error: unknown) => {
         this.categoryErrorMessage = apiErrorMessage(error, 'לא הצלחנו לשמור את הקטגוריה. נסו שוב בעוד רגע.');
+        this.feedback.error(error, this.categoryErrorMessage);
       }
     });
   }
@@ -609,9 +613,11 @@ export class MenuManagementPageComponent {
       next: () => {
         this.categorySuccessMessage = 'הקטגוריה נמחקה בהצלחה';
         this.resetCategoryForm();
+        this.feedback.success(this.categorySuccessMessage);
       },
       error: (error: unknown) => {
         this.categoryErrorMessage = this.categoryDeleteErrorMessage(error);
+        this.feedback.error(error, this.categoryErrorMessage);
       }
     });
   }
@@ -628,8 +634,12 @@ export class MenuManagementPageComponent {
         this.actingItemId = null;
       })
     ).subscribe({
+      next: () => {
+        this.feedback.success(item.isAvailable ? 'המנה הוסתרה בהצלחה' : 'המנה הוחזרה לתפריט בהצלחה');
+      },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את זמינות המנה. נסו שוב בעוד רגע.');
+        this.feedback.error(error, this.errorMessage);
       }
     });
   }
@@ -646,8 +656,12 @@ export class MenuManagementPageComponent {
         this.actingItemId = null;
       })
     ).subscribe({
+      next: () => {
+        this.feedback.success('המנה נמחקה בהצלחה');
+      },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו למחוק את המנה. נסו שוב בעוד רגע.');
+        this.feedback.error(error, this.errorMessage);
       }
     });
   }

@@ -4,6 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 
 import { AuthService } from '../../core/services/auth.service';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { controlError, israeliPhoneValidator, strongPasswordValidator } from '../../shared/form-validation';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
@@ -103,6 +104,7 @@ import { roleLabels } from '../../shared/ui-labels';
 export class AccountPageComponent {
   readonly auth = inject(AuthService);
   private readonly fb = inject(FormBuilder);
+  private readonly feedback = inject(FeedbackService);
 
   readonly roleLabels = roleLabels;
   readonly profileForm = this.fb.nonNullable.group({
@@ -157,9 +159,11 @@ export class AccountPageComponent {
       next: () => {
         this.profileForm.markAsPristine();
         this.profileMessage = 'הפרטים עודכנו בהצלחה.';
+        this.feedback.success(this.profileMessage);
       },
       error: (error: unknown) => {
-        this.profileErrorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את הפרטים.');
+        this.profileErrorMessage = apiErrorMessage(error);
+        this.feedback.error(error);
       }
     });
   }
@@ -191,9 +195,11 @@ export class AccountPageComponent {
         this.passwordForm.reset();
         this.passwordSubmitted = false;
         this.passwordMessage = 'הסיסמה עודכנה בהצלחה';
+        this.feedback.success(this.passwordMessage);
       },
       error: (error: unknown) => {
-        this.passwordErrorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את הסיסמה');
+        this.passwordErrorMessage = apiErrorMessage(error);
+        this.feedback.error(error);
       }
     });
   }

@@ -6,6 +6,7 @@ import { catchError, combineLatest, map, of, shareReplay, startWith } from 'rxjs
 import { MenuCategory, MenuItem, UserRole } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
 import { CustomerCartLine, CustomerCartService } from '../../core/services/customer-cart.service';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { FloatingCartComponent } from '../../shared/components/floating-cart.component';
 import { MenuItemCardComponent } from '../../shared/components/menu-item-card.component';
@@ -226,6 +227,7 @@ export class DishDetailsPageComponent implements OnDestroy {
   private readonly data = inject(RestaurantDataService);
   private readonly auth = inject(AuthService);
   readonly cart = inject(CustomerCartService);
+  private readonly feedback = inject(FeedbackService);
   private readonly router = inject(Router);
   private readonly id = Number(this.route.snapshot.paramMap.get('id'));
   private feedbackTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -304,6 +306,7 @@ export class DishDetailsPageComponent implements OnDestroy {
 
   private showCartFeedback(message: string): void {
     this.cartMessage = message;
+    this.feedback.success(message);
 
     if (this.feedbackTimeout) {
       clearTimeout(this.feedbackTimeout);
@@ -316,6 +319,7 @@ export class DishDetailsPageComponent implements OnDestroy {
 
   private redirectToLogin(returnUrl = this.router.url): void {
     this.cartMessage = 'כדי להוסיף מנות לעגלה צריך להתחבר כלקוח.';
+    this.feedback.info(this.cartMessage);
     void this.router.navigate(['/login'], {
       queryParams: {
         returnUrl,

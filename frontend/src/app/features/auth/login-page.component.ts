@@ -5,6 +5,7 @@ import { finalize } from 'rxjs';
 
 import { User, UserRole } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { controlError } from '../../shared/form-validation';
 import { roleLabels } from '../../shared/ui-labels';
@@ -59,6 +60,7 @@ import { roleLabels } from '../../shared/ui-labels';
 })
 export class LoginPageComponent {
   private readonly auth = inject(AuthService);
+  private readonly feedback = inject(FeedbackService);
   private readonly fb = inject(FormBuilder);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
@@ -100,6 +102,7 @@ export class LoginPageComponent {
       next: (user) => this.navigateAfterLogin(user),
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'ההתחברות נכשלה. בדקו אימייל וסיסמה ונסו שוב.');
+        this.feedback.error(error, this.errorMessage);
       }
     });
   }

@@ -6,6 +6,22 @@ function textValue(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function isTechnicalMessage(message: string): boolean {
+  const normalized = message.toLowerCase();
+  return normalized.includes('http failure response') ||
+    normalized.includes('unknown error') ||
+    normalized.includes('networkerror') ||
+    normalized.includes('syntaxerror') ||
+    normalized.includes('typeerror') ||
+    normalized.includes('exception') ||
+    normalized.includes('stack trace');
+}
+
+function friendlyMessage(value: unknown): string {
+  const message = textValue(value);
+  return message && !isTechnicalMessage(message) ? message : '';
+}
+
 function validationErrorsMessage(value: unknown): string {
   const errors = asRecord(value);
   if (!errors) {
@@ -14,13 +30,13 @@ function validationErrorsMessage(value: unknown): string {
 
   for (const messages of Object.values(errors)) {
     if (Array.isArray(messages)) {
-      const message = messages.map(textValue).find(Boolean);
+      const message = messages.map(friendlyMessage).find(Boolean);
       if (message) {
         return message;
       }
     }
 
-    const message = textValue(messages);
+    const message = friendlyMessage(messages);
     if (message) {
       return message;
     }
@@ -30,7 +46,7 @@ function validationErrorsMessage(value: unknown): string {
 }
 
 function payloadMessage(payload: unknown): string {
-  const directMessage = textValue(payload);
+  const directMessage = friendlyMessage(payload);
   if (directMessage) {
     return directMessage;
   }
@@ -45,10 +61,13 @@ function payloadMessage(payload: unknown): string {
     return validationMessage;
   }
 
-  return textValue(record['message']) || textValue(record['title']) || textValue(record['detail']);
+  return friendlyMessage(record['message']) || friendlyMessage(record['title']) || friendlyMessage(record['detail']);
 }
 
-export function apiErrorMessage(error: unknown, fallback: string): string {
+export const DEFAULT_API_ERROR_MESSAGE = 'אירעה שגיאה, נסו שוב.';
+export const DEFAULT_SUCCESS_MESSAGE = 'הפעולה בוצעה בהצלחה.';
+
+export function apiErrorMessage(error: unknown, fallback = DEFAULT_API_ERROR_MESSAGE): string {
   const record = asRecord(error);
   const nestedMessage = record ? payloadMessage(record['error']) : '';
 

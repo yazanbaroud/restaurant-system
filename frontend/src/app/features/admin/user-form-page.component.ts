@@ -6,6 +6,7 @@ import { finalize, of, switchMap } from 'rxjs';
 
 import { User, UserRole } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
@@ -202,6 +203,7 @@ export class UserFormPageComponent implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly data = inject(RestaurantDataService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly feedback = inject(FeedbackService);
   private readonly fb = inject(FormBuilder);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -307,10 +309,12 @@ export class UserFormPageComponent implements OnInit {
       takeUntilDestroyed(this.destroyRef)
     ).subscribe({
       next: () => {
+        this.feedback.success(this.editingUserId ? 'המשתמש עודכן בהצלחה' : 'המשתמש נוצר בהצלחה');
         void this.router.navigate(['/admin/users']);
       },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לשמור את המשתמש. בדקו את הפרטים ונסו שוב.');
+        this.feedback.error(error, this.errorMessage);
       }
     });
   }
@@ -357,11 +361,13 @@ export class UserFormPageComponent implements OnInit {
       takeUntilDestroyed(this.destroyRef)
     ).subscribe({
       next: () => {
-        this.passwordMessage = 'הסיסמה עודכנה בהצלחה';
         this.cancelPasswordReset();
+        this.passwordMessage = 'הסיסמה עודכנה בהצלחה';
+        this.feedback.success(this.passwordMessage);
       },
       error: (error: unknown) => {
         this.passwordError = apiErrorMessage(error, 'לא הצלחנו לעדכן את הסיסמה');
+        this.feedback.error(error, this.passwordError);
       }
     });
   }

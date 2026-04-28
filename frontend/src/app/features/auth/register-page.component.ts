@@ -5,6 +5,7 @@ import { finalize } from 'rxjs';
 
 import { UserRole } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
+import { FeedbackService } from '../../core/services/feedback.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { controlError, israeliPhoneValidator, strongPasswordValidator } from '../../shared/form-validation';
 
@@ -71,6 +72,7 @@ import { controlError, israeliPhoneValidator, strongPasswordValidator } from '..
 export class RegisterPageComponent {
   private readonly fb = inject(FormBuilder);
   private readonly auth = inject(AuthService);
+  private readonly feedback = inject(FeedbackService);
   private readonly router = inject(Router);
 
   readonly form = this.fb.nonNullable.group({
@@ -103,9 +105,13 @@ export class RegisterPageComponent {
         this.isSubmitting = false;
       })
     ).subscribe({
-      next: () => void this.router.navigateByUrl('/reservation'),
+      next: () => {
+        this.feedback.success('ההרשמה בוצעה בהצלחה');
+        void this.router.navigateByUrl('/reservation');
+      },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'ההרשמה נכשלה. בדקו את הפרטים ונסו שוב.');
+        this.feedback.error(error, this.errorMessage);
       }
     });
   }

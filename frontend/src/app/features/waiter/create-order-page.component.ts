@@ -477,9 +477,15 @@ export class CreateOrderPageComponent implements OnInit {
   }
 
   submit(): void {
+    if (this.isSubmitting) {
+      return;
+    }
+
     if (!this.canSubmit) {
       this.submitted = true;
       this.form.markAllAsTouched();
+      this.errorMessage = this.createSubmitErrorMessage();
+      this.feedback.error(null, this.errorMessage);
       return;
     }
 
@@ -504,7 +510,7 @@ export class CreateOrderPageComponent implements OnInit {
       })
     ).subscribe({
       next: (order) => {
-        this.feedback.success('ההזמנה נפתחה בהצלחה');
+        this.feedback.success();
         void this.router.navigate([this.orderDetailsBaseLink, order.id]);
       },
       error: (error: unknown) => {
@@ -516,5 +522,17 @@ export class CreateOrderPageComponent implements OnInit {
 
   fieldError(controlName: keyof typeof this.form.controls): string {
     return controlError(this.form.controls[controlName], this.submitted);
+  }
+
+  private createSubmitErrorMessage(): string {
+    if (this.cart.length === 0) {
+      return 'יש להוסיף לפחות מנה אחת להזמנה.';
+    }
+
+    if (this.form.controls.orderType.value === OrderType.DineIn && this.selectedTableIds.size === 0) {
+      return 'יש לבחור שולחן להזמנה במסעדה.';
+    }
+
+    return 'בדקו את פרטי ההזמנה ונסו שוב.';
   }
 }

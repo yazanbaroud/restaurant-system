@@ -64,8 +64,8 @@ function payloadMessage(payload: unknown): string {
   return friendlyMessage(record['message']) || friendlyMessage(record['title']) || friendlyMessage(record['detail']);
 }
 
-export const DEFAULT_API_ERROR_MESSAGE = 'אירעה שגיאה, נסו שוב.';
-export const DEFAULT_SUCCESS_MESSAGE = 'הפעולה בוצעה בהצלחה.';
+export const DEFAULT_API_ERROR_MESSAGE = 'אירעה שגיאה, נסה שוב';
+export const DEFAULT_SUCCESS_MESSAGE = 'הפעולה בוצעה בהצלחה';
 
 export function apiErrorMessage(error: unknown, fallback = DEFAULT_API_ERROR_MESSAGE): string {
   const record = asRecord(error);

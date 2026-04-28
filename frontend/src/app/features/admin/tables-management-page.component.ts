@@ -178,7 +178,7 @@ export class TablesManagementPageComponent {
       })
     ).subscribe({
       next: () => {
-        this.feedback.success('מצב השולחן עודכן בהצלחה');
+        this.feedback.success();
       },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את מצב השולחן. נסו שוב בעוד רגע.');

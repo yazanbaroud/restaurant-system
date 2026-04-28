@@ -148,6 +148,8 @@ export class TableFormPageComponent implements OnInit {
     if (this.form.invalid) {
       this.submitted = true;
       this.form.markAllAsTouched();
+      this.errorMessage = 'בדקו את פרטי השולחן ונסו שוב.';
+      this.feedback.error(null, this.errorMessage);
       return;
     }
 
@@ -177,7 +179,7 @@ export class TableFormPageComponent implements OnInit {
       takeUntilDestroyed(this.destroyRef)
     ).subscribe({
       next: () => {
-        this.feedback.success(this.editingTableId ? 'השולחן עודכן בהצלחה' : 'השולחן נוצר בהצלחה');
+        this.feedback.success();
         void this.router.navigate(['/admin/tables']);
       },
       error: (error: unknown) => {

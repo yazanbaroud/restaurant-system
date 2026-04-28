@@ -88,6 +88,7 @@ export class LoginPageComponent {
     if (this.form.invalid) {
       this.submitted = true;
       this.form.markAllAsTouched();
+      this.feedback.error(null, 'מלאו אימייל וסיסמה תקינים.');
       return;
     }
 
@@ -99,7 +100,10 @@ export class LoginPageComponent {
         this.isSubmitting = false;
       })
     ).subscribe({
-      next: (user) => this.navigateAfterLogin(user),
+      next: (user) => {
+        this.feedback.success();
+        this.navigateAfterLogin(user);
+      },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'ההתחברות נכשלה. בדקו אימייל וסיסמה ונסו שוב.');
         this.feedback.error(error, this.errorMessage);

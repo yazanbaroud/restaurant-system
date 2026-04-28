@@ -479,6 +479,8 @@ export class ReservationPageComponent {
 
     if (this.form.invalid) {
       this.form.markAllAsTouched();
+      this.errorMessage = 'בדקו את השדות המסומנים ונסו שוב.';
+      this.feedback.error(null, this.errorMessage);
       return;
     }
 
@@ -490,7 +492,7 @@ export class ReservationPageComponent {
     ).subscribe({
       next: () => {
         this.successMessage = 'הבקשה נשלחה בהצלחה, ניצור איתך קשר לאישור סופי.';
-        this.feedback.success(this.successMessage);
+        this.feedback.success();
         this.submitted = false;
         this.form.reset(this.defaultFormValue());
       },

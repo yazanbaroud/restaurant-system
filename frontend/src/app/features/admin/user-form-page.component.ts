@@ -269,6 +269,7 @@ export class UserFormPageComponent implements OnInit {
       this.errorMessage = this.editingUserId
         ? 'מלאו את כל פרטי המשתמש הנדרשים.'
         : 'מלאו את כל הפרטים וסיסמה תקינה.';
+      this.feedback.error(null, this.errorMessage);
       return;
     }
 
@@ -309,7 +310,7 @@ export class UserFormPageComponent implements OnInit {
       takeUntilDestroyed(this.destroyRef)
     ).subscribe({
       next: () => {
-        this.feedback.success(this.editingUserId ? 'המשתמש עודכן בהצלחה' : 'המשתמש נוצר בהצלחה');
+        this.feedback.success();
         void this.router.navigate(['/admin/users']);
       },
       error: (error: unknown) => {
@@ -348,6 +349,10 @@ export class UserFormPageComponent implements OnInit {
 
     if (this.passwordResetForm.invalid || this.isResettingPassword) {
       this.passwordResetForm.markAllAsTouched();
+      if (this.passwordResetForm.invalid) {
+        this.passwordError = 'בדקו את פרטי הסיסמה ונסו שוב.';
+        this.feedback.error(null, this.passwordError);
+      }
       return;
     }
 
@@ -363,7 +368,7 @@ export class UserFormPageComponent implements OnInit {
       next: () => {
         this.cancelPasswordReset();
         this.passwordMessage = 'הסיסמה עודכנה בהצלחה';
-        this.feedback.success(this.passwordMessage);
+        this.feedback.success();
       },
       error: (error: unknown) => {
         this.passwordError = apiErrorMessage(error, 'לא הצלחנו לעדכן את הסיסמה');

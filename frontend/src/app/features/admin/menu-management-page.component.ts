@@ -529,6 +529,8 @@ export class MenuManagementPageComponent {
     this.categoryFormSubmitted = true;
     if (this.categoryForm.invalid) {
       this.categoryForm.markAllAsTouched();
+      this.categoryErrorMessage = 'בדקו את פרטי הקטגוריה ונסו שוב.';
+      this.feedback.error(null, this.categoryErrorMessage);
       return;
     }
 
@@ -537,6 +539,7 @@ export class MenuManagementPageComponent {
     if (this.categoryNameExists(categoryName)) {
       this.categoryErrorMessage = 'כבר קיימת קטגוריה בשם הזה.';
       this.categoryForm.markAllAsTouched();
+      this.feedback.error(null, this.categoryErrorMessage);
       return;
     }
 
@@ -560,7 +563,7 @@ export class MenuManagementPageComponent {
       next: () => {
         this.resetCategoryForm();
         this.categorySuccessMessage = wasEditing ? 'הקטגוריה עודכנה בהצלחה' : 'הקטגוריה נוצרה בהצלחה';
-        this.feedback.success(this.categorySuccessMessage);
+        this.feedback.success();
       },
       error: (error: unknown) => {
         this.categoryErrorMessage = apiErrorMessage(error, 'לא הצלחנו לשמור את הקטגוריה. נסו שוב בעוד רגע.');
@@ -613,7 +616,7 @@ export class MenuManagementPageComponent {
       next: () => {
         this.categorySuccessMessage = 'הקטגוריה נמחקה בהצלחה';
         this.resetCategoryForm();
-        this.feedback.success(this.categorySuccessMessage);
+        this.feedback.success();
       },
       error: (error: unknown) => {
         this.categoryErrorMessage = this.categoryDeleteErrorMessage(error);
@@ -635,7 +638,7 @@ export class MenuManagementPageComponent {
       })
     ).subscribe({
       next: () => {
-        this.feedback.success(item.isAvailable ? 'המנה הוסתרה בהצלחה' : 'המנה הוחזרה לתפריט בהצלחה');
+        this.feedback.success();
       },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את זמינות המנה. נסו שוב בעוד רגע.');
@@ -657,7 +660,7 @@ export class MenuManagementPageComponent {
       })
     ).subscribe({
       next: () => {
-        this.feedback.success('המנה נמחקה בהצלחה');
+        this.feedback.success();
       },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו למחוק את המנה. נסו שוב בעוד רגע.');

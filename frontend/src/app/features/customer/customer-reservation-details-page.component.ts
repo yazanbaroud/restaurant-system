@@ -302,7 +302,7 @@ export class CustomerReservationDetailsPageComponent {
       next: (reservation) => {
         this.reservation = reservation;
         this.successMessage = 'הזמנת המקום בוטלה בהצלחה.';
-        this.feedback.success(this.successMessage);
+        this.feedback.success();
         this.cdr.detectChanges();
       },
       error: (error: unknown) => {

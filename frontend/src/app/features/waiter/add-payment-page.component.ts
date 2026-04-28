@@ -515,8 +515,14 @@ export class AddPaymentPageComponent {
     const vm = this.latestViewModel;
     this.submitted = true;
 
+    if (this.isSubmitting) {
+      return;
+    }
+
     if (!vm || !this.canSubmit(vm)) {
       this.form.markAllAsTouched();
+      this.errorMessage = this.createSubmitErrorMessage(vm);
+      this.feedback.error(null, this.errorMessage);
       return;
     }
 
@@ -532,7 +538,7 @@ export class AddPaymentPageComponent {
     ).subscribe({
       next: () => {
         this.successMessage = 'התשלום נוסף בהצלחה';
-        this.feedback.success(this.successMessage);
+        this.feedback.success();
         this.submitted = false;
         this.form.markAsPristine();
         this.form.markAsUntouched();
@@ -596,5 +602,25 @@ export class AddPaymentPageComponent {
   private shouldShowAmountError(): boolean {
     const control = this.form.controls.amount;
     return this.submitted || control.touched || control.dirty;
+  }
+
+  private createSubmitErrorMessage(vm: PaymentViewModel | null): string {
+    if (!vm?.order) {
+      return 'לא מצאנו את ההזמנה לתשלום.';
+    }
+
+    if (vm.isPaid || vm.remainingBalance <= 0) {
+      return 'ההזמנה שולמה במלואה.';
+    }
+
+    if (this.amountValue <= 0 || this.form.controls.amount.invalid) {
+      return 'סכום התשלום חייב להיות גדול מ־0.';
+    }
+
+    if (this.amountValue > vm.remainingBalance) {
+      return 'לא ניתן לשלם יותר מהיתרה שנותרה.';
+    }
+
+    return 'בדקו את פרטי התשלום ונסו שוב.';
   }
 }

@@ -91,6 +91,7 @@ export class RegisterPageComponent {
     if (this.form.invalid) {
       this.submitted = true;
       this.form.markAllAsTouched();
+      this.feedback.error(null, 'בדקו את השדות המסומנים ונסו שוב.');
       return;
     }
 
@@ -106,7 +107,7 @@ export class RegisterPageComponent {
       })
     ).subscribe({
       next: () => {
-        this.feedback.success('ההרשמה בוצעה בהצלחה');
+        this.feedback.success();
         void this.router.navigateByUrl('/reservation');
       },
       error: (error: unknown) => {

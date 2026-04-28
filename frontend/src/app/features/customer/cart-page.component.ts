@@ -337,11 +337,13 @@ export class CartPageComponent {
 
     if (!lines.length) {
       this.errorMessage = 'יש להוסיף לפחות מנה אחת להזמנה.';
+      this.feedback.error(null, this.errorMessage);
       return;
     }
 
     if (this.orderType === OrderType.DineIn && !this.selectedTableId) {
       this.errorMessage = 'יש לבחור שולחן להזמנה במסעדה.';
+      this.feedback.error(null, this.errorMessage);
       return;
     }
 
@@ -363,7 +365,7 @@ export class CartPageComponent {
     ).subscribe({
       next: (order) => {
         this.cart.clear();
-        this.feedback.success('ההזמנה נשלחה בהצלחה');
+        this.feedback.success();
         void this.router.navigate(['/orders', order.id]);
       },
       error: (error: unknown) => {

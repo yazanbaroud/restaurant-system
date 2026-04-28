@@ -485,7 +485,7 @@ export class MenuPageComponent implements OnDestroy {
   private showCartFeedback(itemId: number, message: string): void {
     this.cartMessage = message;
     this.lastChangedItemId = itemId;
-    this.feedback.success(message);
+    this.feedback.success();
 
     if (this.feedbackTimeout) {
       clearTimeout(this.feedbackTimeout);

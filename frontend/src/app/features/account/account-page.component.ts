@@ -145,6 +145,9 @@ export class AccountPageComponent {
     this.profileSubmitted = true;
     if (this.profileForm.invalid || this.isProfileSubmitting) {
       this.profileForm.markAllAsTouched();
+      if (this.profileForm.invalid) {
+        this.feedback.error(null, 'בדקו את פרטי הפרופיל ונסו שוב.');
+      }
       return;
     }
 
@@ -159,11 +162,11 @@ export class AccountPageComponent {
       next: () => {
         this.profileForm.markAsPristine();
         this.profileMessage = 'הפרטים עודכנו בהצלחה.';
-        this.feedback.success(this.profileMessage);
+        this.feedback.success();
       },
       error: (error: unknown) => {
         this.profileErrorMessage = apiErrorMessage(error);
-        this.feedback.error(error);
+        this.feedback.error(error, this.profileErrorMessage);
       }
     });
   }
@@ -177,6 +180,9 @@ export class AccountPageComponent {
 
     if (this.passwordForm.invalid || this.isPasswordSubmitting) {
       this.passwordForm.markAllAsTouched();
+      if (this.passwordForm.invalid) {
+        this.feedback.error(null, 'בדקו את פרטי הסיסמה ונסו שוב.');
+      }
       return;
     }
 
@@ -195,11 +201,11 @@ export class AccountPageComponent {
         this.passwordForm.reset();
         this.passwordSubmitted = false;
         this.passwordMessage = 'הסיסמה עודכנה בהצלחה';
-        this.feedback.success(this.passwordMessage);
+        this.feedback.success();
       },
       error: (error: unknown) => {
         this.passwordErrorMessage = apiErrorMessage(error);
-        this.feedback.error(error);
+        this.feedback.error(error, this.passwordErrorMessage);
       }
     });
   }

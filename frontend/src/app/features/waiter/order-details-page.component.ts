@@ -568,7 +568,7 @@ export class OrderDetailsPageComponent {
       })
     ).subscribe({
       next: () => {
-        this.feedback.success('סטטוס ההזמנה עודכן בהצלחה');
+        this.feedback.success();
       },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את סטטוס ההזמנה. נסו שוב בעוד רגע.');

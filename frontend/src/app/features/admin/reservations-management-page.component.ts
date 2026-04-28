@@ -321,6 +321,7 @@ export class ReservationsManagementPageComponent {
     const restaurantNotes = change.restaurantNotes?.trim() || this.restaurantNoteForStatus(change.status);
     if (change.status === ReservationStatus.Rejected && !restaurantNotes) {
       this.errorMessage = 'נא להזין סיבת דחייה לפני עדכון ההזמנה.';
+      this.feedback.error(null, this.errorMessage);
       return;
     }
 
@@ -332,7 +333,7 @@ export class ReservationsManagementPageComponent {
       })
     ).subscribe({
       next: () => {
-        this.feedback.success('סטטוס הזמנת המקום עודכן בהצלחה');
+        this.feedback.success();
       },
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את סטטוס ההזמנה. נסו שוב בעוד רגע.');

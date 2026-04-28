@@ -339,11 +339,14 @@ export class MenuItemFormPageComponent implements OnInit {
     if (this.menuItemCreationBlocked()) {
       this.errorMessage = 'יש ליצור קטגוריה פעילה לפני יצירת מנה.';
       this.form.markAllAsTouched();
+      this.feedback.error(null, this.errorMessage);
       return;
     }
 
     if (this.form.invalid) {
+      this.errorMessage = 'בדקו את פרטי המנה ונסו שוב.';
       this.form.markAllAsTouched();
+      this.feedback.error(null, this.errorMessage);
       return;
     }
 
@@ -370,7 +373,7 @@ export class MenuItemFormPageComponent implements OnInit {
       takeUntilDestroyed(this.destroyRef)
     ).subscribe({
       next: () => {
-        this.feedback.success(this.editingItemId ? 'המנה עודכנה בהצלחה' : 'המנה נוצרה בהצלחה');
+        this.feedback.success();
         void this.router.navigate(['/admin/menu']);
       },
       error: (error: unknown) => {

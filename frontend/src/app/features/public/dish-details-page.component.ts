@@ -306,7 +306,7 @@ export class DishDetailsPageComponent implements OnDestroy {
 
   private showCartFeedback(message: string): void {
     this.cartMessage = message;
-    this.feedback.success(message);
+    this.feedback.success();
 
     if (this.feedbackTimeout) {
       clearTimeout(this.feedbackTimeout);

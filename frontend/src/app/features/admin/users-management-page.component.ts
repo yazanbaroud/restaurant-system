@@ -251,7 +251,7 @@ export class UsersManagementPageComponent {
     ).subscribe({
       next: () => {
         this.successMessage = 'המשתמש נמחק בהצלחה';
-        this.feedback.success(this.successMessage);
+        this.feedback.success();
       },
       error: (error: unknown) => {
         this.errorMessage = this.deleteUserErrorMessage(error);

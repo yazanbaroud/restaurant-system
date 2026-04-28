@@ -2,7 +2,7 @@ import { AsyncPipe, CurrencyPipe } from '@angular/common';
 import { Component, OnInit, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize } from 'rxjs';
+import { catchError, finalize, Observable, of } from 'rxjs';
 
 import { MenuItem, OrderType, Table, TableStatus } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
@@ -392,8 +392,12 @@ export class CreateOrderPageComponent implements OnInit {
   readonly OrderType = OrderType;
   readonly TableStatus = TableStatus;
   readonly orderTypeLabels = orderTypeLabels;
-  readonly menuItems$ = this.data.getAvailableMenuItems();
-  readonly tables$ = this.data.getTables();
+  readonly menuItems$ = this.data.getAvailableMenuItems().pipe(
+    catchError((error) => this.loadFallback<MenuItem>(error, 'לא הצלחנו לטעון את התפריט. נסו לרענן בעוד רגע.'))
+  );
+  readonly tables$ = this.data.getTables().pipe(
+    catchError((error) => this.loadFallback<Table>(error, 'לא הצלחנו לטעון את השולחנות. נסו לרענן בעוד רגע.'))
+  );
 
   readonly form = this.fb.nonNullable.group({
     orderType: [OrderType.DineIn, Validators.required],
@@ -534,5 +538,11 @@ export class CreateOrderPageComponent implements OnInit {
     }
 
     return 'בדקו את פרטי ההזמנה ונסו שוב.';
+  }
+
+  private loadFallback<T>(error: unknown, message: string): Observable<T[]> {
+    this.errorMessage = message;
+    this.feedback.error(error, message);
+    return of([]);
   }
 }

@@ -1,7 +1,7 @@
 import { AsyncPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { finalize } from 'rxjs';
+import { catchError, finalize, of } from 'rxjs';
 
 import { Table, TableStatus } from '../../core/models';
 import { FeedbackService } from '../../core/services/feedback.service';
@@ -157,7 +157,13 @@ export class TablesManagementPageComponent {
   private readonly data = inject(RestaurantDataService);
   private readonly feedback = inject(FeedbackService);
 
-  readonly tables$ = this.data.getTables();
+  readonly tables$ = this.data.getTables().pipe(
+    catchError((error) => {
+      this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לטעון את השולחנות. נסו לרענן בעוד רגע.');
+      this.feedback.error(error, this.errorMessage);
+      return of([]);
+    })
+  );
   readonly TableStatus = TableStatus;
 
   updatingTableId: number | null = null;

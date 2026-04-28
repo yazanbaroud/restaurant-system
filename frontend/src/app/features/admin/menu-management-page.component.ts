@@ -3,7 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { finalize, shareReplay, tap } from 'rxjs';
+import { catchError, finalize, of, shareReplay, tap } from 'rxjs';
 
 import { MenuCategory, MenuCategoryRecord, MenuItem } from '../../core/models';
 import { FeedbackService } from '../../core/services/feedback.service';
@@ -470,12 +470,23 @@ export class MenuManagementPageComponent {
   private readonly feedback = inject(FeedbackService);
   private readonly fb = inject(FormBuilder);
 
-  readonly menuItems$ = this.data.getMenuItems();
+  readonly menuItems$ = this.data.getMenuItems().pipe(
+    catchError((error) => {
+      this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לטעון את התפריט. נסו לרענן בעוד רגע.');
+      this.feedback.error(error, this.errorMessage);
+      return of([]);
+    })
+  );
   readonly categoryLabels = categoryLabels;
   private latestCategories: MenuCategoryRecord[] = [];
   readonly categories$ = this.data.getMenuCategories().pipe(
     tap((categories) => {
       this.latestCategories = categories;
+    }),
+    catchError((error) => {
+      this.categoryErrorMessage = apiErrorMessage(error, 'לא הצלחנו לטעון את הקטגוריות. נסו לרענן בעוד רגע.');
+      this.feedback.error(error, this.categoryErrorMessage);
+      return of([]);
     }),
     shareReplay({ bufferSize: 1, refCount: true })
   );

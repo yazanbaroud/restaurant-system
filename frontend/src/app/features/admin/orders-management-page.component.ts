@@ -1,7 +1,7 @@
 import { AsyncPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { BehaviorSubject, Observable, switchMap } from 'rxjs';
+import { BehaviorSubject, catchError, Observable, of, switchMap, tap } from 'rxjs';
 
 import { Order, OrderStatus, PaymentStatus } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
@@ -28,6 +28,13 @@ interface OrdersDateRange {
         title="כל הזמנות המסעדה"
         subtitle="חיפוש וסינון לפי לקוח, מספר הזמנה, תאריך, סטטוס ותשלום."
       />
+
+      @if (loadErrorMessage) {
+        <div class="empty-state">
+          <h2>{{ loadErrorMessage }}</h2>
+          <p>בדקו את החיבור לשרת ונסו לרענן את העמוד.</p>
+        </div>
+      }
 
       @if (orders$ | async; as orders) {
         @if (filteredOrders(orders); as visibleOrders) {
@@ -198,7 +205,17 @@ export class OrdersManagementPageComponent {
   });
 
   readonly orders$: Observable<Order[]> = this.dateRange$.pipe(
-    switchMap(({ fromDate, toDate }) => this.data.getOrders(fromDate, toDate))
+    switchMap(({ fromDate, toDate }) =>
+      this.data.getOrders(fromDate, toDate).pipe(
+        tap(() => {
+          this.loadErrorMessage = '';
+        }),
+        catchError(() => {
+          this.loadErrorMessage = 'לא הצלחנו לטעון את ההזמנות.';
+          return of([]);
+        })
+      )
+    )
   );
   readonly filters: { value: OrderFilter; label: string }[] = [
     { value: 'all', label: 'הכל' },
@@ -216,6 +233,7 @@ export class OrdersManagementPageComponent {
   selectedFromDate = this.defaultDate;
   selectedToDate = this.defaultDate;
   searchTerm = '';
+  loadErrorMessage = '';
 
   filteredOrders(orders: Order[]): Order[] {
     const search = this.normalizeSearch(this.searchTerm);

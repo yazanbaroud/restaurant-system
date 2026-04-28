@@ -1,7 +1,7 @@
 import { AsyncPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { finalize, map } from 'rxjs';
+import { catchError, finalize, map, of } from 'rxjs';
 
 import { Order, OrderStatus } from '../../core/models';
 import { FeedbackService } from '../../core/services/feedback.service';
@@ -216,7 +216,12 @@ export class ActiveOrdersPageComponent {
   searchTerm = '';
 
   readonly activeOrders$ = this.data.getOrders().pipe(
-    map((orders) => orders.filter((order) => [OrderStatus.InSalads, OrderStatus.InMain].includes(order.status)))
+    map((orders) => orders.filter((order) => [OrderStatus.InSalads, OrderStatus.InMain].includes(order.status))),
+    catchError((error) => {
+      this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לטעון את ההזמנות הפעילות. נסו לרענן בעוד רגע.');
+      this.feedback.error(error, this.errorMessage);
+      return of([]);
+    })
   );
 
   filteredOrders(orders: Order[]): Order[] {

@@ -1,6 +1,6 @@
 import { AsyncPipe, CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
-import { BehaviorSubject, combineLatest, map, switchMap } from 'rxjs';
+import { BehaviorSubject, catchError, combineLatest, map, of, switchMap } from 'rxjs';
 
 import { Order, Payment, PaymentMethod } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
@@ -16,6 +16,7 @@ interface PaymentsViewModel {
   rows: PaymentRow[];
   totalCount: number;
   totalAmount: number;
+  hasError: boolean;
 }
 
 @Component({
@@ -60,7 +61,13 @@ interface PaymentsViewModel {
           </div>
         </div>
 
-        @if (vm.rows.length) {
+        @if (vm.hasError) {
+          <div class="empty-state">
+            <h2>לא הצלחנו לטעון את התשלומים</h2>
+            <p>בדקו את החיבור לשרת ונסו שוב.</p>
+            <button type="button" class="btn btn-ghost" (click)="reloadPage()">רענון</button>
+          </div>
+        } @else if (vm.rows.length) {
           <div class="table-like payments-table">
             <div class="table-like__head">
               <span>הזמנה</span>
@@ -187,7 +194,8 @@ export class PaymentsTrackingPageComponent {
     this.data.getOrders(),
     this.methodFilter$
   ]).pipe(
-    map(([payments, orders, methodFilter]) => this.createViewModel(payments, orders, methodFilter))
+    map(([payments, orders, methodFilter]) => this.createViewModel(payments, orders, methodFilter)),
+    catchError(() => of(this.errorViewModel()))
   );
 
   setDateFilter(date: string): void {
@@ -216,6 +224,12 @@ export class PaymentsTrackingPageComponent {
     return String(method);
   }
 
+  reloadPage(): void {
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
+  }
+
   private createViewModel(payments: Payment[], orders: Order[], methodFilter: PaymentMethod | 'all'): PaymentsViewModel {
     const rows = payments
       .filter((payment) => methodFilter === 'all' || payment.method === methodFilter)
@@ -227,7 +241,17 @@ export class PaymentsTrackingPageComponent {
     return {
       rows,
       totalCount: rows.length,
-      totalAmount: rows.reduce((sum, row) => sum + row.payment.amount, 0)
+      totalAmount: rows.reduce((sum, row) => sum + row.payment.amount, 0),
+      hasError: false
+    };
+  }
+
+  private errorViewModel(): PaymentsViewModel {
+    return {
+      rows: [],
+      totalCount: 0,
+      totalAmount: 0,
+      hasError: true
     };
   }
 

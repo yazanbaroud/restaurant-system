@@ -1,6 +1,6 @@
 import { AsyncPipe, CurrencyPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
-import { BehaviorSubject, combineLatest, map, switchMap } from 'rxjs';
+import { BehaviorSubject, catchError, combineLatest, map, of, switchMap } from 'rxjs';
 
 import {
   DashboardSummary,
@@ -28,6 +28,7 @@ interface DashboardViewModel {
   reports: ReportsSummary;
   orders: Order[];
   reservations: Reservation[];
+  hasError: boolean;
 }
 
 @Component({
@@ -50,6 +51,14 @@ interface DashboardViewModel {
       />
 
       @if (vm$ | async; as vm) {
+        @if (vm.hasError) {
+          <div class="empty-state dashboard-error-state">
+            <h2>לא הצלחנו לטעון את נתוני לוח הניהול</h2>
+            <p>בדקו את החיבור לשרת ורעננו את העמוד.</p>
+            <button type="button" class="btn btn-ghost" (click)="reloadPage()">רענון</button>
+          </div>
+        }
+
         <div class="panel dashboard-toolbar">
           <div class="dashboard-toolbar__filters">
             <label>
@@ -214,6 +223,10 @@ interface DashboardViewModel {
       align-items: end;
     }
 
+    .dashboard-error-state {
+      margin-bottom: 1rem;
+    }
+
     .dashboard-toolbar__filters,
     .dashboard-toolbar__summary,
     .dashboard-metric-row {
@@ -350,7 +363,8 @@ export class AdminDashboardPageComponent {
     orders: this.dateRange$.pipe(switchMap(({ fromDate, toDate }) => this.data.getOrders(fromDate, toDate))),
     reservations: this.dateRange$.pipe(switchMap(({ fromDate, toDate }) => this.data.getReservations(fromDate, toDate)))
   }).pipe(
-    map((vm) => vm as DashboardViewModel)
+    map((vm) => ({ ...vm, hasError: false }) as DashboardViewModel),
+    catchError(() => of(this.errorViewModel()))
   );
 
   setFromDate(date: string): void {
@@ -368,6 +382,12 @@ export class AdminDashboardPageComponent {
     this.selectedFromDate = range.fromDate;
     this.selectedToDate = range.toDate;
     this.dateRange$.next(range);
+  }
+
+  reloadPage(): void {
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
   }
 
   activeOrders(orders: Order[]): Order[] {
@@ -433,5 +453,65 @@ export class AdminDashboardPageComponent {
       String(date.getMonth() + 1).padStart(2, '0'),
       String(date.getDate()).padStart(2, '0')
     ].join('-');
+  }
+
+  private errorViewModel(): DashboardViewModel {
+    return {
+      dashboard: {
+        totalRevenueToday: 0,
+        totalRevenueThisMonth: 0,
+        activeOrders: 0,
+        completedOrders: 0,
+        cancelledOrders: 0,
+        unpaidOrders: 0,
+        reservationsToday: 0,
+        pendingReservations: 0,
+        occupiedTables: 0,
+        availableTables: 0,
+        topDishes: [],
+        paymentBreakdown: []
+      },
+      reports: {
+        daily: this.emptyPeriodReport(),
+        weekly: this.emptyPeriodReport(),
+        monthly: this.emptyPeriodReport(),
+        yearly: this.emptyPeriodReport(),
+        sales: { totalRevenue: 0, ordersCount: 0, itemsSold: 0, averageOrderValue: 0 },
+        topDishes: [],
+        leastOrdered: [],
+        paymentBreakdown: [],
+        peakHours: [],
+        waiterPerformance: [],
+        reservationsSummary: {
+          totalReservations: 0,
+          pendingReservations: 0,
+          approvedReservations: 0,
+          rejectedReservations: 0,
+          cancelledReservations: 0,
+          arrivedReservations: 0,
+          noShowReservations: 0
+        },
+        tableOccupancy: {
+          totalTables: 0,
+          occupiedTables: 0,
+          availableTables: 0,
+          reservedTables: 0,
+          occupancyRate: 0
+        }
+      },
+      orders: [],
+      reservations: [],
+      hasError: true
+    };
+  }
+
+  private emptyPeriodReport() {
+    return {
+      totalRevenue: 0,
+      ordersCount: 0,
+      completedOrders: 0,
+      cancelledOrders: 0,
+      averageOrderValue: 0
+    };
   }
 }

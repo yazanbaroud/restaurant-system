@@ -2,7 +2,7 @@ import { AsyncPipe } from '@angular/common';
 import { Component, OnDestroy, inject } from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { combineLatest, debounceTime, distinctUntilChanged, map, shareReplay, startWith } from 'rxjs';
+import { catchError, combineLatest, debounceTime, distinctUntilChanged, map, of, shareReplay, startWith } from 'rxjs';
 
 import { MenuCategory, MenuCategoryRecord, MenuItem, UserRole } from '../../core/models';
 import { AuthService } from '../../core/services/auth.service';
@@ -24,6 +24,7 @@ interface MenuViewModel {
   visibleCount: number;
   hasSearch: boolean;
   selectedCategoryLabel: string;
+  hasError: boolean;
 }
 
 @Component({
@@ -93,7 +94,13 @@ interface MenuViewModel {
           <p class="success-note menu-feedback" role="status">{{ cartMessage }}</p>
         }
 
-        @if (vm.totalCount === 0) {
+        @if (vm.hasError) {
+          <div class="empty-state">
+            <h2>לא הצלחנו לטעון את התפריט</h2>
+            <p>נסו לרענן את העמוד בעוד רגע.</p>
+            <button type="button" class="btn btn-ghost" (click)="reloadPage()">רענון</button>
+          </div>
+        } @else if (vm.totalCount === 0) {
           <div class="empty-state">
             <h2>אין מנות זמינות כרגע</h2>
             <p>אפשר לבדוק שוב בהמשך או להזמין מקום במסעדה.</p>
@@ -324,6 +331,7 @@ export class MenuPageComponent implements OnDestroy {
     map(([items, categories, searchTerm, selectedCategory, sort]) =>
       this.buildViewModel(items, categories, searchTerm, selectedCategory, sort)
     ),
+    catchError(() => of(this.errorViewModel())),
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
@@ -351,6 +359,12 @@ export class MenuPageComponent implements OnDestroy {
     }
 
     void this.router.navigate(['/cart']);
+  }
+
+  reloadPage(): void {
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
   }
 
   shouldShowCartAction(): boolean {
@@ -419,7 +433,20 @@ export class MenuPageComponent implements OnDestroy {
       totalCount: displayableItems.length,
       visibleCount: visibleItems.length,
       hasSearch: Boolean(searchTerm),
-      selectedCategoryLabel: this.selectedCategoryLabel(selectedCategory, categoryTabs)
+      selectedCategoryLabel: this.selectedCategoryLabel(selectedCategory, categoryTabs),
+      hasError: false
+    };
+  }
+
+  private errorViewModel(): MenuViewModel {
+    return {
+      categories: [],
+      items: [],
+      totalCount: 0,
+      visibleCount: 0,
+      hasSearch: false,
+      selectedCategoryLabel: 'כל הקטגוריות',
+      hasError: true
     };
   }
 

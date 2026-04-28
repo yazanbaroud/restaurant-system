@@ -11,7 +11,7 @@ import { StatusBadgeComponent } from './status-badge.component';
   standalone: true,
   imports: [CurrencyPipe, RouterLink, StatusBadgeComponent],
   template: `
-    <article class="menu-card">
+    <article class="menu-card" [class.menu-card--compact]="compact" [class.menu-card--pulse]="isRecentlyAdded">
       <a class="menu-card__image" [routerLink]="['/menu', item.id]">
         <img [src]="item.images[0]" [alt]="item.name" loading="lazy" />
       </a>
@@ -32,8 +32,9 @@ import { StatusBadgeComponent } from './status-badge.component';
                 <button type="button" aria-label="הגדלת כמות" (click)="increment.emit(item)">+</button>
               </div>
             } @else {
-              <button type="button" class="btn btn-small btn-gold" [disabled]="!item.isAvailable" (click)="add.emit(item)">
-                הוספה
+              <button type="button" class="btn btn-small btn-gold menu-card__add" [disabled]="!item.isAvailable" (click)="add.emit(item)">
+                +
+                <span>הוספה</span>
               </button>
             }
           }
@@ -67,6 +68,46 @@ import { StatusBadgeComponent } from './status-badge.component';
       color: var(--brown-950);
       font-weight: 900;
     }
+
+    .menu-card__add {
+      gap: 6px;
+      min-width: 92px;
+      font-weight: 950;
+    }
+
+    .menu-card__add:first-letter {
+      font-size: 1.1rem;
+    }
+
+    .menu-card--pulse {
+      border-color: rgba(102, 112, 68, 0.42);
+      box-shadow: 0 14px 34px rgba(102, 112, 68, 0.18);
+      transform: translateY(-1px);
+      transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+    }
+
+    .menu-card--compact .menu-card__body {
+      padding: 14px;
+    }
+
+    .menu-card--compact .menu-card__image {
+      aspect-ratio: 16 / 10;
+    }
+
+    .menu-card--compact h3 {
+      margin-block: 10px 6px;
+      font-size: 1.05rem;
+    }
+
+    .menu-card--compact p {
+      display: -webkit-box;
+      min-height: 0;
+      margin-bottom: 12px;
+      overflow: hidden;
+      color: var(--muted);
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
   `]
 })
 export class MenuItemCardComponent {
@@ -74,6 +115,8 @@ export class MenuItemCardComponent {
   @Input() showAdd = false;
   @Input() showQuantityControls = false;
   @Input() quantityInCart = 0;
+  @Input() isRecentlyAdded = false;
+  @Input() compact = false;
   @Output() add = new EventEmitter<MenuItem>();
   @Output() increment = new EventEmitter<MenuItem>();
   @Output() decrement = new EventEmitter<MenuItem>();

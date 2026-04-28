@@ -7,6 +7,9 @@ import { roleGuard } from './core/guards/role.guard';
 import { UserRole } from './core/models';
 import { LoginPageComponent } from './features/auth/login-page.component';
 import { RegisterPageComponent } from './features/auth/register-page.component';
+import { CartPageComponent } from './features/customer/cart-page.component';
+import { CustomerOrderDetailsPageComponent } from './features/customer/customer-order-details-page.component';
+import { CustomerOrdersPageComponent } from './features/customer/customer-orders-page.component';
 import { AccountPageComponent } from './features/account/account-page.component';
 import { AdminDashboardPageComponent } from './features/admin/admin-dashboard-page.component';
 import { MenuItemFormPageComponent } from './features/admin/menu-item-form-page.component';
@@ -39,6 +42,9 @@ export const routes: Routes = [
       { path: 'menu/:id', component: DishDetailsPageComponent },
       { path: 'reservation', component: ReservationPageComponent },
       { path: 'account', component: AccountPageComponent, canActivate: [roleGuard] },
+      { path: 'cart', component: CartPageComponent, canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
+      { path: 'orders', component: CustomerOrdersPageComponent, canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
+      { path: 'orders/:id', component: CustomerOrderDetailsPageComponent, canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
       { path: 'login', component: LoginPageComponent },
       { path: 'register', component: RegisterPageComponent }
     ]

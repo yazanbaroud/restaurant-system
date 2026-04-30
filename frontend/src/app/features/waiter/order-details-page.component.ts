@@ -3,13 +3,15 @@ import { Component, inject } from '@angular/core';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Observable, catchError, finalize, map, of, startWith } from 'rxjs';
 
-import { Order, OrderItem, OrderStatus, PaymentStatus } from '../../core/models';
+import { KitchenStatus, Order, OrderItem, OrderStatus, PaymentStatus } from '../../core/models';
 import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
 import {
+  kitchenStatusLabels,
+  kitchenStatusTones,
   orderStatusLabels,
   orderStatusTones,
   orderTypeLabels,
@@ -55,6 +57,7 @@ interface OrderDetailsViewModel {
               <h2>{{ customerName(order) }}</h2>
               <div class="badge-row">
                 <app-status-badge [label]="orderStatusLabels[order.status]" [tone]="orderStatusTones[order.status]" />
+                <app-status-badge [label]="kitchenStatusLabels[order.kitchenStatus]" [tone]="kitchenStatusTones[order.kitchenStatus]" />
                 <app-status-badge [label]="paymentStatusLabels[order.paymentStatus]" [tone]="paymentStatusTones[order.paymentStatus]" />
                 <app-status-badge [label]="orderTypeLabels[order.orderType]" tone="beige" />
               </div>
@@ -115,6 +118,10 @@ interface OrderDetailsViewModel {
                   <dd>{{ orderStatusLabels[order.status] }}</dd>
                 </div>
                 <div>
+                  <dt>סטטוס מטבח</dt>
+                  <dd>{{ kitchenStatusLabels[order.kitchenStatus] }}</dd>
+                </div>
+                <div>
                   <dt>סטטוס תשלום</dt>
                   <dd>{{ paymentStatusLabels[order.paymentStatus] }}</dd>
                 </div>
@@ -166,6 +173,16 @@ interface OrderDetailsViewModel {
                 <h2>פעולות</h2>
                 <p class="muted">עדכון סטטוס ההזמנה לפי התקדמות המטבח והשירות.</p>
                 <div class="status-actions">
+                  @if (canAdvanceKitchen(order)) {
+                    <button
+                      type="button"
+                      class="btn btn-small btn-ghost status-action"
+                      [disabled]="isUpdating"
+                      (click)="advanceKitchen()"
+                    >
+                      קידום מטבח
+                    </button>
+                  }
                   @for (action of statusActions; track action.status) {
                     <button
                       type="button"
@@ -498,18 +515,18 @@ export class OrderDetailsPageComponent {
     this.router.url.startsWith('/admin');
 
   readonly OrderStatus = OrderStatus;
+  readonly KitchenStatus = KitchenStatus;
   readonly PaymentStatus = PaymentStatus;
   readonly orderDetailsBaseLink = this.isAdminRoute ? '/admin/orders' : '/waiter/orders';
   readonly ordersHomeLink = this.isAdminRoute ? ['/admin/orders'] : ['/waiter'];
   readonly orderStatusLabels = orderStatusLabels;
   readonly orderStatusTones = orderStatusTones;
+  readonly kitchenStatusLabels = kitchenStatusLabels;
+  readonly kitchenStatusTones = kitchenStatusTones;
   readonly orderTypeLabels = orderTypeLabels;
   readonly paymentStatusLabels = paymentStatusLabels;
   readonly paymentStatusTones = paymentStatusTones;
   readonly statusActions = [
-    { status: OrderStatus.InSalads, label: 'בסלטים' },
-    { status: OrderStatus.InMain, label: 'בעיקריות' },
-    { status: OrderStatus.Completed, label: 'הושלם' },
     { status: OrderStatus.Cancelled, label: 'ביטול' }
   ];
   readonly vm$: Observable<OrderDetailsViewModel> = Number.isFinite(this.id) && this.id > 0
@@ -536,7 +553,13 @@ export class OrderDetailsPageComponent {
   }
 
   canAddPayment(order: Order): boolean {
-    return order.paymentStatus !== PaymentStatus.Paid && order.status !== OrderStatus.Cancelled;
+    return order.status === OrderStatus.Open &&
+      order.paymentStatus !== PaymentStatus.Paid &&
+      order.paymentStatus !== PaymentStatus.Refunded;
+  }
+
+  canAdvanceKitchen(order: Order): boolean {
+    return order.status === OrderStatus.Open && order.kitchenStatus !== KitchenStatus.Served;
   }
 
   paymentActionHint(order: Order): string {
@@ -552,17 +575,39 @@ export class OrderDetailsPageComponent {
   }
 
   statusActionDisabled(order: Order, status: OrderStatus): boolean {
-    return this.isUpdating || order.status === status;
+    return this.isUpdating || order.status !== OrderStatus.Open || order.status === status;
   }
 
-  setStatus(status: OrderStatus): void {
+  advanceKitchen(): void {
     if (this.isUpdating) {
       return;
     }
 
     this.isUpdating = true;
     this.errorMessage = '';
-    this.data.updateOrderStatus(this.id, status).pipe(
+    this.data.advanceKitchenStatus(this.id).pipe(
+      finalize(() => {
+        this.isUpdating = false;
+      })
+    ).subscribe({
+      next: () => {
+        this.feedback.success();
+      },
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את סטטוס המטבח. נסו שוב בעוד רגע.');
+        this.feedback.error(error, this.errorMessage);
+      }
+    });
+  }
+
+  setStatus(status: OrderStatus): void {
+    if (this.isUpdating || status !== OrderStatus.Cancelled) {
+      return;
+    }
+
+    this.isUpdating = true;
+    this.errorMessage = '';
+    this.data.cancelOrder(this.id).pipe(
       finalize(() => {
         this.isUpdating = false;
       })

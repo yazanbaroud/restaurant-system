@@ -2,8 +2,10 @@ import { CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { RouterLink } from '@angular/router';
 
-import { Order, OrderStatus } from '../../core/models';
+import { KitchenStatus, Order, OrderStatus } from '../../core/models';
 import {
+  kitchenStatusLabels,
+  kitchenStatusTones,
   orderStatusLabels,
   orderStatusTones,
   orderTypeLabels,
@@ -27,6 +29,7 @@ import { StatusBadgeComponent } from './status-badge.component';
       </div>
       <div class="badge-row">
         <app-status-badge [label]="orderStatusLabels[order.status]" [tone]="orderStatusTones[order.status]" />
+        <app-status-badge [label]="kitchenStatusLabels[order.kitchenStatus]" [tone]="kitchenStatusTones[order.kitchenStatus]" />
         <app-status-badge [label]="orderTypeLabels[order.orderType]" tone="beige" />
         @for (table of order.tables; track table.id) {
           <app-status-badge [label]="table.name" tone="charcoal" />
@@ -41,7 +44,7 @@ import { StatusBadgeComponent } from './status-badge.component';
       <div class="inline-between">
         <strong class="price">{{ order.totalPrice | currency: 'ILS' : 'symbol' : '1.0-0' }}</strong>
         <div class="actions-inline">
-          @if (showStatusActions && order.status !== OrderStatus.Completed && order.status !== OrderStatus.Cancelled) {
+          @if (showStatusActions && order.status === OrderStatus.Open && order.kitchenStatus !== KitchenStatus.Served) {
             <button type="button" class="btn btn-small btn-ghost" (click)="advance.emit(order)">קידום</button>
           }
           <a class="btn btn-small btn-dark" [routerLink]="detailsLink">פתיחה</a>
@@ -57,6 +60,9 @@ export class OrderCardComponent {
   @Output() advance = new EventEmitter<Order>();
 
   readonly OrderStatus = OrderStatus;
+  readonly KitchenStatus = KitchenStatus;
+  readonly kitchenStatusLabels = kitchenStatusLabels;
+  readonly kitchenStatusTones = kitchenStatusTones;
   readonly orderStatusLabels = orderStatusLabels;
   readonly orderStatusTones = orderStatusTones;
   readonly orderTypeLabels = orderTypeLabels;

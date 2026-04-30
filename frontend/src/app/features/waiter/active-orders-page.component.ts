@@ -3,14 +3,15 @@ import { Component, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { catchError, finalize, map, of } from 'rxjs';
 
-import { Order, OrderStatus } from '../../core/models';
+import { KitchenStatus, Order, OrderStatus } from '../../core/models';
 import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { OrderCardComponent } from '../../shared/components/order-card.component';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
+import { kitchenStatusLabels } from '../../shared/ui-labels';
 
-type ActiveOrderFilter = 'all' | OrderStatus.InSalads | OrderStatus.InMain;
+type ActiveOrderFilter = 'all' | KitchenStatus;
 
 @Component({
   selector: 'app-active-orders-page',
@@ -57,20 +58,38 @@ type ActiveOrderFilter = 'all' | OrderStatus.InSalads | OrderStatus.InMain;
             <button
               type="button"
               class="waiter-shift-metric"
-              [class.active]="selectedFilter === OrderStatus.InSalads"
-              (click)="selectedFilter = OrderStatus.InSalads"
+              [class.active]="selectedFilter === KitchenStatus.New"
+              (click)="selectedFilter = KitchenStatus.New"
             >
-              <span>בסלטים</span>
-              <strong>{{ countByStatus(activeOrders, OrderStatus.InSalads) }}</strong>
+              <span>{{ kitchenStatusLabels[KitchenStatus.New] }}</span>
+              <strong>{{ countByKitchenStatus(activeOrders, KitchenStatus.New) }}</strong>
             </button>
             <button
               type="button"
               class="waiter-shift-metric"
-              [class.active]="selectedFilter === OrderStatus.InMain"
-              (click)="selectedFilter = OrderStatus.InMain"
+              [class.active]="selectedFilter === KitchenStatus.Preparing"
+              (click)="selectedFilter = KitchenStatus.Preparing"
             >
-              <span>בעיקריות</span>
-              <strong>{{ countByStatus(activeOrders, OrderStatus.InMain) }}</strong>
+              <span>{{ kitchenStatusLabels[KitchenStatus.Preparing] }}</span>
+              <strong>{{ countByKitchenStatus(activeOrders, KitchenStatus.Preparing) }}</strong>
+            </button>
+            <button
+              type="button"
+              class="waiter-shift-metric"
+              [class.active]="selectedFilter === KitchenStatus.Ready"
+              (click)="selectedFilter = KitchenStatus.Ready"
+            >
+              <span>{{ kitchenStatusLabels[KitchenStatus.Ready] }}</span>
+              <strong>{{ countByKitchenStatus(activeOrders, KitchenStatus.Ready) }}</strong>
+            </button>
+            <button
+              type="button"
+              class="waiter-shift-metric"
+              [class.active]="selectedFilter === KitchenStatus.Served"
+              (click)="selectedFilter = KitchenStatus.Served"
+            >
+              <span>{{ kitchenStatusLabels[KitchenStatus.Served] }}</span>
+              <strong>{{ countByKitchenStatus(activeOrders, KitchenStatus.Served) }}</strong>
             </button>
           </div>
         </div>
@@ -134,7 +153,7 @@ type ActiveOrderFilter = 'all' | OrderStatus.InSalads | OrderStatus.InMain;
 
     .waiter-shift-metrics {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 0.75rem;
     }
 
@@ -210,13 +229,15 @@ export class ActiveOrdersPageComponent {
   private readonly data = inject(RestaurantDataService);
   private readonly feedback = inject(FeedbackService);
   readonly OrderStatus = OrderStatus;
+  readonly KitchenStatus = KitchenStatus;
+  readonly kitchenStatusLabels = kitchenStatusLabels;
   updatingOrderId: number | null = null;
   errorMessage = '';
   selectedFilter: ActiveOrderFilter = 'all';
   searchTerm = '';
 
   readonly activeOrders$ = this.data.getOrders().pipe(
-    map((orders) => orders.filter((order) => [OrderStatus.InSalads, OrderStatus.InMain].includes(order.status))),
+    map((orders) => orders.filter((order) => order.status === OrderStatus.Open)),
     catchError((error) => {
       this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לטעון את ההזמנות הפעילות. נסו לרענן בעוד רגע.');
       this.feedback.error(error, this.errorMessage);
@@ -230,15 +251,15 @@ export class ActiveOrdersPageComponent {
     return orders.filter((order) => {
       const fullName = `${order.customerFirstName ?? ''} ${order.customerLastName ?? ''}`.trim().toLowerCase();
       const orderNumber = String(order.orderNumber ?? '').toLowerCase();
-      const matchesStatus = this.selectedFilter === 'all' || order.status === this.selectedFilter;
+      const matchesStatus = this.selectedFilter === 'all' || order.kitchenStatus === this.selectedFilter;
       const matchesSearch = !search || fullName.includes(search) || orderNumber.includes(search);
 
       return matchesStatus && matchesSearch;
     });
   }
 
-  countByStatus(orders: Order[], status: OrderStatus): number {
-    return orders.filter((order) => order.status === status).length;
+  countByKitchenStatus(orders: Order[], status: KitchenStatus): number {
+    return orders.filter((order) => order.kitchenStatus === status).length;
   }
 
   resetFilters(): void {
@@ -251,10 +272,9 @@ export class ActiveOrdersPageComponent {
       return;
     }
 
-    const nextStatus = order.status === OrderStatus.InSalads ? OrderStatus.InMain : OrderStatus.Completed;
     this.updatingOrderId = order.id;
     this.errorMessage = '';
-    this.data.updateOrderStatus(order.id, nextStatus).pipe(
+    this.data.advanceKitchenStatus(order.id).pipe(
       finalize(() => {
         this.updatingOrderId = null;
       })

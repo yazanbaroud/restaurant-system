@@ -22,6 +22,7 @@ import {
   CreateTableInput,
   CreateUserInput,
   DashboardSummary,
+  KitchenStatus,
   MenuCategory,
   MenuCategoryRecord,
   MenuItem,
@@ -113,6 +114,8 @@ export class RestaurantDataService {
       this.upsertPayment(payment);
     }
 
+    this.applyRealtimePaymentSummary(payload);
+
     const orderPayload = this.extractNestedObject(payload, ['order']);
     if (orderPayload) {
       const order = this.normalizeOrder(orderPayload);
@@ -121,6 +124,34 @@ export class RestaurantDataService {
         this.syncTablesFromOrder(order);
       }
     }
+  }
+
+  private applyRealtimePaymentSummary(payload: unknown): void {
+    const record = this.asRecord(payload);
+    if (!record || !('paymentStatus' in record)) {
+      return;
+    }
+
+    const orderId = this.numberValue(record['orderId']);
+    if (orderId <= 0) {
+      return;
+    }
+
+    const paymentStatus = this.normalizePaymentStatus(record['paymentStatus']);
+    const status = 'orderStatus' in record ? this.normalizeOrderStatus(record['orderStatus']) : null;
+    const kitchenStatus = 'kitchenStatus' in record ? this.normalizeKitchenStatus(record['kitchenStatus']) : null;
+    this.ordersSubject.next(
+      this.ordersSubject.value.map((order) =>
+        order.id === orderId
+          ? {
+              ...order,
+              paymentStatus,
+              ...(status ? { status } : {}),
+              ...(kitchenStatus ? { kitchenStatus } : {})
+            }
+          : order
+      )
+    );
   }
 
   getMenuItems(): Observable<MenuItem[]> {
@@ -417,7 +448,8 @@ export class RestaurantDataService {
       customerFirstName: input.customerFirstName,
       customerLastName: input.customerLastName,
       createdAt: now.toISOString(),
-      status: OrderStatus.InSalads,
+      status: OrderStatus.Open,
+      kitchenStatus: KitchenStatus.New,
       notes: input.notes,
       totalPrice: items.reduce((sum, item) => sum + item.lineTotal, 0),
       orderType: input.orderType,
@@ -429,10 +461,18 @@ export class RestaurantDataService {
     return order;
   }
 
-  updateOrderStatus(id: number, status: OrderStatus): Observable<Order> {
+  advanceKitchenStatus(id: number): Observable<Order> {
+    return this.applyOrderCommand(id, `${this.apiBaseUrl}/api/Orders/${id}/advance-kitchen-status`);
+  }
+
+  cancelOrder(id: number): Observable<Order> {
+    return this.applyOrderCommand(id, `${this.apiBaseUrl}/api/Orders/${id}/cancel`);
+  }
+
+  private applyOrderCommand(id: number, endpoint: string): Observable<Order> {
     const existingLocalOrder = this.ordersSubject.value.find((candidate) => candidate.id === id);
 
-    return this.http.put<unknown>(`${this.apiBaseUrl}/api/Orders/${id}/status`, { status }).pipe(
+    return this.http.post<unknown>(endpoint, {}).pipe(
       map((response) => this.normalizeOrder(response)),
       tap((order) => {
         this.upsertOrder(order);
@@ -441,7 +481,7 @@ export class RestaurantDataService {
 
         if (
           existingLocalOrder &&
-          this.shouldReleaseTables(status) &&
+          this.shouldReleaseTables(order.status) &&
           this.hasMissingReleasedTableState(order, existingLocalOrder)
         ) {
           this.releaseOrderTables(existingLocalOrder);
@@ -478,6 +518,7 @@ export class RestaurantDataService {
       totalPrice: 0,
       orderType: OrderType.DineIn,
       paymentStatus: PaymentStatus.Unpaid,
+      kitchenStatus: KitchenStatus.New,
       items: [],
       tables: []
     };
@@ -531,7 +572,11 @@ export class RestaurantDataService {
 
         return {
           ...order,
-          paymentStatus: totalPaid >= order.totalPrice ? PaymentStatus.Paid : PaymentStatus.Unpaid
+          paymentStatus: totalPaid <= 0
+            ? PaymentStatus.Unpaid
+            : totalPaid >= order.totalPrice
+              ? PaymentStatus.Paid
+              : PaymentStatus.Partial
         };
       })
     );
@@ -875,10 +920,10 @@ export class RestaurantDataService {
       totalRevenueThisMonth: MOCK_DASHBOARD.totalRevenueThisMonth + payments
         .filter((payment) => payment.paidAt.startsWith(month))
         .reduce((sum, payment) => sum + payment.amount, 0),
-      activeOrders: orders.filter((order) => [OrderStatus.InSalads, OrderStatus.InMain].includes(order.status)).length,
+      activeOrders: orders.filter((order) => order.status === OrderStatus.Open).length,
       completedOrders: orders.filter((order) => order.status === OrderStatus.Completed).length,
       cancelledOrders: orders.filter((order) => order.status === OrderStatus.Cancelled).length,
-      unpaidOrders: orders.filter((order) => order.paymentStatus === PaymentStatus.Unpaid).length,
+      unpaidOrders: orders.filter((order) => order.paymentStatus === PaymentStatus.Unpaid || order.paymentStatus === PaymentStatus.Partial).length,
       reservationsToday: reservations.filter((reservation) => reservation.reservationDate === today).length,
       pendingReservations: reservations.filter((reservation) => reservation.status === ReservationStatus.Pending).length,
       occupiedTables: tables.filter((table) => table.status === TableStatus.Occupied).length,
@@ -1598,10 +1643,28 @@ export class RestaurantDataService {
 
   private createPaymentPayload(orderId: number, amount: number, method: PaymentMethod): {
     orderId: number;
+    idempotencyKey: string;
     amount: number;
-    method: PaymentMethod;
+    method: string;
   } {
-    return { orderId, amount, method };
+    return {
+      orderId,
+      idempotencyKey: this.createIdempotencyKey(),
+      amount,
+      method: method === PaymentMethod.Cash ? 'Cash' : 'Card'
+    };
+  }
+
+  private createIdempotencyKey(): string {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+      return crypto.randomUUID();
+    }
+
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (character) => {
+      const randomValue = Math.floor(Math.random() * 16);
+      const value = character === 'x' ? randomValue : (randomValue & 0x3) | 0x8;
+      return value.toString(16);
+    });
   }
 
   private upsertPayment(payment: Payment): void {
@@ -1771,6 +1834,7 @@ export class RestaurantDataService {
       customerLastName: this.stringValue(record['customerLastName']) || fallbackInput?.customerLastName || '',
       createdAt,
       status: this.normalizeOrderStatus(record['status']),
+      kitchenStatus: this.normalizeKitchenStatus(record['kitchenStatus']),
       notes: this.stringValue(record['notes']) || fallbackInput?.notes || '',
       totalPrice,
       orderType: this.normalizeOrderType(record['orderType'] ?? fallbackInput?.orderType),
@@ -1848,9 +1912,8 @@ export class RestaurantDataService {
     };
   }
 
-  private createOrderPayload(input: CreateOrderInput): CreateOrderInput {
+  private createOrderPayload(input: CreateOrderInput): Omit<CreateOrderInput, 'userId'> {
     return {
-      userId: input.userId ?? null,
       customerFirstName: input.customerFirstName,
       customerLastName: input.customerLastName,
       notes: input.notes,
@@ -2325,7 +2388,27 @@ export class RestaurantDataService {
       }
     }
 
-    return OrderStatus.InSalads;
+    return OrderStatus.Open;
+  }
+
+  private normalizeKitchenStatus(value: unknown): KitchenStatus {
+    const numericValue = this.numberValue(value);
+    if (this.isKitchenStatus(numericValue)) {
+      return numericValue;
+    }
+
+    if (typeof value === 'string') {
+      const statusName = value.toLowerCase();
+      const status = Object.values(KitchenStatus)
+        .filter((candidate): candidate is KitchenStatus => typeof candidate === 'number')
+        .find((candidate) => KitchenStatus[candidate].toLowerCase() === statusName);
+
+      if (status) {
+        return status;
+      }
+    }
+
+    return KitchenStatus.New;
   }
 
   private normalizeOrderType(value: unknown): OrderType {
@@ -2430,6 +2513,10 @@ export class RestaurantDataService {
 
   private isOrderStatus(value: number): value is OrderStatus {
     return Object.values(OrderStatus).includes(value);
+  }
+
+  private isKitchenStatus(value: number): value is KitchenStatus {
+    return Object.values(KitchenStatus).includes(value);
   }
 
   private isOrderType(value: number): value is OrderType {

@@ -72,7 +72,7 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
         ValidateDateRange(fromDay, toDay);
         var orders = QueryOrders(fromDay, toDay).Where(x => x.Status != OrderStatus.Cancelled);
         var count = await orders.CountAsync(cancellationToken);
-        var revenue = await orders.SumAsync(x => x.TotalPrice, cancellationToken);
+        var revenue = await orders.SumAsync(x => x.TotalAmount, cancellationToken);
         return new SalesReportDto(fromDay, toDay, revenue, count, count == 0 ? 0 : revenue / count);
     }
 
@@ -97,7 +97,7 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
         {
             ValidateDateRange(from.Value, to.Value);
             var (start, end) = Range(from.Value, to.Value.AddDays(1));
-            query = query.Where(x => x.PaidAt >= start && x.PaidAt < end);
+            query = query.Where(x => x.CreatedAt >= start && x.CreatedAt < end);
         }
 
         return await query.GroupBy(x => x.Method)
@@ -111,14 +111,14 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
             .Select(x => new
             {
                 Hour = EF.Functions.DateDiffHour(HourEpoch, x.CreatedAt) % 24,
-                x.TotalPrice
+                x.TotalAmount
             })
             .GroupBy(x => x.Hour)
             .Select(x => new
             {
                 Hour = x.Key,
                 OrdersCount = x.Count(),
-                Revenue = x.Sum(o => o.TotalPrice)
+                Revenue = x.Sum(o => o.TotalAmount)
             })
             .OrderByDescending(x => x.OrdersCount)
             .Select(x => new PeakHourDto(x.Hour, x.OrdersCount, x.Revenue))
@@ -128,7 +128,7 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
         await QueryOrders(from ?? DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-30), to ?? DateOnly.FromDateTime(DateTime.UtcNow))
             .Where(x => x.Status != OrderStatus.Cancelled && x.UserId != null && x.User != null && x.User.Role == UserRole.Waiter)
             .GroupBy(x => new { x.UserId, x.User!.FirstName, x.User.LastName })
-            .Select(x => new WaiterPerformanceDto(x.Key.UserId, x.Key.FirstName + " " + x.Key.LastName, x.Count(), x.Sum(o => o.TotalPrice)))
+            .Select(x => new WaiterPerformanceDto(x.Key.UserId, x.Key.FirstName + " " + x.Key.LastName, x.Count(), x.Sum(o => o.TotalAmount)))
             .ToArrayAsync(cancellationToken);
 
     public async Task<ReservationSummaryDto> GetReservationsSummaryAsync(DateOnly? from, DateOnly? to, CancellationToken cancellationToken)
@@ -197,7 +197,7 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
     }
 
     private static async Task<decimal> Revenue(IQueryable<Order> orders, CancellationToken cancellationToken) =>
-        await orders.Where(x => x.Status != OrderStatus.Cancelled).SumAsync(x => x.TotalPrice, cancellationToken);
+        await orders.Where(x => x.Status != OrderStatus.Cancelled).SumAsync(x => x.TotalAmount, cancellationToken);
 
     private static (DateTime Start, DateTime End) Range(DateOnly from, DateOnly to) =>
         (from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), to.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));

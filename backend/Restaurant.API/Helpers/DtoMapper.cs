@@ -44,8 +44,9 @@ public static class DtoMapper
             order.CustomerLastName,
             AsUtc(order.CreatedAt),
             order.Status,
+            order.KitchenStatus,
             order.Notes,
-            order.TotalPrice,
+            order.TotalAmount,
             order.OrderType,
             order.PaymentStatus,
             order.Items.Select(x => new OrderItemResponseDto(
@@ -56,10 +57,20 @@ public static class DtoMapper
                 x.UnitPrice,
                 x.UnitPrice * x.Quantity,
                 x.Notes)).ToArray(),
-            order.OrderTables.Select(x => new OrderTableResponseDto(x.Id, x.TableId, x.Table.Name)).ToArray());
+            order.OrderTables.Select(x => new OrderTableResponseDto(x.Id, x.TableId, x.Table.Name)).ToArray(),
+            order.StatusChanges
+                .OrderByDescending(x => x.ChangedAt)
+                .Select(x => new OrderStatusChangeResponseDto(
+                    x.Id,
+                    x.ChangeType,
+                    x.FromValue,
+                    x.ToValue,
+                    AsUtc(x.ChangedAt),
+                    x.ChangedByUserId))
+                .ToArray());
 
     public static PaymentResponseDto ToPaymentResponse(this Payment payment) =>
-        new(payment.Id, payment.OrderId, payment.Amount, payment.Method, AsUtc(payment.PaidAt));
+        new(payment.Id, payment.OrderId, payment.IdempotencyKey, payment.Amount, payment.Method, AsUtc(payment.CreatedAt), payment.CreatedByUserId);
 
     public static ReservationResponseDto ToReservationResponse(this Reservation reservation) =>
         new(

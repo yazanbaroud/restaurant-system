@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using Restaurant.API.Helpers;
 
 namespace Restaurant.API.Middleware;
@@ -25,6 +26,7 @@ public sealed class GlobalExceptionMiddleware(RequestDelegate next, ILogger<Glob
         {
             ValidationException => StatusCodes.Status400BadRequest,
             ApiException apiException => apiException.StatusCode,
+            DbUpdateConcurrencyException => StatusCodes.Status409Conflict,
             _ => StatusCodes.Status500InternalServerError
         };
 

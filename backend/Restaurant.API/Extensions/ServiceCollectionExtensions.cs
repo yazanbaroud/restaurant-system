@@ -8,6 +8,7 @@ using Microsoft.OpenApi.Models;
 using Restaurant.API.Data;
 using Restaurant.API.Helpers;
 using Restaurant.API.Interfaces;
+using Restaurant.API.Options;
 using Restaurant.API.Seed;
 using Restaurant.API.Services;
 using Restaurant.API.Validators;
@@ -38,6 +39,7 @@ public static class ServiceCollectionExtensions
             .ValidateOnStart();
 
         services.Configure<SeedAdminOptions>(configuration.GetSection("SeedAdmin"));
+        services.Configure<OrderLifecycleOptions>(configuration.GetSection("OrderLifecycle"));
 
         services.AddDbContext<AppDbContext>(options =>
             options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
@@ -76,6 +78,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IUsersService, UsersService>();
         services.AddScoped<IMenuService, MenuService>();
         services.AddScoped<ITablesService, TablesService>();
+        services.AddScoped<IOrderTableAssignmentService, OrderTableAssignmentService>();
+        services.AddScoped<IOrderStateService, OrderStateService>();
         services.AddScoped<IOrdersService, OrdersService>();
         services.AddScoped<ICustomerOrdersService, CustomerOrdersService>();
         services.AddScoped<IPaymentsService, PaymentsService>();

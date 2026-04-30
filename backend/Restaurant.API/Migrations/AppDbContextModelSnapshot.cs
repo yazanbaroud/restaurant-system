@@ -129,6 +129,15 @@ namespace Restaurant.API.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<DateTime?>("KitchenStatusChangedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("KitchenStatusChangedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("KitchenStatus")
+                        .HasColumnType("int");
+
                     b.Property<string>("Notes")
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
@@ -141,13 +150,30 @@ namespace Restaurant.API.Migrations
                     b.Property<int>("OrderType")
                         .HasColumnType("int");
 
+                    b.Property<DateTime?>("OrderStatusChangedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("OrderStatusChangedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("PaymentStatusChangedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int?>("PaymentStatusChangedByUserId")
+                        .HasColumnType("int");
+
                     b.Property<int>("PaymentStatus")
                         .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
-                    b.Property<decimal>("TotalPrice")
+                    b.Property<decimal>("TotalAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
@@ -204,6 +230,44 @@ namespace Restaurant.API.Migrations
                     b.ToTable("OrderItems");
                 });
 
+            modelBuilder.Entity("Restaurant.API.Models.OrderStatusChange", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ChangedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("ChangeType")
+                        .HasColumnType("int");
+
+                    b.Property<string>("FromValue")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ToValue")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChangedByUserId");
+
+                    b.HasIndex("OrderId", "ChangedAt");
+
+                    b.ToTable("OrderStatusChanges");
+                });
+
             modelBuilder.Entity("Restaurant.API.Models.OrderTable", b =>
                 {
                     b.Property<int>("Id")
@@ -240,16 +304,32 @@ namespace Restaurant.API.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CreatedByUserId")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("IdempotencyKey")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<int>("Method")
                         .HasColumnType("int");
 
                     b.Property<int>("OrderId")
                         .HasColumnType("int");
 
-                    b.Property<DateTime>("PaidAt")
-                        .HasColumnType("datetime2");
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique();
 
                     b.HasIndex("OrderId");
 
@@ -370,6 +450,11 @@ namespace Restaurant.API.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
@@ -465,6 +550,25 @@ namespace Restaurant.API.Migrations
                     b.Navigation("Order");
                 });
 
+            modelBuilder.Entity("Restaurant.API.Models.OrderStatusChange", b =>
+                {
+                    b.HasOne("Restaurant.API.Models.User", "ChangedByUser")
+                        .WithMany()
+                        .HasForeignKey("ChangedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Restaurant.API.Models.Order", "Order")
+                        .WithMany("StatusChanges")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ChangedByUser");
+
+                    b.Navigation("Order");
+                });
+
             modelBuilder.Entity("Restaurant.API.Models.OrderTable", b =>
                 {
                     b.HasOne("Restaurant.API.Models.Order", "Order")
@@ -486,11 +590,19 @@ namespace Restaurant.API.Migrations
 
             modelBuilder.Entity("Restaurant.API.Models.Payment", b =>
                 {
+                    b.HasOne("Restaurant.API.Models.User", "CreatedByUser")
+                        .WithMany()
+                        .HasForeignKey("CreatedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("Restaurant.API.Models.Order", "Order")
                         .WithMany("Payments")
                         .HasForeignKey("OrderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("CreatedByUser");
 
                     b.Navigation("Order");
                 });
@@ -519,6 +631,8 @@ namespace Restaurant.API.Migrations
                     b.Navigation("OrderTables");
 
                     b.Navigation("Payments");
+
+                    b.Navigation("StatusChanges");
                 });
 
             modelBuilder.Entity("Restaurant.API.Models.Table", b =>

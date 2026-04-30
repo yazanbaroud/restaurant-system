@@ -1,4 +1,5 @@
 import {
+  KitchenStatus,
   MenuCategory,
   OrderStatus,
   OrderType,
@@ -39,17 +40,29 @@ export const tableStatusTones: Record<TableStatus, BadgeTone> = {
 };
 
 export const orderStatusLabels: Record<OrderStatus, string> = {
-  [OrderStatus.InSalads]: 'בסלטים',
-  [OrderStatus.InMain]: 'בעיקריות',
+  [OrderStatus.Open]: 'פעילה',
   [OrderStatus.Completed]: 'הושלם',
   [OrderStatus.Cancelled]: 'בוטל'
 };
 
 export const orderStatusTones: Record<OrderStatus, BadgeTone> = {
-  [OrderStatus.InSalads]: 'gold',
-  [OrderStatus.InMain]: 'olive',
+  [OrderStatus.Open]: 'gold',
   [OrderStatus.Completed]: 'charcoal',
   [OrderStatus.Cancelled]: 'danger'
+};
+
+export const kitchenStatusLabels: Record<KitchenStatus, string> = {
+  [KitchenStatus.New]: 'חדשה',
+  [KitchenStatus.Preparing]: 'בהכנה',
+  [KitchenStatus.Ready]: 'מוכנה',
+  [KitchenStatus.Served]: 'הוגשה'
+};
+
+export const kitchenStatusTones: Record<KitchenStatus, BadgeTone> = {
+  [KitchenStatus.New]: 'gold',
+  [KitchenStatus.Preparing]: 'olive',
+  [KitchenStatus.Ready]: 'beige',
+  [KitchenStatus.Served]: 'charcoal'
 };
 
 export const orderTypeLabels: Record<OrderType, string> = {
@@ -59,12 +72,16 @@ export const orderTypeLabels: Record<OrderType, string> = {
 
 export const paymentStatusLabels: Record<PaymentStatus, string> = {
   [PaymentStatus.Unpaid]: 'לא שולם',
-  [PaymentStatus.Paid]: 'שולם'
+  [PaymentStatus.Paid]: 'שולם',
+  [PaymentStatus.Partial]: 'שולם חלקית',
+  [PaymentStatus.Refunded]: 'הוחזר'
 };
 
 export const paymentStatusTones: Record<PaymentStatus, BadgeTone> = {
   [PaymentStatus.Unpaid]: 'burgundy',
-  [PaymentStatus.Paid]: 'olive'
+  [PaymentStatus.Paid]: 'olive',
+  [PaymentStatus.Partial]: 'gold',
+  [PaymentStatus.Refunded]: 'charcoal'
 };
 
 export const paymentMethodLabels: Record<PaymentMethod, string> = {

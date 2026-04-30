@@ -391,7 +391,7 @@ export class AdminDashboardPageComponent {
   }
 
   activeOrders(orders: Order[]): Order[] {
-    return orders.filter((order) => [OrderStatus.InSalads, OrderStatus.InMain].includes(order.status));
+    return orders.filter((order) => order.status === OrderStatus.Open);
   }
 
   pendingReservations(reservations: Reservation[]): Reservation[] {

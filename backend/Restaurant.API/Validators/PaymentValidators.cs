@@ -8,6 +8,7 @@ public sealed class CreatePaymentDtoValidator : AbstractValidator<CreatePaymentD
     public CreatePaymentDtoValidator()
     {
         RuleFor(x => x.OrderId).GreaterThan(0);
+        RuleFor(x => x.IdempotencyKey).NotEmpty();
         RuleFor(x => x.Amount).GreaterThan(0);
         RuleFor(x => x.Method).IsInEnum();
     }

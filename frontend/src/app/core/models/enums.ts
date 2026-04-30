@@ -20,10 +20,16 @@ export enum MenuCategory {
 }
 
 export enum OrderStatus {
-  InSalads = 1,
-  InMain = 2,
+  Open = 1,
   Completed = 3,
   Cancelled = 4
+}
+
+export enum KitchenStatus {
+  New = 1,
+  Preparing = 2,
+  Ready = 3,
+  Served = 4
 }
 
 export enum OrderType {
@@ -33,7 +39,9 @@ export enum OrderType {
 
 export enum PaymentStatus {
   Unpaid = 1,
-  Paid = 2
+  Paid = 2,
+  Partial = 3,
+  Refunded = 4
 }
 
 export enum PaymentMethod {

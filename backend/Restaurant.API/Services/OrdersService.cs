@@ -1,4 +1,7 @@
+using System.Data;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Restaurant.API.Data;
 using Restaurant.API.DTOs;
 using Restaurant.API.Enums;
@@ -10,56 +13,80 @@ namespace Restaurant.API.Services;
 
 public sealed class OrdersService(
     AppDbContext db,
+    IOrderTableAssignmentService tableAssignments,
+    IOrderStateService orderState,
     IRestaurantRealtimeNotifier realtimeNotifier,
     ILogger<OrdersService> logger) : IOrdersService
 {
-    public async Task<OrderResponseDto> CreateAsync(CreateOrderDto dto, CancellationToken cancellationToken)
+    public async Task<OrderResponseDto> CreateAsync(int createdByUserId, CreateOrderDto dto, CancellationToken cancellationToken)
     {
-        var assignedTables = await ValidateAndLoadAssignableTablesAsync(dto.OrderType, dto.TableIds, Array.Empty<int>(), cancellationToken);
+        EnsureAuthenticatedUser(createdByUserId);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
 
-        var menuItems = await LoadMenuItemsAsync(dto.Items.Select(x => x.MenuItemId), cancellationToken);
-        var order = new Order
+        try
         {
-            UserId = dto.UserId,
-            CustomerFirstName = dto.CustomerFirstName?.Trim() ?? string.Empty,
-            CustomerLastName = dto.CustomerLastName?.Trim() ?? string.Empty,
-            Notes = dto.Notes?.Trim(),
-            CreatedAt = DateTime.UtcNow,
-            OrderNumber = OrderNumberGenerator.Create(DateTime.UtcNow),
-            OrderType = dto.OrderType,
-            Status = OrderStatus.InSalads,
-            PaymentStatus = PaymentStatus.Unpaid
-        };
-
-        foreach (var item in dto.Items)
-        {
-            var menuItem = menuItems[item.MenuItemId];
-            order.Items.Add(new OrderItem
+            var menuItems = await LoadMenuItemsAsync(dto.Items.Select(x => x.MenuItemId), cancellationToken);
+            var now = DateTime.UtcNow;
+            var order = new Order
             {
-                MenuItemId = item.MenuItemId,
-                Quantity = item.Quantity,
-                UnitPrice = menuItem.Price,
-                Notes = item.Notes?.Trim()
-            });
-        }
+                UserId = createdByUserId,
+                CustomerFirstName = dto.CustomerFirstName?.Trim() ?? string.Empty,
+                CustomerLastName = dto.CustomerLastName?.Trim() ?? string.Empty,
+                Notes = dto.Notes?.Trim(),
+                CreatedAt = now,
+                OrderNumber = OrderNumberGenerator.Create(now),
+                OrderType = dto.OrderType
+            };
 
-        AddOrderTables(order, assignedTables.Select(x => x.Id));
-        MarkTablesOccupied(assignedTables);
-        RecalculateTotal(order);
-        db.Orders.Add(order);
-        await db.SaveChangesAsync(cancellationToken);
-        await ReloadOrderAsync(order, cancellationToken);
-        logger.LogInformation("Order created with id {OrderId} and number {OrderNumber}", order.Id, order.OrderNumber);
-        var response = order.ToOrderResponse();
-        await realtimeNotifier.OrderCreatedAsync(response, CustomerUserId(order), cancellationToken);
-        return response;
+            orderState.Initialize(order, createdByUserId, now);
+            AddItems(order, dto.Items, menuItems);
+            await tableAssignments.AssignTablesForNewOrderAsync(order, dto.OrderType, dto.TableIds, cancellationToken);
+            RecalculateTotal(order);
+
+            db.Orders.Add(order);
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            await ReloadOrderAsync(order, cancellationToken);
+            logger.LogInformation("Order created with id {OrderId} and number {OrderNumber} by user {UserId}", order.Id, order.OrderNumber, createdByUserId);
+            var response = order.ToOrderResponse();
+            await realtimeNotifier.OrderCreatedAsync(response, CustomerUserId(order), cancellationToken);
+            return response;
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            logger.LogWarning(exception, "Order creation concurrency conflict by user {UserId}", createdByUserId);
+            throw new ApiException("Order was updated concurrently. Refresh and try again.", StatusCodes.Status409Conflict);
+        }
+        catch (DbUpdateException exception) when (IsSqlConcurrencyFailure(exception))
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            logger.LogWarning(exception, "Order creation SQL concurrency conflict by user {UserId}", createdByUserId);
+            throw new ApiException("Order was updated concurrently. Refresh and try again.", StatusCodes.Status409Conflict);
+        }
+        catch
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            throw;
+        }
     }
 
-    public async Task<IReadOnlyCollection<OrderResponseDto>> GetAllAsync(OrderStatus? status, DateOnly? date, DateOnly? from, DateOnly? to, PaymentStatus? paymentStatus, OrderType? orderType, bool activeOnly, CancellationToken cancellationToken)
+    public async Task<IReadOnlyCollection<OrderResponseDto>> GetAllAsync(
+        OrderStatus? status,
+        KitchenStatus? kitchenStatus,
+        DateOnly? date,
+        DateOnly? from,
+        DateOnly? to,
+        PaymentStatus? paymentStatus,
+        OrderType? orderType,
+        bool activeOnly,
+        CancellationToken cancellationToken)
     {
         var query = IncludeOrderGraph(db.Orders.AsNoTracking());
-        if (activeOnly) query = query.Where(x => x.Status == OrderStatus.InSalads || x.Status == OrderStatus.InMain);
+        if (activeOnly) query = query.Where(x => x.Status == OrderStatus.Open);
         if (status.HasValue) query = query.Where(x => x.Status == status.Value);
+        if (kitchenStatus.HasValue) query = query.Where(x => x.KitchenStatus == kitchenStatus.Value);
         if (paymentStatus.HasValue) query = query.Where(x => x.PaymentStatus == paymentStatus.Value);
         if (orderType.HasValue) query = query.Where(x => x.OrderType == orderType.Value);
         if (date.HasValue)
@@ -68,15 +95,18 @@ public sealed class OrdersService(
             var end = start.AddDays(1);
             query = query.Where(x => x.CreatedAt >= start && x.CreatedAt < end);
         }
+
         if (from.HasValue && to.HasValue && from.Value > to.Value)
         {
-            throw new ApiException("תאריך ההתחלה חייב להיות לפני תאריך הסיום או זהה לו.");
+            throw new ApiException("Start date must be before or equal to end date.");
         }
+
         if (from.HasValue)
         {
             var start = from.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
             query = query.Where(x => x.CreatedAt >= start);
         }
+
         if (to.HasValue)
         {
             var end = to.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddDays(1);
@@ -90,134 +120,322 @@ public sealed class OrdersService(
     public async Task<OrderResponseDto> GetByIdAsync(int id, bool activeOnly, CancellationToken cancellationToken)
     {
         var query = IncludeOrderGraph(db.Orders.AsNoTracking());
-        if (activeOnly) query = query.Where(x => x.Status == OrderStatus.InSalads || x.Status == OrderStatus.InMain);
+        if (activeOnly) query = query.Where(x => x.Status == OrderStatus.Open);
 
         var order = await query.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("ההזמנה לא נמצאה.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("Order not found.", StatusCodes.Status404NotFound);
         return order.ToOrderResponse();
     }
 
     public async Task<OrderResponseDto> UpdateAsync(int id, UpdateOrderDto dto, CancellationToken cancellationToken)
     {
-        var order = await LoadTrackedOrderAsync(id, cancellationToken);
-        EnsureStaffEditable(order);
-        await ValidateAndLoadAssignableTablesAsync(dto.OrderType, order.OrderTables.Select(x => x.TableId).ToArray(), order.OrderTables.Select(x => x.TableId).ToArray(), cancellationToken);
-        order.CustomerFirstName = dto.CustomerFirstName?.Trim() ?? string.Empty;
-        order.CustomerLastName = dto.CustomerLastName?.Trim() ?? string.Empty;
-        order.Notes = dto.Notes?.Trim();
-        order.OrderType = dto.OrderType;
-        await db.SaveChangesAsync(cancellationToken);
-        return order.ToOrderResponse();
-    }
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
 
-    public async Task<OrderResponseDto> UpdateStatusAsync(int id, UpdateOrderStatusDto dto, CancellationToken cancellationToken)
-    {
-        var order = await LoadTrackedOrderAsync(id, cancellationToken);
-        EnsureStatusTransitionAllowed(order, dto.Status);
-        var previousStatus = order.Status;
-        order.Status = dto.Status;
-
-        if (IsClosedStatus(dto.Status))
+        try
         {
-            ReleaseAssignedTables(order);
+            var order = await LoadTrackedOrderForUpdateAsync(id, cancellationToken);
+            orderState.EnsureItemsCanBeChanged(order);
+            var tableIds = dto.OrderType == OrderType.TakeAway
+                ? Array.Empty<int>()
+                : order.OrderTables.Select(x => x.TableId).ToArray();
+
+            await tableAssignments.ReplaceTablesAsync(order, dto.OrderType, tableIds, cancellationToken);
+            order.CustomerFirstName = dto.CustomerFirstName?.Trim() ?? string.Empty;
+            order.CustomerLastName = dto.CustomerLastName?.Trim() ?? string.Empty;
+            order.Notes = dto.Notes?.Trim();
+            order.OrderType = dto.OrderType;
+
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            await ReloadOrderAsync(order, cancellationToken);
+            return order.ToOrderResponse();
         }
-        else if (IsClosedStatus(previousStatus) && order.OrderTables.Count > 0)
+        catch (DbUpdateConcurrencyException exception)
         {
-            var assignedTables = await ValidateAndLoadAssignableTablesAsync(order.OrderType, order.OrderTables.Select(x => x.TableId).ToArray(), Array.Empty<int>(), cancellationToken);
-            MarkTablesOccupied(assignedTables);
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            logger.LogWarning(exception, "Order {OrderId} update concurrency conflict", id);
+            throw new ApiException("Order was updated concurrently. Refresh and try again.", StatusCodes.Status409Conflict);
         }
-
-        await db.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Order {OrderId} status updated to {Status}", order.Id, order.Status);
-        var response = order.ToOrderResponse();
-        await realtimeNotifier.OrderStatusUpdatedAsync(response, CustomerUserId(order), cancellationToken);
-        return response;
-    }
-
-    public async Task<OrderResponseDto> AddItemAsync(int id, AddOrderItemDto dto, CancellationToken cancellationToken)
-    {
-        var order = await LoadTrackedOrderAsync(id, cancellationToken);
-        EnsureStaffEditable(order);
-        var menuItem = await LoadAvailableMenuItemAsync(dto.MenuItemId, cancellationToken)
-            ?? throw new ApiException("המנה לא נמצאה או אינה זמינה.", StatusCodes.Status404NotFound);
-        order.Items.Add(new OrderItem { MenuItemId = menuItem.Id, Quantity = dto.Quantity, UnitPrice = menuItem.Price, Notes = dto.Notes?.Trim() });
-        RecalculateTotal(order);
-        await UpdatePaymentStatusAsync(order, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        await ReloadOrderAsync(order, cancellationToken);
-        return order.ToOrderResponse();
-    }
-
-    public async Task<OrderResponseDto> UpdateItemAsync(int id, int itemId, UpdateOrderItemDto dto, CancellationToken cancellationToken)
-    {
-        var order = await LoadTrackedOrderAsync(id, cancellationToken);
-        EnsureStaffEditable(order);
-        var item = order.Items.SingleOrDefault(x => x.Id == itemId)
-            ?? throw new ApiException("פריט ההזמנה לא נמצא.", StatusCodes.Status404NotFound);
-        item.Quantity = dto.Quantity;
-        item.Notes = dto.Notes?.Trim();
-        RecalculateTotal(order);
-        await UpdatePaymentStatusAsync(order, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        return order.ToOrderResponse();
-    }
-
-    public async Task<OrderResponseDto> DeleteItemAsync(int id, int itemId, CancellationToken cancellationToken)
-    {
-        var order = await LoadTrackedOrderAsync(id, cancellationToken);
-        EnsureStaffEditable(order);
-        var item = order.Items.SingleOrDefault(x => x.Id == itemId)
-            ?? throw new ApiException("פריט ההזמנה לא נמצא.", StatusCodes.Status404NotFound);
-
-        if (order.Items.Count <= 1)
+        catch (DbUpdateException exception) when (IsSqlConcurrencyFailure(exception))
         {
-            throw new ApiException("הזמנה חייבת לכלול לפחות מנה אחת.");
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            logger.LogWarning(exception, "Order {OrderId} update SQL concurrency conflict", id);
+            throw new ApiException("Order was updated concurrently. Refresh and try again.", StatusCodes.Status409Conflict);
         }
-
-        order.Items.Remove(item);
-        RecalculateTotal(order);
-        await UpdatePaymentStatusAsync(order, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        return order.ToOrderResponse();
+        catch
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            throw;
+        }
     }
+
+    public async Task<OrderResponseDto> AdvanceKitchenStatusAsync(int id, int changedByUserId, CancellationToken cancellationToken)
+    {
+        EnsureAuthenticatedUser(changedByUserId);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+
+        try
+        {
+            var order = await LoadTrackedOrderForUpdateAsync(id, cancellationToken);
+            var completed = orderState.AdvanceKitchenStatus(order, changedByUserId, DateTime.UtcNow);
+            if (completed)
+            {
+                await tableAssignments.ReleaseTablesForClosedOrderAsync(order, cancellationToken);
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            await ReloadOrderAsync(order, cancellationToken);
+
+            logger.LogInformation("Order {OrderId} kitchen status advanced to {KitchenStatus}", order.Id, order.KitchenStatus);
+            var response = order.ToOrderResponse();
+            await realtimeNotifier.OrderStatusUpdatedAsync(response, CustomerUserId(order), cancellationToken);
+            return response;
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            logger.LogWarning(exception, "Order {OrderId} kitchen status concurrency conflict", id);
+            throw new ApiException("Order was updated concurrently. Refresh and try again.", StatusCodes.Status409Conflict);
+        }
+        catch (DbUpdateException exception) when (IsSqlConcurrencyFailure(exception))
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            logger.LogWarning(exception, "Order {OrderId} kitchen status SQL concurrency conflict", id);
+            throw new ApiException("Order was updated concurrently. Refresh and try again.", StatusCodes.Status409Conflict);
+        }
+        catch
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            throw;
+        }
+    }
+
+    public async Task<OrderResponseDto> MarkPaidAsync(int id, int changedByUserId, CancellationToken cancellationToken)
+    {
+        EnsureAuthenticatedUser(changedByUserId);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+
+        try
+        {
+            var order = await LoadTrackedOrderForUpdateAsync(id, cancellationToken);
+            var paidAmount = await db.Payments.Where(x => x.OrderId == id).SumAsync(x => x.Amount, cancellationToken);
+            var completed = orderState.MarkPaidFromExistingPayments(order, paidAmount, changedByUserId, DateTime.UtcNow);
+            if (completed)
+            {
+                await tableAssignments.ReleaseTablesForClosedOrderAsync(order, cancellationToken);
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            await ReloadOrderAsync(order, cancellationToken);
+
+            var response = order.ToOrderResponse();
+            await realtimeNotifier.OrderStatusUpdatedAsync(response, CustomerUserId(order), cancellationToken);
+            return response;
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            logger.LogWarning(exception, "Order {OrderId} mark-paid concurrency conflict", id);
+            throw new ApiException("Order was updated concurrently. Refresh and try again.", StatusCodes.Status409Conflict);
+        }
+        catch (DbUpdateException exception) when (IsSqlConcurrencyFailure(exception))
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            logger.LogWarning(exception, "Order {OrderId} mark-paid SQL concurrency conflict", id);
+            throw new ApiException("Order was updated concurrently. Refresh and try again.", StatusCodes.Status409Conflict);
+        }
+        catch
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            throw;
+        }
+    }
+
+    public async Task<OrderResponseDto> CancelAsync(int id, int changedByUserId, CancellationToken cancellationToken)
+    {
+        EnsureAuthenticatedUser(changedByUserId);
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+
+        try
+        {
+            var order = await LoadTrackedOrderForUpdateAsync(id, cancellationToken);
+            orderState.Cancel(order, changedByUserId, DateTime.UtcNow);
+            await tableAssignments.ReleaseTablesForClosedOrderAsync(order, cancellationToken);
+
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            await ReloadOrderAsync(order, cancellationToken);
+
+            logger.LogInformation("Order {OrderId} cancelled by user {UserId}", order.Id, changedByUserId);
+            var response = order.ToOrderResponse();
+            await realtimeNotifier.OrderStatusUpdatedAsync(response, CustomerUserId(order), cancellationToken);
+            return response;
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            logger.LogWarning(exception, "Order {OrderId} cancellation concurrency conflict", id);
+            throw new ApiException("Order was updated concurrently. Refresh and try again.", StatusCodes.Status409Conflict);
+        }
+        catch (DbUpdateException exception) when (IsSqlConcurrencyFailure(exception))
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            logger.LogWarning(exception, "Order {OrderId} cancellation SQL concurrency conflict", id);
+            throw new ApiException("Order was updated concurrently. Refresh and try again.", StatusCodes.Status409Conflict);
+        }
+        catch
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            throw;
+        }
+    }
+
+    public Task<OrderResponseDto> AddItemAsync(int id, AddOrderItemDto dto, CancellationToken cancellationToken) =>
+        MutateOrderItemsAsync(
+            id,
+            async (order, token) =>
+            {
+                var menuItem = await LoadAvailableMenuItemAsync(dto.MenuItemId, token);
+                order.Items.Add(new OrderItem
+                {
+                    MenuItemId = menuItem.Id,
+                    Quantity = dto.Quantity,
+                    UnitPrice = menuItem.Price,
+                    Notes = dto.Notes?.Trim()
+                });
+            },
+            "item add",
+            cancellationToken);
+
+    public Task<OrderResponseDto> UpdateItemAsync(int id, int itemId, UpdateOrderItemDto dto, CancellationToken cancellationToken) =>
+        MutateOrderItemsAsync(
+            id,
+            (order, _) =>
+            {
+                var item = order.Items.SingleOrDefault(x => x.Id == itemId)
+                    ?? throw new ApiException("Order item not found.", StatusCodes.Status404NotFound);
+                item.Quantity = dto.Quantity;
+                item.Notes = dto.Notes?.Trim();
+                return Task.CompletedTask;
+            },
+            "item update",
+            cancellationToken);
+
+    public Task<OrderResponseDto> DeleteItemAsync(int id, int itemId, CancellationToken cancellationToken) =>
+        MutateOrderItemsAsync(
+            id,
+            (order, _) =>
+            {
+                var item = order.Items.SingleOrDefault(x => x.Id == itemId)
+                    ?? throw new ApiException("Order item not found.", StatusCodes.Status404NotFound);
+
+                if (order.Items.Count <= 1)
+                {
+                    throw new ApiException("Order must include at least one item.");
+                }
+
+                order.Items.Remove(item);
+                return Task.CompletedTask;
+            },
+            "item delete",
+            cancellationToken);
 
     public async Task<OrderResponseDto> UpdateTablesAsync(int id, UpdateOrderTablesDto dto, CancellationToken cancellationToken)
     {
-        var order = await LoadTrackedOrderAsync(id, cancellationToken);
-        EnsureStaffEditable(order);
-        var currentTableIds = order.OrderTables.Select(x => x.TableId).ToArray();
-        var assignedTables = await ValidateAndLoadAssignableTablesAsync(order.OrderType, dto.TableIds, currentTableIds, cancellationToken);
-        var newTableIds = assignedTables.Select(x => x.Id).ToHashSet();
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
 
-        foreach (var removedTable in order.OrderTables.Where(x => !newTableIds.Contains(x.TableId)).Select(x => x.Table))
+        try
         {
-            if (removedTable.Status == TableStatus.Occupied)
-            {
-                removedTable.Status = TableStatus.Available;
-            }
+            var order = await LoadTrackedOrderForUpdateAsync(id, cancellationToken);
+            orderState.EnsureItemsCanBeChanged(order);
+            await tableAssignments.ReplaceTablesAsync(order, order.OrderType, dto.TableIds, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            await ReloadOrderAsync(order, cancellationToken);
+            return order.ToOrderResponse();
         }
-
-        order.OrderTables.Clear();
-        AddOrderTables(order, newTableIds);
-        MarkTablesOccupied(assignedTables);
-        await db.SaveChangesAsync(cancellationToken);
-        await ReloadOrderAsync(order, cancellationToken);
-        return order.ToOrderResponse();
+        catch (DbUpdateConcurrencyException exception)
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            logger.LogWarning(exception, "Order {OrderId} table update concurrency conflict", id);
+            throw new ApiException("Order tables were updated concurrently. Refresh and try again.", StatusCodes.Status409Conflict);
+        }
+        catch (DbUpdateException exception) when (IsSqlConcurrencyFailure(exception))
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            logger.LogWarning(exception, "Order {OrderId} table update SQL concurrency conflict", id);
+            throw new ApiException("Order tables were updated concurrently. Refresh and try again.", StatusCodes.Status409Conflict);
+        }
+        catch
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            throw;
+        }
     }
 
     private static IQueryable<Order> IncludeOrderGraph(IQueryable<Order> query) =>
         query.Include(x => x.Items).ThenInclude(x => x.MenuItem)
             .Include(x => x.OrderTables).ThenInclude(x => x.Table)
+            .Include(x => x.StatusChanges)
             .Include(x => x.User);
 
     private async Task<Order> LoadTrackedOrderAsync(int id, CancellationToken cancellationToken) =>
         await IncludeOrderGraph(db.Orders).Include(x => x.Payments).SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
-            ?? throw new ApiException("ההזמנה לא נמצאה.", StatusCodes.Status404NotFound);
+            ?? throw new ApiException("Order not found.", StatusCodes.Status404NotFound);
+
+    private async Task<Order> LoadTrackedOrderForUpdateAsync(int id, CancellationToken cancellationToken) =>
+        await IncludeOrderGraph(db.Orders
+                .FromSqlInterpolated($"SELECT * FROM [Orders] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id}"))
+            .Include(x => x.Payments)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new ApiException("Order not found.", StatusCodes.Status404NotFound);
+
+    private async Task<OrderResponseDto> MutateOrderItemsAsync(
+        int id,
+        Func<Order, CancellationToken, Task> mutate,
+        string operation,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+
+        try
+        {
+            var order = await LoadTrackedOrderForUpdateAsync(id, cancellationToken);
+            orderState.EnsureItemsCanBeChanged(order);
+            await mutate(order, cancellationToken);
+            RecalculateTotal(order);
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            await ReloadOrderAsync(order, cancellationToken);
+            return order.ToOrderResponse();
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            logger.LogWarning(exception, "Order {OrderId} {Operation} concurrency conflict", id, operation);
+            throw new ApiException("Order was updated concurrently. Refresh and try again.", StatusCodes.Status409Conflict);
+        }
+        catch (DbUpdateException exception) when (IsSqlConcurrencyFailure(exception))
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            logger.LogWarning(exception, "Order {OrderId} {Operation} SQL concurrency conflict", id, operation);
+            throw new ApiException("Order was updated concurrently. Refresh and try again.", StatusCodes.Status409Conflict);
+        }
+        catch
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            throw;
+        }
+    }
 
     private async Task ReloadOrderAsync(Order order, CancellationToken cancellationToken)
     {
         await db.Entry(order).Collection(x => x.Items).Query().Include(x => x.MenuItem).LoadAsync(cancellationToken);
         await db.Entry(order).Collection(x => x.OrderTables).Query().Include(x => x.Table).LoadAsync(cancellationToken);
+        await db.Entry(order).Collection(x => x.StatusChanges).LoadAsync(cancellationToken);
+        await db.Entry(order).Reference(x => x.User).LoadAsync(cancellationToken);
     }
 
     private async Task<Dictionary<int, MenuItem>> LoadMenuItemsAsync(IEnumerable<int> ids, CancellationToken cancellationToken)
@@ -234,147 +452,57 @@ public sealed class OrdersService(
         var availableItems = items.Where(x => activeCategorySet.Contains(x.Category)).ToDictionary(x => x.Id);
         if (availableItems.Count != distinctIds.Length)
         {
-            throw new ApiException("אחת או יותר מהמנות לא נמצאו או אינן זמינות.");
+            throw new ApiException("One or more menu items were not found or are unavailable.");
         }
+
         return availableItems;
     }
 
     private async Task<MenuItem> LoadAvailableMenuItemAsync(int id, CancellationToken cancellationToken) =>
         (await LoadMenuItemsAsync([id], cancellationToken))[id];
 
-    private static void ValidateTablesForOrder(OrderType orderType, IReadOnlyCollection<int>? tableIds)
+    private static void AddItems(Order order, IEnumerable<CreateOrderItemDto> items, IReadOnlyDictionary<int, MenuItem> menuItems)
     {
-        if (orderType == OrderType.DineIn && (tableIds is null || tableIds.Count == 0))
+        foreach (var item in items)
         {
-            throw new ApiException("להזמנה במסעדה יש לבחור לפחות שולחן אחד.");
-        }
-    }
-
-    private async Task<IReadOnlyCollection<Table>> ValidateAndLoadAssignableTablesAsync(
-        OrderType orderType,
-        IReadOnlyCollection<int>? tableIds,
-        IReadOnlyCollection<int> currentlyAssignedTableIds,
-        CancellationToken cancellationToken)
-    {
-        ValidateTablesForOrder(orderType, tableIds);
-
-        var distinctTableIds = tableIds?.Where(x => x > 0).Distinct().ToArray() ?? Array.Empty<int>();
-        if (distinctTableIds.Length == 0)
-        {
-            return Array.Empty<Table>();
-        }
-
-        if (tableIds is not null && distinctTableIds.Length != tableIds.Count)
-        {
-            throw new ApiException("רשימת השולחנות אינה תקינה.");
-        }
-
-        var tables = await db.Tables.Where(x => distinctTableIds.Contains(x.Id)).ToArrayAsync(cancellationToken);
-        var missingTableIds = distinctTableIds.Except(tables.Select(x => x.Id)).ToArray();
-        if (missingTableIds.Length > 0)
-        {
-            throw new ApiException("אחד או יותר מהשולחנות לא נמצאו.", StatusCodes.Status404NotFound);
-        }
-
-        var currentIds = currentlyAssignedTableIds.ToHashSet();
-        var unavailableTables = tables
-            .Where(x => !currentIds.Contains(x.Id) && x.Status != TableStatus.Available)
-            .Select(x => x.Name)
-            .ToArray();
-
-        if (unavailableTables.Length > 0)
-        {
-            throw new ApiException("ניתן לשייך רק שולחנות פנויים.", StatusCodes.Status409Conflict);
-        }
-
-        return tables;
-    }
-
-    private static void AddOrderTables(Order order, IEnumerable<int>? tableIds)
-    {
-        foreach (var tableId in tableIds?.Distinct() ?? Enumerable.Empty<int>())
-        {
-            order.OrderTables.Add(new OrderTable { TableId = tableId });
-        }
-    }
-
-    private static void MarkTablesOccupied(IEnumerable<Table> tables)
-    {
-        foreach (var table in tables)
-        {
-            table.Status = TableStatus.Occupied;
-        }
-    }
-
-    private static void ReleaseAssignedTables(Order order)
-    {
-        foreach (var orderTable in order.OrderTables)
-        {
-            if (orderTable.Table.Status == TableStatus.Occupied)
+            var menuItem = menuItems[item.MenuItemId];
+            order.Items.Add(new OrderItem
             {
-                orderTable.Table.Status = TableStatus.Available;
-            }
-        }
-    }
-
-    private static bool IsClosedStatus(OrderStatus status) =>
-        status is OrderStatus.Completed or OrderStatus.Cancelled;
-
-    private static bool HasAnyPayment(Order order) =>
-        order.Payments.Count > 0;
-
-    private static bool HasPaidStatus(Order order) =>
-        order.PaymentStatus == PaymentStatus.Paid;
-
-    private static void EnsureStaffEditable(Order order)
-    {
-        if (HasPaidStatus(order))
-        {
-            throw new ApiException("לא ניתן לעדכן הזמנה ששולמה.", StatusCodes.Status409Conflict);
-        }
-
-        if (IsClosedStatus(order.Status))
-        {
-            throw new ApiException("לא ניתן לעדכן הזמנה שהושלמה או בוטלה.", StatusCodes.Status409Conflict);
-        }
-
-        if (HasAnyPayment(order))
-        {
-            throw new ApiException("לא ניתן לעדכן הזמנה שכבר בוצע עבורה תשלום.", StatusCodes.Status409Conflict);
-        }
-    }
-
-    private static void EnsureStatusTransitionAllowed(Order order, OrderStatus nextStatus)
-    {
-        if (order.Status == nextStatus)
-        {
-            return;
-        }
-
-        if (IsClosedStatus(order.Status))
-        {
-            throw new ApiException("לא ניתן לפתוח מחדש הזמנה שהושלמה או בוטלה.", StatusCodes.Status409Conflict);
-        }
-
-        if (nextStatus == OrderStatus.Cancelled && HasAnyPayment(order))
-        {
-            throw new ApiException("לא ניתן לבטל הזמנה שכבר בוצע עבורה תשלום.", StatusCodes.Status409Conflict);
+                MenuItemId = item.MenuItemId,
+                Quantity = item.Quantity,
+                UnitPrice = menuItem.Price,
+                Notes = item.Notes?.Trim()
+            });
         }
     }
 
     private static int? CustomerUserId(Order order) =>
         order.User?.Role == UserRole.Customer ? order.UserId : null;
 
-    private static void RecalculateTotal(Order order) =>
-        order.TotalPrice = order.Items.Sum(x => x.UnitPrice * x.Quantity);
-
-    private async Task UpdatePaymentStatusAsync(Order order, CancellationToken cancellationToken)
+    private static void EnsureAuthenticatedUser(int userId)
     {
-        var paid = order.Payments.Sum(x => x.Amount);
-        if (order.Id > 0)
+        if (userId <= 0)
         {
-            paid = await db.Payments.Where(x => x.OrderId == order.Id).SumAsync(x => x.Amount, cancellationToken);
+            throw new ApiException("Authenticated user was not found.", StatusCodes.Status401Unauthorized);
         }
-        order.PaymentStatus = paid >= order.TotalPrice ? PaymentStatus.Paid : PaymentStatus.Unpaid;
     }
+
+    private async Task RollbackQuietlyAsync(IDbContextTransaction transaction, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await transaction.RollbackAsync(cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Failed to roll back order transaction");
+        }
+    }
+
+    private static void RecalculateTotal(Order order) =>
+        order.TotalAmount = order.Items.Sum(x => x.UnitPrice * x.Quantity);
+
+    private static bool IsSqlConcurrencyFailure(DbUpdateException exception) =>
+        exception.InnerException is SqlException sqlException &&
+        sqlException.Errors.Cast<SqlError>().Any(error => error.Number == 1205);
 }

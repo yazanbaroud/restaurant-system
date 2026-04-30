@@ -6,6 +6,7 @@ import { environment } from '../../../environments/environment';
 import {
   CreateCustomerOrderInput,
   CustomerOrderItemInput,
+  KitchenStatus,
   CustomerTableOption,
   Order,
   OrderItem,
@@ -92,6 +93,7 @@ export class CustomerOrdersService {
       customerLastName: this.stringValue(record['customerLastName']),
       createdAt: this.stringValue(record['createdAt']),
       status: this.normalizeOrderStatus(record['status']),
+      kitchenStatus: this.normalizeKitchenStatus(record['kitchenStatus']),
       notes: this.stringValue(record['notes']),
       totalPrice: this.numberValue(record['totalPrice']),
       orderType: this.normalizeOrderType(record['orderType']),
@@ -138,7 +140,12 @@ export class CustomerOrdersService {
 
   private normalizeOrderStatus(value: unknown): OrderStatus {
     const numericValue = Number(value);
-    return Object.values(OrderStatus).includes(numericValue as OrderStatus) ? numericValue as OrderStatus : OrderStatus.InSalads;
+    return Object.values(OrderStatus).includes(numericValue as OrderStatus) ? numericValue as OrderStatus : OrderStatus.Open;
+  }
+
+  private normalizeKitchenStatus(value: unknown): KitchenStatus {
+    const numericValue = Number(value);
+    return Object.values(KitchenStatus).includes(numericValue as KitchenStatus) ? numericValue as KitchenStatus : KitchenStatus.New;
   }
 
   private normalizeOrderType(value: unknown): OrderType {

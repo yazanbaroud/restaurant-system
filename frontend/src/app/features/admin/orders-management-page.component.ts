@@ -75,6 +75,7 @@ interface OrdersDateRange {
               <select #paymentSelect [value]="paymentFilterValue()" (change)="setPaymentFilter(paymentSelect.value)">
                 <option value="all">הכל</option>
                 <option [value]="paymentOptionValue(PaymentStatus.Unpaid)">{{ paymentStatusLabels[PaymentStatus.Unpaid] }}</option>
+                <option [value]="paymentOptionValue(PaymentStatus.Partial)">{{ paymentStatusLabels[PaymentStatus.Partial] }}</option>
                 <option [value]="paymentOptionValue(PaymentStatus.Paid)">{{ paymentStatusLabels[PaymentStatus.Paid] }}</option>
               </select>
             </label>
@@ -219,8 +220,7 @@ export class OrdersManagementPageComponent {
   );
   readonly filters: { value: OrderFilter; label: string }[] = [
     { value: 'all', label: 'הכל' },
-    { value: OrderStatus.InSalads, label: orderStatusLabels[OrderStatus.InSalads] },
-    { value: OrderStatus.InMain, label: orderStatusLabels[OrderStatus.InMain] },
+    { value: OrderStatus.Open, label: orderStatusLabels[OrderStatus.Open] },
     { value: OrderStatus.Completed, label: orderStatusLabels[OrderStatus.Completed] },
     { value: OrderStatus.Cancelled, label: orderStatusLabels[OrderStatus.Cancelled] }
   ];

@@ -398,8 +398,7 @@ export class CustomerOrdersPageComponent {
 
   readonly statusOptions: FilterOption<OrderStatusFilter>[] = [
     { value: 'all', label: 'כל הסטטוסים' },
-    { value: OrderStatus.InSalads, label: orderStatusLabels[OrderStatus.InSalads] },
-    { value: OrderStatus.InMain, label: orderStatusLabels[OrderStatus.InMain] },
+    { value: OrderStatus.Open, label: orderStatusLabels[OrderStatus.Open] },
     { value: OrderStatus.Completed, label: orderStatusLabels[OrderStatus.Completed] },
     { value: OrderStatus.Cancelled, label: orderStatusLabels[OrderStatus.Cancelled] }
   ];
@@ -407,6 +406,7 @@ export class CustomerOrdersPageComponent {
   readonly paymentStatusOptions: FilterOption<PaymentStatusFilter>[] = [
     { value: 'all', label: 'כל התשלומים' },
     { value: PaymentStatus.Unpaid, label: paymentStatusLabels[PaymentStatus.Unpaid] },
+    { value: PaymentStatus.Partial, label: paymentStatusLabels[PaymentStatus.Partial] },
     { value: PaymentStatus.Paid, label: paymentStatusLabels[PaymentStatus.Paid] }
   ];
 
@@ -425,11 +425,11 @@ export class CustomerOrdersPageComponent {
 
   readonly searchControl = new FormControl(this.initialStringQuery('q'), { nonNullable: true });
   readonly statusControl = new FormControl<OrderStatusFilter>(
-    this.initialEnumQuery('status', [OrderStatus.InSalads, OrderStatus.InMain, OrderStatus.Completed, OrderStatus.Cancelled]),
+    this.initialEnumQuery('status', [OrderStatus.Open, OrderStatus.Completed, OrderStatus.Cancelled]),
     { nonNullable: true }
   );
   readonly paymentStatusControl = new FormControl<PaymentStatusFilter>(
-    this.initialEnumQuery('payment', [PaymentStatus.Unpaid, PaymentStatus.Paid]),
+    this.initialEnumQuery('payment', [PaymentStatus.Unpaid, PaymentStatus.Partial, PaymentStatus.Paid]),
     { nonNullable: true }
   );
   readonly orderTypeControl = new FormControl<OrderTypeFilter>(

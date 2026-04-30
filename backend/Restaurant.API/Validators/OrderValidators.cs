@@ -49,11 +49,6 @@ public sealed class UpdateOrderDtoValidator : AbstractValidator<UpdateOrderDto>
     }
 }
 
-public sealed class UpdateOrderStatusDtoValidator : AbstractValidator<UpdateOrderStatusDto>
-{
-    public UpdateOrderStatusDtoValidator() => RuleFor(x => x.Status).IsInEnum();
-}
-
 public sealed class UpdateOrderTablesDtoValidator : AbstractValidator<UpdateOrderTablesDto>
 {
     public UpdateOrderTablesDtoValidator() => RuleFor(x => x.TableIds).NotNull();

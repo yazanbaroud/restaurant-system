@@ -12,8 +12,8 @@ namespace Restaurant.API.Controllers;
 public sealed class PaymentsController(IPaymentsService paymentsService) : ControllerBase
 {
     [HttpPost]
-    public async Task<ActionResult<PaymentResponseDto>> Create(CreatePaymentDto dto, CancellationToken cancellationToken) =>
-        Created(string.Empty, await paymentsService.CreateAsync(dto, cancellationToken));
+    public async Task<ActionResult<CreatePaymentResponseDto>> Create(CreatePaymentDto dto, CancellationToken cancellationToken) =>
+        Created(string.Empty, await paymentsService.CreateAsync(User.GetUserId(), dto, cancellationToken));
 
     [HttpGet]
     [Authorize(Roles = AppRoles.Admin)]

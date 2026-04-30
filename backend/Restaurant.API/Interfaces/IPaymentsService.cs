@@ -4,7 +4,7 @@ namespace Restaurant.API.Interfaces;
 
 public interface IPaymentsService
 {
-    Task<PaymentResponseDto> CreateAsync(CreatePaymentDto dto, CancellationToken cancellationToken);
+    Task<CreatePaymentResponseDto> CreateAsync(int createdByUserId, CreatePaymentDto dto, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<PaymentResponseDto>> GetAllAsync(DateOnly? date, DateTimeOffset? from, DateTimeOffset? to, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<PaymentResponseDto>> GetByOrderAsync(int orderId, CancellationToken cancellationToken);
 }

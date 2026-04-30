@@ -12,6 +12,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<MenuItemImage> MenuItemImages => Set<MenuItemImage>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
+    public DbSet<OrderStatusChange> OrderStatusChanges => Set<OrderStatusChange>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<OrderTable> OrderTables => Set<OrderTable>();
     public DbSet<Reservation> Reservations => Set<Reservation>();
@@ -39,6 +40,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.Location).HasMaxLength(100);
             entity.Property(x => x.Notes).HasMaxLength(500);
             entity.Property(x => x.Status).HasConversion<int>().IsRequired();
+            entity.Property(x => x.RowVersion).IsRowVersion();
         });
 
         modelBuilder.Entity<MenuItem>(entity =>
@@ -80,10 +82,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.CustomerFirstName).HasMaxLength(100);
             entity.Property(x => x.CustomerLastName).HasMaxLength(100);
             entity.Property(x => x.Notes).HasMaxLength(1000);
-            entity.Property(x => x.TotalPrice).HasPrecision(18, 2);
+            entity.Property(x => x.TotalAmount).HasPrecision(18, 2);
             entity.Property(x => x.Status).HasConversion<int>().IsRequired();
+            entity.Property(x => x.KitchenStatus).HasConversion<int>().IsRequired();
             entity.Property(x => x.OrderType).HasConversion<int>().IsRequired();
             entity.Property(x => x.PaymentStatus).HasConversion<int>().IsRequired();
+            entity.Property(x => x.RowVersion).IsRowVersion();
             entity.HasOne(x => x.User)
                 .WithMany(x => x.Orders)
                 .HasForeignKey(x => x.UserId)
@@ -106,12 +110,20 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
         modelBuilder.Entity<Payment>(entity =>
         {
+            entity.HasIndex(x => x.IdempotencyKey).IsUnique();
             entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.IdempotencyKey).IsRequired();
             entity.Property(x => x.Method).HasConversion<int>().IsRequired();
+            entity.Property(x => x.CreatedAt).IsRequired();
+            entity.Property(x => x.RowVersion).IsRowVersion();
             entity.HasOne(x => x.Order)
                 .WithMany(x => x.Payments)
                 .HasForeignKey(x => x.OrderId)
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.CreatedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.CreatedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<OrderTable>(entity =>
@@ -140,6 +152,23 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany(x => x.Reservations)
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<OrderStatusChange>(entity =>
+        {
+            entity.Property(x => x.ChangeType).HasConversion<int>().IsRequired();
+            entity.Property(x => x.FromValue).HasMaxLength(40);
+            entity.Property(x => x.ToValue).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.ChangedAt).IsRequired();
+            entity.HasIndex(x => new { x.OrderId, x.ChangedAt });
+            entity.HasOne(x => x.Order)
+                .WithMany(x => x.StatusChanges)
+                .HasForeignKey(x => x.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.ChangedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.ChangedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

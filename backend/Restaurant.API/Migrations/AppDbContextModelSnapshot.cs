@@ -336,6 +336,53 @@ namespace Restaurant.API.Migrations
                     b.ToTable("Payments");
                 });
 
+            modelBuilder.Entity("Restaurant.API.Models.RefreshToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedByIp")
+                        .HasMaxLength(45)
+                        .HasColumnType("nvarchar(45)");
+
+                    b.Property<DateTime>("ExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ReplacedByTokenHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<DateTime?>("RevokedAtUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("RevokedByIp")
+                        .HasMaxLength(45)
+                        .HasColumnType("nvarchar(45)");
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("RefreshTokens");
+                });
+
             modelBuilder.Entity("Restaurant.API.Models.RestaurantBusinessHour", b =>
                 {
                     b.Property<int>("Id")
@@ -484,6 +531,11 @@ namespace Restaurant.API.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bit")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -500,6 +552,9 @@ namespace Restaurant.API.Migrations
                         .HasColumnType("nvarchar(40)");
 
                     b.Property<int>("Role")
+                        .HasColumnType("int");
+
+                    b.Property<int>("TokenVersion")
                         .HasColumnType("int");
 
                     b.HasKey("Id");
@@ -607,6 +662,17 @@ namespace Restaurant.API.Migrations
                     b.Navigation("Order");
                 });
 
+            modelBuilder.Entity("Restaurant.API.Models.RefreshToken", b =>
+                {
+                    b.HasOne("Restaurant.API.Models.User", "User")
+                        .WithMany("RefreshTokens")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Restaurant.API.Models.Reservation", b =>
                 {
                     b.HasOne("Restaurant.API.Models.User", "User")
@@ -643,6 +709,8 @@ namespace Restaurant.API.Migrations
             modelBuilder.Entity("Restaurant.API.Models.User", b =>
                 {
                     b.Navigation("Orders");
+
+                    b.Navigation("RefreshTokens");
 
                     b.Navigation("Reservations");
                 });

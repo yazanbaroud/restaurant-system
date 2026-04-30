@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Restaurant.API.DTOs;
 using Restaurant.API.Enums;
 using Restaurant.API.Helpers;
@@ -13,6 +14,7 @@ public sealed class ReservationsController(IReservationsService reservationsServ
 {
     [HttpPost]
     [AllowAnonymous]
+    [EnableRateLimiting(AppRateLimitPolicies.PublicReservation)]
     public async Task<ActionResult<ReservationResponseDto>> Create(CreateReservationDto dto, CancellationToken cancellationToken) =>
         Created(string.Empty, await reservationsService.CreateAsync(dto, GetAuthenticatedCustomerUserId(), cancellationToken));
 

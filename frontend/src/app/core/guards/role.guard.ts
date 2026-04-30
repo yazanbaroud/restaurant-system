@@ -22,7 +22,7 @@ export const roleGuard: CanActivateFn = (route, state) => {
   return auth.me().pipe(
     map((user) => authorizeUser(user, roles, router)),
     catchError(() => {
-      auth.logout();
+      auth.clearSession();
       return of(loginRedirect(router, state.url, roles));
     })
   );

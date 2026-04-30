@@ -735,7 +735,8 @@ export class RestaurantDataService {
       lastName: input.lastName,
       email: input.email,
       phoneNumber: input.phoneNumber,
-      role: input.role
+      role: input.role,
+      isActive: true
     };
   }
 
@@ -748,7 +749,8 @@ export class RestaurantDataService {
       lastName: input.lastName ?? user?.lastName ?? '',
       email: input.email ?? user?.email ?? '',
       phoneNumber: input.phoneNumber ?? user?.phoneNumber ?? '',
-      role: user?.role ?? UserRole.Customer
+      role: user?.role ?? UserRole.Customer,
+      isActive: user?.isActive ?? true
     };
   }
 
@@ -761,7 +763,8 @@ export class RestaurantDataService {
       lastName: user?.lastName ?? '',
       email: user?.email ?? '',
       phoneNumber: user?.phoneNumber ?? '',
-      role
+      role,
+      isActive: user?.isActive ?? true
     };
   }
 
@@ -782,7 +785,8 @@ export class RestaurantDataService {
       lastName: this.stringValue(record['lastName']).trim() || fallbackLastName,
       email: this.stringValue(record['email']).trim() || fallback.email || '',
       phoneNumber: this.stringValue(record['phoneNumber'] ?? record['phone'] ?? record['mobile'] ?? record['telephone']).trim() || fallback.phoneNumber || '',
-      role: this.normalizeUserRole(record['role'] ?? record['roleId'] ?? record['userRole'] ?? fallback.role)
+      role: this.normalizeUserRole(record['role'] ?? record['roleId'] ?? record['userRole'] ?? fallback.role),
+      isActive: this.booleanValue(record['isActive'] ?? record['active'], fallback.isActive ?? true)
     };
   }
 

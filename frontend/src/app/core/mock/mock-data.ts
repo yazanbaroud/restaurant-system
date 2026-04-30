@@ -27,7 +27,8 @@ export const MOCK_USERS: User[] = [
     lastName: 'חלבי',
     email: 'manager@hakeves.test',
     phoneNumber: '050-220-1144',
-    role: UserRole.Admin
+    role: UserRole.Admin,
+    isActive: true
   },
   {
     id: 2,
@@ -35,7 +36,8 @@ export const MOCK_USERS: User[] = [
     lastName: 'נסראלדין',
     email: 'waiter@hakeves.test',
     phoneNumber: '052-710-8877',
-    role: UserRole.Waiter
+    role: UserRole.Waiter,
+    isActive: true
   },
   {
     id: 3,
@@ -43,7 +45,8 @@ export const MOCK_USERS: User[] = [
     lastName: 'כהן',
     email: 'customer@hakeves.test',
     phoneNumber: '054-333-9281',
-    role: UserRole.Customer
+    role: UserRole.Customer,
+    isActive: true
   }
 ];
 

@@ -1,7 +1,10 @@
+using System.Security.Claims;
 using System.Text;
+using System.Threading.RateLimiting;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -43,6 +46,7 @@ public static class ServiceCollectionExtensions
 
         services.AddDbContext<AppDbContext>(options =>
             options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
+        services.AddHttpContextAccessor();
 
         var allowedOrigins = configuration.GetSection("Cors:AllowedOrigins")
             .Get<string[]>()
@@ -69,6 +73,26 @@ public static class ServiceCollectionExtensions
                     .AllowAnyMethod()
                     .AllowCredentials();
             });
+        });
+        services.AddRateLimiter(options =>
+        {
+            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+            options.AddPolicy(AppRateLimitPolicies.Login, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    RateLimitPartitionKey(context, AppRateLimitPolicies.Login),
+                    _ => FixedWindow(permitLimit: 5, TimeSpan.FromMinutes(1))));
+            options.AddPolicy(AppRateLimitPolicies.Register, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    RateLimitPartitionKey(context, AppRateLimitPolicies.Register),
+                    _ => FixedWindow(permitLimit: 3, TimeSpan.FromMinutes(5))));
+            options.AddPolicy(AppRateLimitPolicies.PublicReservation, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    RateLimitPartitionKey(context, AppRateLimitPolicies.PublicReservation),
+                    _ => FixedWindow(permitLimit: 10, TimeSpan.FromMinutes(5))));
+            options.AddPolicy(AppRateLimitPolicies.CustomerOrderCreation, context =>
+                RateLimitPartition.GetFixedWindowLimiter(
+                    RateLimitPartitionKey(context, AppRateLimitPolicies.CustomerOrderCreation),
+                    _ => FixedWindow(permitLimit: 10, TimeSpan.FromMinutes(1))));
         });
 
         services.AddScoped<IPasswordHasher, PasswordHasher>();
@@ -153,6 +177,29 @@ public static class ServiceCollectionExtensions
                         }
 
                         return Task.CompletedTask;
+                    },
+                    OnTokenValidated = async context =>
+                    {
+                        var userIdValue = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                        var tokenVersionValue = context.Principal?.FindFirstValue(AppClaimTypes.TokenVersion);
+
+                        if (!int.TryParse(userIdValue, out var userId) ||
+                            !int.TryParse(tokenVersionValue, out var tokenVersion))
+                        {
+                            context.Fail("Access token is missing required user claims.");
+                            return;
+                        }
+
+                        var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                        var userState = await db.Users.AsNoTracking()
+                            .Where(x => x.Id == userId)
+                            .Select(x => new { x.IsActive, x.TokenVersion })
+                            .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+
+                        if (userState is null || !userState.IsActive || userState.TokenVersion != tokenVersion)
+                        {
+                            context.Fail("Access token has been revoked.");
+                        }
                     }
                 };
             });
@@ -200,5 +247,31 @@ public static class ServiceCollectionExtensions
         {
             throw new InvalidOperationException("JWT configuration is invalid: Jwt:ExpirationMinutes must be greater than zero.");
         }
+
+        if (settings.RefreshTokenExpirationDays <= 0)
+        {
+            throw new InvalidOperationException("JWT configuration is invalid: Jwt:RefreshTokenExpirationDays must be greater than zero.");
+        }
+    }
+
+    private static FixedWindowRateLimiterOptions FixedWindow(int permitLimit, TimeSpan window) =>
+        new()
+        {
+            PermitLimit = permitLimit,
+            Window = window,
+            QueueLimit = 0,
+            AutoReplenishment = true
+        };
+
+    private static string RateLimitPartitionKey(HttpContext context, string policy)
+    {
+        var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            return $"{policy}:user:{userId}";
+        }
+
+        var ip = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return $"{policy}:ip:{ip}";
     }
 }

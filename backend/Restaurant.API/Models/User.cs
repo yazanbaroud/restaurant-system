@@ -11,6 +11,9 @@ public sealed class User
     public string PhoneNumber { get; set; } = string.Empty;
     public string PasswordHash { get; set; } = string.Empty;
     public UserRole Role { get; set; }
+    public bool IsActive { get; set; } = true;
+    public int TokenVersion { get; set; }
     public ICollection<Order> Orders { get; set; } = new List<Order>();
     public ICollection<Reservation> Reservations { get; set; } = new List<Reservation>();
+    public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 }

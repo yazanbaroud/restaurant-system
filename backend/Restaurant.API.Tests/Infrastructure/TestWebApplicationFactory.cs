@@ -40,7 +40,8 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
                 ["Jwt:Issuer"] = JwtIssuer,
                 ["Jwt:Audience"] = JwtAudience,
                 ["Jwt:Secret"] = JwtSecret,
-                ["Jwt:ExpirationMinutes"] = "120",
+                ["Jwt:ExpirationMinutes"] = "15",
+                ["Jwt:RefreshTokenExpirationDays"] = "30",
                 ["SeedAdmin:Email"] = "seed-admin@test.local",
                 ["SeedAdmin:Password"] = "Admin123!",
                 ["SeedAdmin:FirstName"] = "Seed",
@@ -58,7 +59,8 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
                 settings.Issuer = JwtIssuer;
                 settings.Audience = JwtAudience;
                 settings.Secret = JwtSecret;
-                settings.ExpirationMinutes = 120;
+                settings.ExpirationMinutes = 15;
+                settings.RefreshTokenExpirationDays = 30;
             });
             services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
             {

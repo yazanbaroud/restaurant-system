@@ -31,6 +31,22 @@ public sealed class LoginDtoValidator : AbstractValidator<LoginDto>
     }
 }
 
+public sealed class RefreshTokenDtoValidator : AbstractValidator<RefreshTokenDto>
+{
+    public RefreshTokenDtoValidator()
+    {
+        RuleFor(x => x.RefreshToken).NotEmpty().MaximumLength(512);
+    }
+}
+
+public sealed class LogoutDtoValidator : AbstractValidator<LogoutDto>
+{
+    public LogoutDtoValidator()
+    {
+        RuleFor(x => x.RefreshToken).NotEmpty().MaximumLength(512);
+    }
+}
+
 public sealed class CreateWaiterDtoValidator : AbstractValidator<CreateWaiterDto>
 {
     public CreateWaiterDtoValidator()

@@ -8,4 +8,4 @@ public sealed record CreateUserDto(string FirstName, string LastName, string Ema
 public sealed record UpdateUserDto(string FirstName, string LastName, string Email, string PhoneNumber);
 public sealed record UpdateUserRoleDto(UserRole Role);
 public sealed record ResetUserPasswordDto(string NewPassword);
-public sealed record UserResponseDto(int Id, string FirstName, string LastName, string Email, string PhoneNumber, UserRole Role);
+public sealed record UserResponseDto(int Id, string FirstName, string LastName, string Email, string PhoneNumber, UserRole Role, bool IsActive);

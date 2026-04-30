@@ -7,6 +7,7 @@ export interface User {
   email: string;
   phoneNumber: string;
   role: UserRole;
+  isActive: boolean;
 }
 
 export interface CreateUserInput {

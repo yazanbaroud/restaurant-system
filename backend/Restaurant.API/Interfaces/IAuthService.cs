@@ -6,6 +6,8 @@ public interface IAuthService
 {
     Task<AuthResponseDto> RegisterCustomerAsync(RegisterDto dto, CancellationToken cancellationToken);
     Task<AuthResponseDto> LoginAsync(LoginDto dto, CancellationToken cancellationToken);
+    Task<AuthResponseDto> RefreshAsync(RefreshTokenDto dto, CancellationToken cancellationToken);
+    Task LogoutAsync(int? userId, LogoutDto dto, CancellationToken cancellationToken);
     Task<CurrentUserDto> GetCurrentUserAsync(int userId, CancellationToken cancellationToken);
     Task<CurrentUserDto> UpdateCurrentUserAsync(int userId, UpdateCurrentUserDto dto, CancellationToken cancellationToken);
     Task ChangePasswordAsync(int userId, ChangePasswordDto dto, CancellationToken cancellationToken);

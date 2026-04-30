@@ -6,10 +6,10 @@ namespace Restaurant.API.Helpers;
 public static class DtoMapper
 {
     public static UserResponseDto ToUserResponse(this User user) =>
-        new(user.Id, user.FirstName, user.LastName, user.Email, user.PhoneNumber, user.Role);
+        new(user.Id, user.FirstName, user.LastName, user.Email, user.PhoneNumber, user.Role, user.IsActive);
 
     public static CurrentUserDto ToCurrentUser(this User user) =>
-        new(user.Id, user.FirstName, user.LastName, user.Email, user.PhoneNumber, user.Role);
+        new(user.Id, user.FirstName, user.LastName, user.Email, user.PhoneNumber, user.Role, user.IsActive);
 
     public static MenuItemResponseDto ToMenuItemResponse(this MenuItem item) =>
         item.ToMenuItemResponse(null);

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Restaurant.API.DTOs;
 using Restaurant.API.Helpers;
 using Restaurant.API.Interfaces;
@@ -20,6 +21,7 @@ public sealed class CustomerOrdersController(ICustomerOrdersService customerOrde
         Ok(await customerOrdersService.GetByIdAsync(User.GetUserId(), id, cancellationToken));
 
     [HttpPost("orders")]
+    [EnableRateLimiting(AppRateLimitPolicies.CustomerOrderCreation)]
     public async Task<ActionResult<OrderResponseDto>> Create(CreateCustomerOrderDto dto, CancellationToken cancellationToken)
     {
         var order = await customerOrdersService.CreateAsync(User.GetUserId(), dto, cancellationToken);

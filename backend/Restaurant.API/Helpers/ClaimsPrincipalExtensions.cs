@@ -9,4 +9,10 @@ public static class ClaimsPrincipalExtensions
         var id = user.FindFirstValue(ClaimTypes.NameIdentifier);
         return int.TryParse(id, out var value) ? value : 0;
     }
+
+    public static int? GetTokenVersion(this ClaimsPrincipal user)
+    {
+        var tokenVersion = user.FindFirstValue(AppClaimTypes.TokenVersion);
+        return int.TryParse(tokenVersion, out var value) ? value : null;
+    }
 }

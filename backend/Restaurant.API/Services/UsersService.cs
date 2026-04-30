@@ -57,6 +57,7 @@ public sealed class UsersService(
         user.LastName = dto.LastName.Trim();
         user.Email = dto.Email.Trim().ToLowerInvariant();
         user.PhoneNumber = dto.PhoneNumber.Trim();
+        user.TokenVersion++;
 
         await db.SaveChangesAsync(cancellationToken);
         return user.ToUserResponse();
@@ -72,9 +73,9 @@ public sealed class UsersService(
             throw new ApiException("לא ניתן לשנות את התפקיד של החשבון הפעיל.", StatusCodes.Status409Conflict);
         }
 
-        if (user.Role == UserRole.Admin && dto.Role != UserRole.Admin)
+        if (user.IsActive && user.Role == UserRole.Admin && dto.Role != UserRole.Admin)
         {
-            var adminCount = await db.Users.CountAsync(x => x.Role == UserRole.Admin, cancellationToken);
+            var adminCount = await db.Users.CountAsync(x => x.Role == UserRole.Admin && x.IsActive, cancellationToken);
             if (adminCount <= 1)
             {
                 throw new ApiException("חייב להישאר לפחות מנהל אחד.", StatusCodes.Status409Conflict);
@@ -82,6 +83,7 @@ public sealed class UsersService(
         }
 
         user.Role = dto.Role;
+        user.TokenVersion++;
         await db.SaveChangesAsync(cancellationToken);
         logger.LogInformation("User {UserId} role updated to {Role}", user.Id, user.Role);
         return user.ToUserResponse();
@@ -93,8 +95,10 @@ public sealed class UsersService(
             ?? throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
 
         user.PasswordHash = passwordHasher.HashPassword(dto.NewPassword);
+        user.TokenVersion++;
+        await RevokeActiveRefreshTokensAsync(user.Id, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Admin reset password for user {UserId}", user.Id);
+        logger.LogInformation("Admin reset password and invalidated tokens for user {UserId}", user.Id);
     }
 
     public async Task DeleteAsync(int id, int currentUserId, CancellationToken cancellationToken)
@@ -107,18 +111,20 @@ public sealed class UsersService(
         var user = await db.Users.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
 
-        if (user.Role == UserRole.Admin)
+        if (user.Role == UserRole.Admin && user.IsActive)
         {
-            var adminCount = await db.Users.CountAsync(x => x.Role == UserRole.Admin, cancellationToken);
+            var adminCount = await db.Users.CountAsync(x => x.Role == UserRole.Admin && x.IsActive, cancellationToken);
             if (adminCount <= 1)
             {
                 throw new ApiException("חייב להישאר לפחות מנהל אחד.", StatusCodes.Status409Conflict);
             }
         }
 
-        db.Users.Remove(user);
+        user.IsActive = false;
+        user.TokenVersion++;
+        await RevokeActiveRefreshTokensAsync(user.Id, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Admin deleted user {UserId} with role {Role}", user.Id, user.Role);
+        logger.LogInformation("Admin disabled user {UserId} with role {Role}", user.Id, user.Role);
     }
 
     private async Task EnsureEmailAvailableAsync(string email, int? currentUserId, CancellationToken cancellationToken)
@@ -131,6 +137,19 @@ public sealed class UsersService(
         if (exists)
         {
             throw new ApiException("האימייל כבר נמצא בשימוש.", StatusCodes.Status409Conflict);
+        }
+    }
+
+    private async Task RevokeActiveRefreshTokensAsync(int userId, CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var activeTokens = await db.RefreshTokens
+            .Where(x => x.UserId == userId && x.RevokedAtUtc == null && x.ExpiresAtUtc > now)
+            .ToArrayAsync(cancellationToken);
+
+        foreach (var token in activeTokens)
+        {
+            token.RevokedAtUtc = now;
         }
     }
 }

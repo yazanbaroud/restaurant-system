@@ -18,6 +18,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<Reservation> Reservations => Set<Reservation>();
     public DbSet<RestaurantBusinessHour> BusinessHours => Set<RestaurantBusinessHour>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,6 +51,20 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany(x => x.RefreshTokens)
                 .HasForeignKey(x => x.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AuditLog>(entity =>
+        {
+            entity.Property(x => x.EntityType).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.Action).HasMaxLength(80).IsRequired();
+            entity.Property(x => x.Timestamp).IsRequired();
+            entity.HasIndex(x => new { x.EntityType, x.EntityId });
+            entity.HasIndex(x => x.PerformedByUserId);
+            entity.HasIndex(x => x.Timestamp);
+            entity.HasOne(x => x.PerformedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.PerformedByUserId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<Table>(entity =>

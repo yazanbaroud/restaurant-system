@@ -7,7 +7,7 @@ using Restaurant.API.Models;
 
 namespace Restaurant.API.Services;
 
-public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : IMenuService
+public sealed class MenuService(AppDbContext db, IAuditService audit, ILogger<MenuService> logger) : IMenuService
 {
     public async Task<IReadOnlyCollection<MenuItemResponseDto>> GetAllAsync(int? category, bool? isAvailable, bool includeInactiveCategories, CancellationToken cancellationToken)
     {
@@ -76,6 +76,9 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
 
         db.MenuItems.Add(item);
         await db.SaveChangesAsync(cancellationToken);
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.MenuItem, item.Id, AuditActions.Create, NewValues: MenuItemAuditSnapshot(item)),
+            cancellationToken);
         return item.ToMenuItemResponse(category.Name);
     }
 
@@ -92,12 +95,35 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
 
         var category = await GetCategoryAsync(dto.Category, cancellationToken);
 
+        var oldValues = MenuItemAuditSnapshot(item);
         item.Name = name;
         item.Description = dto.Description.Trim();
         item.Price = dto.Price;
         item.Category = dto.Category;
         item.IsAvailable = dto.IsAvailable;
         await db.SaveChangesAsync(cancellationToken);
+        var newValues = MenuItemAuditSnapshot(item);
+        if (oldValues.Price != newValues.Price)
+        {
+            await audit.TryLogAsync(
+                new AuditLogEntry(AuditEntityTypes.MenuItem, item.Id, AuditActions.PriceChanged, OldValues: oldValues, NewValues: newValues),
+                cancellationToken);
+        }
+
+        if (oldValues.IsAvailable != newValues.IsAvailable)
+        {
+            await audit.TryLogAsync(
+                new AuditLogEntry(AuditEntityTypes.MenuItem, item.Id, AuditActions.AvailabilityChanged, OldValues: oldValues, NewValues: newValues),
+                cancellationToken);
+        }
+
+        if (oldValues.Price == newValues.Price && oldValues.IsAvailable == newValues.IsAvailable)
+        {
+            await audit.TryLogAsync(
+                new AuditLogEntry(AuditEntityTypes.MenuItem, item.Id, AuditActions.Update, OldValues: oldValues, NewValues: newValues),
+                cancellationToken);
+        }
+
         return item.ToMenuItemResponse(category.Name);
     }
 
@@ -105,8 +131,12 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
     {
         var item = await db.MenuItems.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new ApiException("המנה לא נמצאה.", StatusCodes.Status404NotFound);
+        var oldValues = MenuItemAuditSnapshot(item);
         item.IsAvailable = false;
         await db.SaveChangesAsync(cancellationToken);
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.MenuItem, item.Id, AuditActions.AvailabilityChanged, OldValues: oldValues, NewValues: MenuItemAuditSnapshot(item)),
+            cancellationToken);
         logger.LogInformation("Menu item {MenuItemId} marked unavailable", item.Id);
     }
 
@@ -208,4 +238,12 @@ public sealed class MenuService(AppDbContext db, ILogger<MenuService> logger) : 
 
     private static string CategoryName(IReadOnlyDictionary<int, string> categories, int category) =>
         categories.TryGetValue(category, out var name) ? name : string.Empty;
+
+    private static MenuItemAuditValues MenuItemAuditSnapshot(MenuItem item) =>
+        new(item.Name, NormalizeMoney(item.Price), item.Category, item.IsAvailable);
+
+    private static decimal NormalizeMoney(decimal value) =>
+        decimal.Round(value, 2, MidpointRounding.AwayFromZero);
+
+    private sealed record MenuItemAuditValues(string Name, decimal Price, int Category, bool IsAvailable);
 }

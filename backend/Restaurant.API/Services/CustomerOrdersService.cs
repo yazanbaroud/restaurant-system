@@ -14,6 +14,7 @@ public sealed class CustomerOrdersService(
     AppDbContext db,
     IOrderTableAssignmentService tableAssignments,
     IOrderStateService orderState,
+    IAuditService audit,
     IRestaurantRealtimeNotifier realtimeNotifier,
     ILogger<CustomerOrdersService> logger) : ICustomerOrdersService
 {
@@ -79,6 +80,8 @@ public sealed class CustomerOrdersService(
             await transaction.CommitAsync(cancellationToken);
             await ReloadOrderAsync(order, cancellationToken);
 
+            await LogOrderCreatedAsync(order, userId, cancellationToken);
+            await LogTableAssignmentChangeAsync(order, userId, [], TableIds(order), cancellationToken);
             var response = order.ToOrderResponse();
             logger.LogInformation("Customer {UserId} created order {OrderId}", userId, order.Id);
             await realtimeNotifier.OrderCreatedAsync(response, userId, cancellationToken);
@@ -111,6 +114,7 @@ public sealed class CustomerOrdersService(
         try
         {
             var order = await LoadOwnedTrackedOrderForUpdateAsync(userId, id, cancellationToken);
+            var oldTableIds = TableIds(order);
             orderState.EnsureItemsCanBeChanged(order);
             await tableAssignments.ReplaceTablesAsync(order, dto.OrderType, ToTableIds(dto.TableId), cancellationToken);
 
@@ -120,6 +124,7 @@ public sealed class CustomerOrdersService(
             await transaction.CommitAsync(cancellationToken);
             await ReloadOrderAsync(order, cancellationToken);
 
+            await LogTableAssignmentChangeAsync(order, userId, oldTableIds, TableIds(order), cancellationToken);
             return await SendOrderUpdatedAsync(order, cancellationToken);
         }
         catch (DbUpdateConcurrencyException exception)
@@ -304,6 +309,62 @@ public sealed class CustomerOrdersService(
         return response;
     }
 
+    private async Task LogOrderCreatedAsync(Order order, int userId, CancellationToken cancellationToken) =>
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.Order, order.Id, AuditActions.Create, userId, NewValues: OrderAuditSnapshot(order)),
+            cancellationToken);
+
+    private async Task LogTableAssignmentChangeAsync(
+        Order order,
+        int userId,
+        IReadOnlyCollection<int> oldTableIds,
+        IReadOnlyCollection<int> newTableIds,
+        CancellationToken cancellationToken)
+    {
+        if (SameTableIds(oldTableIds, newTableIds))
+        {
+            return;
+        }
+
+        var oldValues = new { TableIds = oldTableIds.OrderBy(x => x).ToArray() };
+        var newValues = new { TableIds = newTableIds.OrderBy(x => x).ToArray() };
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.Order, order.Id, AuditActions.TableAssignmentChanged, userId, oldValues, newValues),
+            cancellationToken);
+
+        foreach (var tableId in oldTableIds.Concat(newTableIds).Distinct().OrderBy(x => x))
+        {
+            var wasAssigned = oldTableIds.Contains(tableId);
+            var isAssigned = newTableIds.Contains(tableId);
+            await audit.TryLogAsync(
+                new AuditLogEntry(
+                    AuditEntityTypes.Table,
+                    tableId,
+                    AuditActions.TableAssignmentChanged,
+                    userId,
+                    new { OrderId = wasAssigned ? order.Id : (int?)null, Assigned = wasAssigned },
+                    new { OrderId = isAssigned ? order.Id : (int?)null, Assigned = isAssigned }),
+                cancellationToken);
+        }
+    }
+
+    private static OrderAuditValues OrderAuditSnapshot(Order order) =>
+        new(
+            order.OrderNumber,
+            order.OrderType.ToString(),
+            order.Status.ToString(),
+            order.KitchenStatus.ToString(),
+            order.PaymentStatus.ToString(),
+            order.TotalAmount,
+            TableIds(order),
+            order.Items.Count);
+
+    private static int[] TableIds(Order order) =>
+        order.OrderTables.Select(x => x.TableId).OrderBy(x => x).ToArray();
+
+    private static bool SameTableIds(IReadOnlyCollection<int> left, IReadOnlyCollection<int> right) =>
+        left.Count == right.Count && left.OrderBy(x => x).SequenceEqual(right.OrderBy(x => x));
+
     private static void EnsureAuthenticatedUser(int userId)
     {
         if (userId <= 0)
@@ -330,4 +391,14 @@ public sealed class CustomerOrdersService(
 
     private bool IsSqlServer() =>
         string.Equals(db.Database.ProviderName, "Microsoft.EntityFrameworkCore.SqlServer", StringComparison.Ordinal);
+
+    private sealed record OrderAuditValues(
+        string OrderNumber,
+        string OrderType,
+        string OrderStatus,
+        string KitchenStatus,
+        string PaymentStatus,
+        decimal TotalAmount,
+        IReadOnlyCollection<int> TableIds,
+        int ItemCount);
 }

@@ -15,6 +15,7 @@ public sealed class PaymentsService(
     AppDbContext db,
     IOrderStateService orderState,
     IOrderTableAssignmentService tableAssignments,
+    IAuditService audit,
     IRestaurantRealtimeNotifier realtimeNotifier,
     ILogger<PaymentsService> logger) : IPaymentsService
 {
@@ -36,10 +37,9 @@ public sealed class PaymentsService(
                 await transaction.CommitAsync(cancellationToken);
 
                 logger.LogInformation(
-                    "Idempotent payment replay for order {OrderId}, payment {PaymentId}, idempotency key {IdempotencyKey}",
+                    "Idempotent payment replay for order {OrderId}, payment {PaymentId}",
                     existingPayment.OrderId,
-                    existingPayment.Id,
-                    dto.IdempotencyKey);
+                    existingPayment.Id);
 
                 return existingResult;
             }
@@ -51,6 +51,8 @@ public sealed class PaymentsService(
                 ?? throw RejectPayment(dto, createdByUserId, "OrderNotFound", "ההזמנה לא נמצאה.", StatusCodes.Status404NotFound);
 
             EnsurePaymentAllowed(order, dto, createdByUserId);
+            var oldOrderStatusValues = OrderStatusSnapshot(order);
+            var oldTableIds = TableIds(order);
 
             var totalAmount = NormalizeMoney(order.TotalAmount);
             var paidBeforePayment = NormalizeMoney(order.Payments.Sum(x => x.Amount));
@@ -113,16 +115,18 @@ public sealed class PaymentsService(
                 RemainingAmount(totalAmount, paidAfterPayment));
 
             logger.LogInformation(
-                "Payment {PaymentId} created for order {OrderId} by user {UserId}. Amount {Amount}, method {Method}, idempotency key {IdempotencyKey}, status {PaymentStatus}, remaining {RemainingAmount}",
+                "Payment {PaymentId} created for order {OrderId} by user {UserId}. Amount {Amount}, method {Method}, status {PaymentStatus}, remaining {RemainingAmount}",
                 payment.Id,
                 order.Id,
                 createdByUserId,
                 amount,
                 payment.Method,
-                payment.IdempotencyKey,
                 result.PaymentStatus,
                 result.RemainingAmount);
 
+            await LogPaymentCreatedAsync(payment, createdByUserId, result, cancellationToken);
+            await LogOrderStatusChangeAsync(order, createdByUserId, oldOrderStatusValues, cancellationToken);
+            await LogTableAssignmentChangeAsync(order, createdByUserId, oldTableIds, TableIds(order), cancellationToken);
             await NotifyPaymentAddedAsync(result, CustomerUserId(order), cancellationToken);
 
             return result;
@@ -130,13 +134,13 @@ public sealed class PaymentsService(
         catch (DbUpdateConcurrencyException exception)
         {
             await RollbackQuietlyAsync(transaction, cancellationToken);
-            logger.LogWarning(exception, "Payment concurrency conflict for order {OrderId}, idempotency key {IdempotencyKey}", dto.OrderId, dto.IdempotencyKey);
+            logger.LogWarning(exception, "Payment concurrency conflict for order {OrderId}", dto.OrderId);
             throw new ApiException("ההזמנה עודכנה במקביל. רעננו את היתרה ונסו שוב.", StatusCodes.Status409Conflict);
         }
         catch (DbUpdateException exception) when (IsUniqueConstraintViolation(exception))
         {
             await RollbackQuietlyAsync(transaction, cancellationToken);
-            logger.LogInformation(exception, "Duplicate idempotency key {IdempotencyKey} detected while creating payment for order {OrderId}", dto.IdempotencyKey, dto.OrderId);
+            logger.LogInformation(exception, "Duplicate payment idempotency key detected while creating payment for order {OrderId}", dto.OrderId);
 
             var existingPayment = await LoadExistingPaymentAsync(dto.IdempotencyKey, cancellationToken);
             if (existingPayment is not null)
@@ -150,7 +154,7 @@ public sealed class PaymentsService(
         catch (DbUpdateException exception) when (IsSqlConcurrencyFailure(exception))
         {
             await RollbackQuietlyAsync(transaction, cancellationToken);
-            logger.LogWarning(exception, "Payment SQL concurrency conflict for order {OrderId}, idempotency key {IdempotencyKey}", dto.OrderId, dto.IdempotencyKey);
+            logger.LogWarning(exception, "Payment SQL concurrency conflict for order {OrderId}", dto.OrderId);
             throw new ApiException("ההזמנה עודכנה במקביל. רעננו את היתרה ונסו שוב.", StatusCodes.Status409Conflict);
         }
         catch
@@ -333,13 +337,12 @@ public sealed class PaymentsService(
     private ApiException RejectPayment(CreatePaymentDto dto, int createdByUserId, string reason, string message, int statusCode)
     {
         logger.LogWarning(
-            "Payment rejected for order {OrderId} by user {UserId}. Reason {Reason}, amount {Amount}, method {Method}, idempotency key {IdempotencyKey}",
+            "Payment rejected for order {OrderId} by user {UserId}. Reason {Reason}, amount {Amount}, method {Method}",
             dto.OrderId,
             createdByUserId,
             reason,
             dto.Amount,
-            dto.Method,
-            dto.IdempotencyKey);
+            dto.Method);
 
         return new ApiException(message, statusCode);
     }
@@ -372,6 +375,88 @@ public sealed class PaymentsService(
         }
     }
 
+    private async Task LogPaymentCreatedAsync(
+        Payment payment,
+        int createdByUserId,
+        CreatePaymentResponseDto result,
+        CancellationToken cancellationToken) =>
+        await audit.TryLogAsync(
+            new AuditLogEntry(
+                AuditEntityTypes.Payment,
+                payment.Id,
+                AuditActions.PaymentCreated,
+                createdByUserId,
+                NewValues: new
+                {
+                    payment.OrderId,
+                    payment.Amount,
+                    Method = payment.Method.ToString(),
+                    payment.CreatedAt,
+                    result.PaymentStatus,
+                    result.RemainingAmount
+                }),
+            cancellationToken);
+
+    private async Task LogOrderStatusChangeAsync(
+        Order order,
+        int changedByUserId,
+        OrderStatusAuditValues oldValues,
+        CancellationToken cancellationToken)
+    {
+        var newValues = OrderStatusSnapshot(order);
+        if (oldValues == newValues)
+        {
+            return;
+        }
+
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.Order, order.Id, AuditActions.StatusChange, changedByUserId, oldValues, newValues),
+            cancellationToken);
+    }
+
+    private async Task LogTableAssignmentChangeAsync(
+        Order order,
+        int changedByUserId,
+        IReadOnlyCollection<int> oldTableIds,
+        IReadOnlyCollection<int> newTableIds,
+        CancellationToken cancellationToken)
+    {
+        if (SameTableIds(oldTableIds, newTableIds))
+        {
+            return;
+        }
+
+        var oldValues = new { TableIds = oldTableIds.OrderBy(x => x).ToArray() };
+        var newValues = new { TableIds = newTableIds.OrderBy(x => x).ToArray() };
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.Order, order.Id, AuditActions.TableAssignmentChanged, changedByUserId, oldValues, newValues),
+            cancellationToken);
+
+        foreach (var tableId in oldTableIds.Concat(newTableIds).Distinct().OrderBy(x => x))
+        {
+            var wasAssigned = oldTableIds.Contains(tableId);
+            var isAssigned = newTableIds.Contains(tableId);
+            await audit.TryLogAsync(
+                new AuditLogEntry(
+                    AuditEntityTypes.Table,
+                    tableId,
+                    AuditActions.TableAssignmentChanged,
+                    changedByUserId,
+                    new { OrderId = wasAssigned ? order.Id : (int?)null, Assigned = wasAssigned },
+                    new { OrderId = isAssigned ? order.Id : (int?)null, Assigned = isAssigned }),
+                cancellationToken);
+        }
+    }
+
+    private static OrderStatusAuditValues OrderStatusSnapshot(Order order) =>
+        new(order.Status.ToString(), order.KitchenStatus.ToString(), order.PaymentStatus.ToString());
+
+    private static int[] TableIds(Order order) =>
+        order.OrderTables.Select(x => x.TableId).OrderBy(x => x).ToArray();
+
+    private static bool SameTableIds(IReadOnlyCollection<int> left, IReadOnlyCollection<int> right) =>
+        left.Count == right.Count && left.OrderBy(x => x).SequenceEqual(right.OrderBy(x => x));
+
     private static int? CustomerUserId(Order order) =>
         order.User?.Role == UserRole.Customer ? order.UserId : null;
 
@@ -394,4 +479,6 @@ public sealed class PaymentsService(
 
     private bool IsSqlite() =>
         string.Equals(db.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal);
+
+    private sealed record OrderStatusAuditValues(string OrderStatus, string KitchenStatus, string PaymentStatus);
 }

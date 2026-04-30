@@ -11,6 +11,7 @@ namespace Restaurant.API.Services;
 public sealed class AdminService(
     AppDbContext db,
     IPasswordHasher passwordHasher,
+    IAuditService audit,
     ILogger<AdminService> logger) : IAdminService
 {
     public Task<UserResponseDto> CreateWaiterAsync(CreateWaiterDto dto, CancellationToken cancellationToken) =>
@@ -39,7 +40,15 @@ public sealed class AdminService(
 
         db.Users.Add(user);
         await db.SaveChangesAsync(cancellationToken);
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.User, user.Id, AuditActions.Create, NewValues: UserAuditSnapshot(user)),
+            cancellationToken);
         logger.LogInformation("{Role} account created with user id {UserId}", role, user.Id);
         return user.ToUserResponse();
     }
+
+    private static UserAuditValues UserAuditSnapshot(User user) =>
+        new(user.Role.ToString(), user.IsActive, user.TokenVersion);
+
+    private sealed record UserAuditValues(string Role, bool IsActive, int TokenVersion);
 }

@@ -11,6 +11,7 @@ namespace Restaurant.API.Services;
 public sealed class UsersService(
     AppDbContext db,
     IPasswordHasher passwordHasher,
+    IAuditService audit,
     ILogger<UsersService> logger) : IUsersService
 {
     public async Task<IReadOnlyCollection<UserResponseDto>> GetAllAsync(CancellationToken cancellationToken) =>
@@ -43,6 +44,9 @@ public sealed class UsersService(
 
         db.Users.Add(user);
         await db.SaveChangesAsync(cancellationToken);
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.User, user.Id, AuditActions.Create, NewValues: UserAuditSnapshot(user)),
+            cancellationToken);
         logger.LogInformation("Admin created user {UserId} with role {Role}", user.Id, user.Role);
         return user.ToUserResponse();
     }
@@ -52,6 +56,7 @@ public sealed class UsersService(
         var user = await db.Users.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
         await EnsureEmailAvailableAsync(dto.Email, id, cancellationToken);
+        var oldValues = UserAuditSnapshot(user);
 
         user.FirstName = dto.FirstName.Trim();
         user.LastName = dto.LastName.Trim();
@@ -60,6 +65,9 @@ public sealed class UsersService(
         user.TokenVersion++;
 
         await db.SaveChangesAsync(cancellationToken);
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.User, user.Id, AuditActions.Update, OldValues: oldValues, NewValues: UserAuditSnapshot(user)),
+            cancellationToken);
         return user.ToUserResponse();
     }
 
@@ -67,6 +75,8 @@ public sealed class UsersService(
     {
         var user = await db.Users.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
+
+        var oldValues = UserAuditSnapshot(user);
 
         if (currentUserId == id)
         {
@@ -85,6 +95,9 @@ public sealed class UsersService(
         user.Role = dto.Role;
         user.TokenVersion++;
         await db.SaveChangesAsync(cancellationToken);
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.User, user.Id, AuditActions.RoleChanged, currentUserId, oldValues, UserAuditSnapshot(user)),
+            cancellationToken);
         logger.LogInformation("User {UserId} role updated to {Role}", user.Id, user.Role);
         return user.ToUserResponse();
     }
@@ -98,6 +111,9 @@ public sealed class UsersService(
         user.TokenVersion++;
         await RevokeActiveRefreshTokensAsync(user.Id, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.User, user.Id, AuditActions.PasswordReset, NewValues: new { user.TokenVersion }),
+            cancellationToken);
         logger.LogInformation("Admin reset password and invalidated tokens for user {UserId}", user.Id);
     }
 
@@ -124,6 +140,9 @@ public sealed class UsersService(
         user.TokenVersion++;
         await RevokeActiveRefreshTokensAsync(user.Id, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.User, user.Id, AuditActions.Disabled, currentUserId, NewValues: UserAuditSnapshot(user)),
+            cancellationToken);
         logger.LogInformation("Admin disabled user {UserId} with role {Role}", user.Id, user.Role);
     }
 
@@ -152,4 +171,9 @@ public sealed class UsersService(
             token.RevokedAtUtc = now;
         }
     }
+
+    private static UserAuditValues UserAuditSnapshot(User user) =>
+        new(user.Role.ToString(), user.IsActive, user.TokenVersion);
+
+    private sealed record UserAuditValues(string Role, bool IsActive, int TokenVersion);
 }

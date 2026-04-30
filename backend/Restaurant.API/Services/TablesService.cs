@@ -13,6 +13,7 @@ namespace Restaurant.API.Services;
 public sealed class TablesService(
     AppDbContext db,
     IOrderTableAssignmentService tableAssignments,
+    IAuditService audit,
     ILogger<TablesService> logger) : ITablesService
 {
     public async Task<IReadOnlyCollection<TableResponseDto>> GetAllAsync(CancellationToken cancellationToken) =>
@@ -36,6 +37,9 @@ public sealed class TablesService(
         };
         db.Tables.Add(table);
         await db.SaveChangesAsync(cancellationToken);
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.Table, table.Id, AuditActions.Create, NewValues: TableAuditSnapshot(table)),
+            cancellationToken);
         return table.ToTableResponse();
     }
 
@@ -46,6 +50,7 @@ public sealed class TablesService(
         try
         {
             var table = await tableAssignments.LoadTableForUpdateAsync(id, cancellationToken);
+            var oldValues = TableAuditSnapshot(table);
             var name = dto.Name.Trim();
             if (await db.Tables.AnyAsync(x => x.Id != id && x.Name == name, cancellationToken))
             {
@@ -61,6 +66,17 @@ public sealed class TablesService(
             table.Notes = TrimOptional(dto.Notes);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            var newValues = TableAuditSnapshot(table);
+            await audit.TryLogAsync(
+                new AuditLogEntry(AuditEntityTypes.Table, table.Id, AuditActions.Update, OldValues: oldValues, NewValues: newValues),
+                cancellationToken);
+            if (oldValues.Status != newValues.Status)
+            {
+                await audit.TryLogAsync(
+                    new AuditLogEntry(AuditEntityTypes.Table, table.Id, AuditActions.ManualStatusChange, OldValues: oldValues, NewValues: newValues),
+                    cancellationToken);
+            }
+
             return table.ToTableResponse();
         }
         catch (DbUpdateConcurrencyException exception)
@@ -89,12 +105,16 @@ public sealed class TablesService(
         try
         {
             var table = await tableAssignments.LoadTableForUpdateAsync(id, cancellationToken);
+            var oldValues = TableAuditSnapshot(table);
             await tableAssignments.EnsureManualStatusChangeIsSafeAsync(table, dto.Status, cancellationToken);
 
             table.Status = dto.Status;
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
+            await audit.TryLogAsync(
+                new AuditLogEntry(AuditEntityTypes.Table, table.Id, AuditActions.ManualStatusChange, OldValues: oldValues, NewValues: TableAuditSnapshot(table)),
+                cancellationToken);
             logger.LogInformation("Table {TableId} status updated to {Status}", table.Id, table.Status);
             return table.ToTableResponse();
         }
@@ -132,7 +152,12 @@ public sealed class TablesService(
     private static string? TrimOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
+    private static TableAuditValues TableAuditSnapshot(Table table) =>
+        new(table.Name, table.Capacity, table.Status.ToString(), table.Location, table.Notes);
+
     private static bool IsSqlConcurrencyFailure(DbUpdateException exception) =>
         exception.InnerException is SqlException sqlException &&
         sqlException.Errors.Cast<SqlError>().Any(error => error.Number == 1205);
+
+    private sealed record TableAuditValues(string Name, int Capacity, string Status, string? Location, string? Notes);
 }

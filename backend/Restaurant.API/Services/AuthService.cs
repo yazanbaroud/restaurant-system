@@ -15,6 +15,7 @@ public sealed class AuthService(
     IPasswordHasher passwordHasher,
     IJwtTokenGenerator jwtTokenGenerator,
     IHttpContextAccessor httpContextAccessor,
+    IAuditService audit,
     IOptions<JwtSettings> jwtOptions,
     ILogger<AuthService> logger) : IAuthService
 {
@@ -47,6 +48,9 @@ public sealed class AuthService(
         var response = await IssueTokenPairAsync(user, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.User, user.Id, AuditActions.Create, user.Id, NewValues: UserAuditSnapshot(user)),
+            cancellationToken);
         logger.LogInformation("Customer registered with user id {UserId}", user.Id);
         return response;
     }
@@ -74,7 +78,7 @@ public sealed class AuthService(
         var now = DateTime.UtcNow;
         if (refreshToken is null || refreshToken.RevokedAtUtc is not null || refreshToken.ExpiresAtUtc <= now)
         {
-            logger.LogWarning("Rejected refresh token rotation for hash {TokenHash}", tokenHash);
+            logger.LogWarning("Rejected refresh token rotation because token was missing, revoked, or expired");
             throw new ApiException("Refresh token is invalid or expired.", StatusCodes.Status401Unauthorized);
         }
 
@@ -162,6 +166,9 @@ public sealed class AuthService(
         user.TokenVersion++;
         await RevokeActiveRefreshTokensAsync(user.Id, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.User, user.Id, AuditActions.PasswordChanged, user.Id, NewValues: new { user.TokenVersion }),
+            cancellationToken);
         logger.LogInformation("User {UserId} changed their password and invalidated existing tokens", user.Id);
     }
 
@@ -232,4 +239,9 @@ public sealed class AuthService(
 
     private bool IsSqlServer() =>
         string.Equals(db.Database.ProviderName, "Microsoft.EntityFrameworkCore.SqlServer", StringComparison.Ordinal);
+
+    private static UserAuditValues UserAuditSnapshot(User user) =>
+        new(user.Role.ToString(), user.IsActive, user.TokenVersion);
+
+    private sealed record UserAuditValues(string Role, bool IsActive, int TokenVersion);
 }

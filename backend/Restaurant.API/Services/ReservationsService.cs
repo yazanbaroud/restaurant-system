@@ -11,6 +11,7 @@ namespace Restaurant.API.Services;
 public sealed class ReservationsService(
     AppDbContext db,
     IBusinessHoursService businessHoursService,
+    IAuditService audit,
     IRestaurantRealtimeNotifier realtimeNotifier,
     ILogger<ReservationsService> logger) : IReservationsService
 {
@@ -39,6 +40,9 @@ public sealed class ReservationsService(
 
         db.Reservations.Add(reservation);
         await db.SaveChangesAsync(cancellationToken);
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.Reservation, reservation.Id, AuditActions.Create, userId, NewValues: ReservationAuditSnapshot(reservation)),
+            cancellationToken);
         logger.LogInformation("Reservation {ReservationId} created for {ReservationDate} at {ReservationTime}", reservation.Id, reservation.ReservationDate, reservation.ReservationTime);
         var response = reservation.ToReservationResponse();
         await realtimeNotifier.ReservationCreatedAsync(response, cancellationToken);
@@ -67,6 +71,7 @@ public sealed class ReservationsService(
     {
         var reservation = await db.Reservations.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new ApiException("הזמנת המקום לא נמצאה.", StatusCodes.Status404NotFound);
+        var oldValues = ReservationAuditSnapshot(reservation);
         reservation.FirstName = dto.FirstName.Trim();
         reservation.LastName = dto.LastName.Trim();
         reservation.PhoneNumber = dto.PhoneNumber.Trim();
@@ -76,6 +81,9 @@ public sealed class ReservationsService(
         reservation.CustomerNotes = dto.CustomerNotes?.Trim();
         reservation.RestaurantNotes = dto.RestaurantNotes?.Trim();
         await db.SaveChangesAsync(cancellationToken);
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.Reservation, reservation.Id, AuditActions.Update, OldValues: oldValues, NewValues: ReservationAuditSnapshot(reservation)),
+            cancellationToken);
         return reservation.ToReservationResponse();
     }
 
@@ -83,9 +91,18 @@ public sealed class ReservationsService(
     {
         var reservation = await db.Reservations.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new ApiException("הזמנת המקום לא נמצאה.", StatusCodes.Status404NotFound);
+        var oldValues = ReservationAuditSnapshot(reservation);
         reservation.Status = dto.Status;
         reservation.RestaurantNotes = dto.RestaurantNotes?.Trim();
         await db.SaveChangesAsync(cancellationToken);
+        await audit.TryLogAsync(
+            new AuditLogEntry(
+                AuditEntityTypes.Reservation,
+                reservation.Id,
+                ReservationStatusAction(reservation.Status),
+                OldValues: oldValues,
+                NewValues: ReservationAuditSnapshot(reservation)),
+            cancellationToken);
         logger.LogInformation("Reservation {ReservationId} status updated to {Status}", reservation.Id, reservation.Status);
         var response = reservation.ToReservationResponse();
         await realtimeNotifier.ReservationStatusUpdatedAsync(response, cancellationToken);
@@ -101,6 +118,9 @@ public sealed class ReservationsService(
             ? "בוטל על ידי המסעדה."
             : reservation.RestaurantNotes;
         await db.SaveChangesAsync(cancellationToken);
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.Reservation, reservation.Id, AuditActions.Cancelled, NewValues: ReservationAuditSnapshot(reservation)),
+            cancellationToken);
         logger.LogInformation("Reservation {ReservationId} cancelled", reservation.Id);
         await realtimeNotifier.ReservationStatusUpdatedAsync(reservation.ToReservationResponse(), cancellationToken);
     }
@@ -137,11 +157,15 @@ public sealed class ReservationsService(
             throw new ApiException("לא ניתן לבטל את הזמנת המקום במצב הנוכחי.", StatusCodes.Status409Conflict);
         }
 
+        var oldValues = ReservationAuditSnapshot(reservation);
         reservation.Status = ReservationStatus.Cancelled;
         reservation.RestaurantNotes = string.IsNullOrWhiteSpace(reservation.RestaurantNotes)
             ? "בוטל על ידי הלקוח."
             : reservation.RestaurantNotes;
         await db.SaveChangesAsync(cancellationToken);
+        await audit.TryLogAsync(
+            new AuditLogEntry(AuditEntityTypes.Reservation, reservation.Id, AuditActions.Cancelled, userId, oldValues, ReservationAuditSnapshot(reservation)),
+            cancellationToken);
 
         var response = reservation.ToReservationResponse();
         logger.LogInformation("Customer {UserId} cancelled reservation {ReservationId}", userId, reservation.Id);
@@ -159,4 +183,28 @@ public sealed class ReservationsService(
             throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
         }
     }
+
+    private static ReservationAuditValues ReservationAuditSnapshot(Reservation reservation) =>
+        new(
+            reservation.UserId,
+            reservation.ReservationDate,
+            reservation.ReservationTime,
+            reservation.GuestsCount,
+            reservation.Status.ToString());
+
+    private static string ReservationStatusAction(ReservationStatus status) =>
+        status switch
+        {
+            ReservationStatus.Approved => AuditActions.Approved,
+            ReservationStatus.Rejected => AuditActions.Rejected,
+            ReservationStatus.Cancelled => AuditActions.Cancelled,
+            _ => AuditActions.StatusChange
+        };
+
+    private sealed record ReservationAuditValues(
+        int? UserId,
+        DateOnly ReservationDate,
+        TimeOnly ReservationTime,
+        int GuestsCount,
+        string Status);
 }

@@ -40,7 +40,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.Location).HasMaxLength(100);
             entity.Property(x => x.Notes).HasMaxLength(500);
             entity.Property(x => x.Status).HasConversion<int>().IsRequired();
-            entity.Property(x => x.RowVersion).IsRowVersion();
+            if (IsSqlite())
+            {
+                entity.Property(x => x.RowVersion).IsConcurrencyToken();
+            }
+            else
+            {
+                entity.Property(x => x.RowVersion).IsRowVersion();
+            }
         });
 
         modelBuilder.Entity<MenuItem>(entity =>
@@ -87,7 +94,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.KitchenStatus).HasConversion<int>().IsRequired();
             entity.Property(x => x.OrderType).HasConversion<int>().IsRequired();
             entity.Property(x => x.PaymentStatus).HasConversion<int>().IsRequired();
-            entity.Property(x => x.RowVersion).IsRowVersion();
+            if (IsSqlite())
+            {
+                entity.Property(x => x.RowVersion).IsConcurrencyToken();
+            }
+            else
+            {
+                entity.Property(x => x.RowVersion).IsRowVersion();
+            }
             entity.HasOne(x => x.User)
                 .WithMany(x => x.Orders)
                 .HasForeignKey(x => x.UserId)
@@ -115,7 +129,14 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.IdempotencyKey).IsRequired();
             entity.Property(x => x.Method).HasConversion<int>().IsRequired();
             entity.Property(x => x.CreatedAt).IsRequired();
-            entity.Property(x => x.RowVersion).IsRowVersion();
+            if (IsSqlite())
+            {
+                entity.Property(x => x.RowVersion).IsConcurrencyToken();
+            }
+            else
+            {
+                entity.Property(x => x.RowVersion).IsRowVersion();
+            }
             entity.HasOne(x => x.Order)
                 .WithMany(x => x.Payments)
                 .HasForeignKey(x => x.OrderId)
@@ -171,4 +192,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }
+
+    private bool IsSqlite() =>
+        string.Equals(Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal);
 }

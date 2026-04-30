@@ -219,7 +219,7 @@ public sealed class OrdersService(
         try
         {
             var order = await LoadTrackedOrderForUpdateAsync(id, cancellationToken);
-            var paidAmount = await db.Payments.Where(x => x.OrderId == id).SumAsync(x => x.Amount, cancellationToken);
+            var paidAmount = await SumPaymentsAsync(id, cancellationToken);
             var completed = orderState.MarkPaidFromExistingPayments(order, paidAmount, changedByUserId, DateTime.UtcNow);
             if (completed)
             {
@@ -386,11 +386,15 @@ public sealed class OrdersService(
             ?? throw new ApiException("Order not found.", StatusCodes.Status404NotFound);
 
     private async Task<Order> LoadTrackedOrderForUpdateAsync(int id, CancellationToken cancellationToken) =>
-        await IncludeOrderGraph(db.Orders
-                .FromSqlInterpolated($"SELECT * FROM [Orders] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id}"))
+        await IncludeOrderGraph(OrdersForUpdate(id))
             .Include(x => x.Payments)
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new ApiException("Order not found.", StatusCodes.Status404NotFound);
+
+    private IQueryable<Order> OrdersForUpdate(int id) =>
+        IsSqlServer()
+            ? db.Orders.FromSqlInterpolated($"SELECT * FROM [Orders] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id}")
+            : db.Orders.Where(x => x.Id == id);
 
     private async Task<OrderResponseDto> MutateOrderItemsAsync(
         int id,
@@ -502,7 +506,27 @@ public sealed class OrdersService(
     private static void RecalculateTotal(Order order) =>
         order.TotalAmount = order.Items.Sum(x => x.UnitPrice * x.Quantity);
 
+    private async Task<decimal> SumPaymentsAsync(int orderId, CancellationToken cancellationToken)
+    {
+        var query = db.Payments.AsNoTracking()
+            .Where(x => x.OrderId == orderId);
+
+        if (IsSqlite())
+        {
+            var amounts = await query.Select(x => x.Amount).ToArrayAsync(cancellationToken);
+            return amounts.Sum();
+        }
+
+        return await query.SumAsync(x => x.Amount, cancellationToken);
+    }
+
     private static bool IsSqlConcurrencyFailure(DbUpdateException exception) =>
         exception.InnerException is SqlException sqlException &&
         sqlException.Errors.Cast<SqlError>().Any(error => error.Number == 1205);
+
+    private bool IsSqlServer() =>
+        string.Equals(db.Database.ProviderName, "Microsoft.EntityFrameworkCore.SqlServer", StringComparison.Ordinal);
+
+    private bool IsSqlite() =>
+        string.Equals(db.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal);
 }

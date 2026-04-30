@@ -209,11 +209,15 @@ public sealed class CustomerOrdersService(
             ?? throw new ApiException("Order not found.", StatusCodes.Status404NotFound);
 
     private async Task<Order> LoadOwnedTrackedOrderForUpdateAsync(int userId, int id, CancellationToken cancellationToken) =>
-        await IncludeOrderGraph(db.Orders
-                .FromSqlInterpolated($"SELECT * FROM [Orders] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id} AND [UserId] = {userId}"))
+        await IncludeOrderGraph(OwnedOrdersForUpdate(userId, id))
             .Include(x => x.Payments)
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new ApiException("Order not found.", StatusCodes.Status404NotFound);
+
+    private IQueryable<Order> OwnedOrdersForUpdate(int userId, int id) =>
+        IsSqlServer()
+            ? db.Orders.FromSqlInterpolated($"SELECT * FROM [Orders] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id} AND [UserId] = {userId}")
+            : db.Orders.Where(x => x.Id == id && x.UserId == userId);
 
     private async Task<OrderResponseDto> MutateOwnedOrderItemsAsync(
         int userId,
@@ -323,4 +327,7 @@ public sealed class CustomerOrdersService(
     private static bool IsSqlConcurrencyFailure(DbUpdateException exception) =>
         exception.InnerException is SqlException sqlException &&
         sqlException.Errors.Cast<SqlError>().Any(error => error.Number == 1205);
+
+    private bool IsSqlServer() =>
+        string.Equals(db.Database.ProviderName, "Microsoft.EntityFrameworkCore.SqlServer", StringComparison.Ordinal);
 }

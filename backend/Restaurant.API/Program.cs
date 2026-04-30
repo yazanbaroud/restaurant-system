@@ -28,3 +28,5 @@ app.MapHub<RestaurantHub>("/hubs/restaurant").RequireAuthorization();
 await AdminSeeder.SeedAsync(app.Services);
 
 app.Run();
+
+public partial class Program;

@@ -63,10 +63,14 @@ public sealed class OrderTableAssignmentService(
             .ToArrayAsync(cancellationToken);
 
     public async Task<Table> LoadTableForUpdateAsync(int id, CancellationToken cancellationToken) =>
-        await db.Tables
-            .FromSqlInterpolated($"SELECT * FROM [Tables] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id}")
+        await TableForUpdate(id)
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new ApiException("Table not found.", StatusCodes.Status404NotFound);
+
+    private IQueryable<Table> TableForUpdate(int id) =>
+        IsSqlServer()
+            ? db.Tables.FromSqlInterpolated($"SELECT * FROM [Tables] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {id}")
+            : db.Tables.Where(x => x.Id == id);
 
     public async Task EnsureManualStatusChangeIsSafeAsync(Table table, TableStatus requestedStatus, CancellationToken cancellationToken)
     {
@@ -90,12 +94,9 @@ public sealed class OrderTableAssignmentService(
             return new Dictionary<int, Table>();
         }
 
-        var parameters = distinctTableIds
-            .Select((id, index) => (object)new SqlParameter($"@id{index}", id))
-            .ToArray();
-        var parameterNames = string.Join(", ", parameters.Cast<SqlParameter>().Select(x => x.ParameterName));
-        var sql = $"SELECT * FROM [Tables] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] IN ({parameterNames})";
-        var tables = await db.Tables.FromSqlRaw(sql, parameters).ToArrayAsync(cancellationToken);
+        var tables = IsSqlServer()
+            ? await LoadAndLockSqlServerTablesAsync(distinctTableIds, cancellationToken)
+            : await db.Tables.Where(x => distinctTableIds.Contains(x.Id)).ToArrayAsync(cancellationToken);
         var missingTableIds = distinctTableIds.Except(tables.Select(x => x.Id)).ToArray();
         if (missingTableIds.Length > 0)
         {
@@ -243,4 +244,17 @@ public sealed class OrderTableAssignmentService(
 
     private void LogRejectedAssignment(IReadOnlySet<int> tableIds, string reason) =>
         logger.LogWarning("Rejected table assignment for tables {TableIds}. Reason {Reason}", tableIds, reason);
+
+    private async Task<Table[]> LoadAndLockSqlServerTablesAsync(int[] distinctTableIds, CancellationToken cancellationToken)
+    {
+        var parameters = distinctTableIds
+            .Select((id, index) => (object)new SqlParameter($"@id{index}", id))
+            .ToArray();
+        var parameterNames = string.Join(", ", parameters.Cast<SqlParameter>().Select(x => x.ParameterName));
+        var sql = $"SELECT * FROM [Tables] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] IN ({parameterNames})";
+        return await db.Tables.FromSqlRaw(sql, parameters).ToArrayAsync(cancellationToken);
+    }
+
+    private bool IsSqlServer() =>
+        string.Equals(db.Database.ProviderName, "Microsoft.EntityFrameworkCore.SqlServer", StringComparison.Ordinal);
 }

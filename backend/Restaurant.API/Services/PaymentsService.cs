@@ -208,18 +208,26 @@ public sealed class PaymentsService(
     }
 
     private async Task<Payment?> LoadExistingPaymentForUpdateAsync(Guid idempotencyKey, CancellationToken cancellationToken) =>
-        await db.Payments
-            .FromSqlInterpolated($"SELECT * FROM [Payments] WITH (UPDLOCK, HOLDLOCK) WHERE [IdempotencyKey] = {idempotencyKey}")
+        await PaymentsForUpdate(idempotencyKey)
             .SingleOrDefaultAsync(cancellationToken);
 
     private async Task<Order?> LoadOrderForPaymentAsync(int orderId, CancellationToken cancellationToken) =>
-        await db.Orders
-            .FromSqlInterpolated($"SELECT * FROM [Orders] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {orderId}")
+        await OrdersForUpdate(orderId)
             .Include(x => x.Payments)
             .Include(x => x.OrderTables)
             .Include(x => x.StatusChanges)
             .Include(x => x.User)
             .SingleOrDefaultAsync(cancellationToken);
+
+    private IQueryable<Payment> PaymentsForUpdate(Guid idempotencyKey) =>
+        IsSqlServer()
+            ? db.Payments.FromSqlInterpolated($"SELECT * FROM [Payments] WITH (UPDLOCK, HOLDLOCK) WHERE [IdempotencyKey] = {idempotencyKey}")
+            : db.Payments.Where(x => x.IdempotencyKey == idempotencyKey);
+
+    private IQueryable<Order> OrdersForUpdate(int orderId) =>
+        IsSqlServer()
+            ? db.Orders.FromSqlInterpolated($"SELECT * FROM [Orders] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {orderId}")
+            : db.Orders.Where(x => x.Id == orderId);
 
     private async Task<Payment?> LoadExistingPaymentAsync(Guid idempotencyKey, CancellationToken cancellationToken) =>
         await db.Payments.AsNoTracking()
@@ -229,9 +237,7 @@ public sealed class PaymentsService(
     {
         var order = await db.Orders.AsNoTracking()
             .SingleAsync(x => x.Id == payment.OrderId, cancellationToken);
-        var paidAmount = NormalizeMoney(await db.Payments.AsNoTracking()
-            .Where(x => x.OrderId == payment.OrderId)
-            .SumAsync(x => x.Amount, cancellationToken));
+        var paidAmount = await SumPaymentsAsync(payment.OrderId, cancellationToken);
         var totalAmount = NormalizeMoney(order.TotalAmount);
 
         return new CreatePaymentResponseDto(
@@ -243,6 +249,20 @@ public sealed class PaymentsService(
             totalAmount,
             paidAmount,
             RemainingAmount(totalAmount, paidAmount));
+    }
+
+    private async Task<decimal> SumPaymentsAsync(int orderId, CancellationToken cancellationToken)
+    {
+        var query = db.Payments.AsNoTracking()
+            .Where(x => x.OrderId == orderId);
+
+        if (IsSqlite())
+        {
+            var amounts = await query.Select(x => x.Amount).ToArrayAsync(cancellationToken);
+            return NormalizeMoney(amounts.Sum());
+        }
+
+        return NormalizeMoney(await query.SumAsync(x => x.Amount, cancellationToken));
     }
 
     private void EnsureAuthenticatedUser(int createdByUserId, CreatePaymentDto dto)
@@ -368,4 +388,10 @@ public sealed class PaymentsService(
     private static bool IsSqlConcurrencyFailure(DbUpdateException exception) =>
         exception.InnerException is SqlException sqlException &&
         sqlException.Errors.Cast<SqlError>().Any(error => error.Number == 1205);
+
+    private bool IsSqlServer() =>
+        string.Equals(db.Database.ProviderName, "Microsoft.EntityFrameworkCore.SqlServer", StringComparison.Ordinal);
+
+    private bool IsSqlite() =>
+        string.Equals(db.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal);
 }

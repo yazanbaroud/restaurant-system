@@ -31,7 +31,11 @@ public static class AdminSeeder
         var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("AdminSeeder");
 
         var migrations = db.Database.GetMigrations();
-        if (migrations.Any())
+        if (db.Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
+        {
+            await db.Database.EnsureCreatedAsync();
+        }
+        else if (migrations.Any())
         {
             await db.Database.MigrateAsync();
         }

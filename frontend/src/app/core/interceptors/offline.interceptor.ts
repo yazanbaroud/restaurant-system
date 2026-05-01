@@ -12,10 +12,10 @@ export const offlineInterceptor: HttpInterceptorFn = (request, next) => {
   if (!network.isOnlineSnapshot && !SAFE_METHODS.has(request.method.toUpperCase())) {
     return throwError(() => new HttpErrorResponse({
       status: 0,
-      statusText: 'Offline',
+      statusText: 'לא מקוון',
       url: request.url,
       error: {
-        title: 'No connection'
+        title: 'אין חיבור לאינטרנט'
       }
     }));
   }

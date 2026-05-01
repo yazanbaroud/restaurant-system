@@ -71,11 +71,11 @@ export function apiErrorMessage(error: unknown, fallback = DEFAULT_API_ERROR_MES
   const record = asRecord(error);
   const status = typeof record?.['status'] === 'number' ? record['status'] : null;
   if (status === 409) {
-    return 'Order was updated by another staff member';
+    return 'ההזמנה עודכנה על ידי איש צוות אחר. רעננו ונסו שוב.';
   }
 
   if (status === 0) {
-    return 'No connection';
+    return 'אין חיבור לאינטרנט';
   }
 
   const nestedMessage = record ? payloadMessage(record['error']) : '';

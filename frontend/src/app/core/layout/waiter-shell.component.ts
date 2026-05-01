@@ -3,6 +3,7 @@ import { Component, DestroyRef, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
+import { UserRole } from '../models';
 import { AuthService } from '../services/auth.service';
 import { RealtimeEventName, RealtimeService } from '../services/realtime.service';
 
@@ -20,11 +21,20 @@ import { RealtimeEventName, RealtimeService } from '../services/realtime.service
             <small>תפעול מלצרים</small>
           </span>
         </a>
-        <nav class="sidebar__nav" aria-label="מלצר">
-          <a routerLink="/waiter" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">שולחנות</a>
-          <a routerLink="/waiter/kitchen" routerLinkActive="active">מטבח</a>
-          <a routerLink="/waiter/create-order" routerLinkActive="active">הזמנה חדשה</a>
-          <a routerLink="/waiter/reservations" routerLinkActive="active">הזמנות מקום</a>
+        <nav class="sidebar__nav" aria-label="ניווט צוות">
+          @if (auth.currentUser$ | async; as navUser) {
+            @if (navUser.role === UserRole.Admin || navUser.role === UserRole.Waiter) {
+              <a routerLink="/waiter" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">שולחנות</a>
+              <a routerLink="/waiter/create-order" routerLinkActive="active">הזמנה חדשה</a>
+              <a routerLink="/waiter/reservations" routerLinkActive="active">הזמנות מקום</a>
+            }
+            @if (navUser.role === UserRole.Admin || navUser.role === UserRole.Salad) {
+              <a routerLink="/waiter/salads" routerLinkActive="active">סלטיה</a>
+            }
+            @if (navUser.role === UserRole.Admin || navUser.role === UserRole.Kitchen) {
+              <a routerLink="/waiter/kitchen" routerLinkActive="active">מטבח</a>
+            }
+          }
         </nav>
       </aside>
       <section class="staff-main">
@@ -62,6 +72,7 @@ import { RealtimeEventName, RealtimeService } from '../services/realtime.service
 })
 export class WaiterShellComponent {
   readonly auth = inject(AuthService);
+  readonly UserRole = UserRole;
   private readonly router = inject(Router);
   private readonly realtime = inject(RealtimeService);
   private readonly destroyRef = inject(DestroyRef);

@@ -1,7 +1,7 @@
 import { AsyncPipe, CurrencyPipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
-import { catchError, combineLatest, map, of, startWith } from 'rxjs';
+import { catchError, combineLatest, map, Observable, of, startWith, switchMap } from 'rxjs';
 
 import { KitchenStatus, Order, OrderStatus, Payment, PaymentStatus, Table, TableStatus } from '../../core/models';
 import { FeedbackService } from '../../core/services/feedback.service';
@@ -24,6 +24,8 @@ interface TablesViewModel {
   tiles: TableTile[];
   isLoading: boolean;
 }
+
+type PaymentsByOrder = ReadonlyMap<number, Payment[]>;
 
 @Component({
   selector: 'app-waiter-tables-page',
@@ -220,11 +222,15 @@ export class TablesPageComponent {
     Ordering: 'בהזמנה',
     PaymentPending: 'לתשלום'
   };
-  readonly vm$ = combineLatest([this.data.getTables(), this.data.getOrders(), this.data.getPayments()]).pipe(
-    map(([tables, orders, payments]) => ({
-      tiles: this.createTiles(tables, orders, payments),
-      isLoading: false
-    })),
+  readonly vm$ = combineLatest([this.data.getTables(), this.data.getOrders()]).pipe(
+    switchMap(([tables, orders]) =>
+      this.paymentsForActiveOrders(orders).pipe(
+        map((paymentsByOrder) => ({
+          tiles: this.createTiles(tables, orders, paymentsByOrder),
+          isLoading: false
+        }))
+      )
+    ),
     catchError((error) => {
       this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לטעון את מפת השולחנות.');
       this.feedback.error(error, this.errorMessage);
@@ -265,7 +271,7 @@ export class TablesPageComponent {
     }
   }
 
-  private createTiles(tables: Table[], orders: Order[], payments: Payment[]): TableTile[] {
+  private createTiles(tables: Table[], orders: Order[], paymentsByOrder: PaymentsByOrder): TableTile[] {
     const activeOrders = orders.filter((order) => order.status === OrderStatus.Open);
 
     return tables
@@ -280,9 +286,31 @@ export class TablesPageComponent {
           status,
           statusLabel: this.statusLabels[status],
           actionLabel: order ? 'פתיחת הזמנה' : status === 'Available' ? 'הזמנה חדשה' : 'לא זמין',
-          amountDue: order ? this.remainingBalance(order, payments) : 0
+          amountDue: order ? this.remainingBalance(order, paymentsByOrder) : 0
         };
       });
+  }
+
+  private paymentsForActiveOrders(orders: Order[]): Observable<PaymentsByOrder> {
+    const activeOrderIds = [...new Set(
+      orders
+        .filter((order) => order.status === OrderStatus.Open)
+        .map((order) => order.id)
+    )];
+
+    if (!activeOrderIds.length) {
+      return of(new Map<number, Payment[]>());
+    }
+
+    return combineLatest(
+      activeOrderIds.map((orderId) =>
+        this.data.getPaymentsForOrder(orderId).pipe(
+          map((payments) => [orderId, payments] as const)
+        )
+      )
+    ).pipe(
+      map((entries) => new Map<number, Payment[]>(entries))
+    );
   }
 
   private tableStatus(table: Table, order: Order | null): TableServiceStatus {
@@ -304,13 +332,12 @@ export class TablesPageComponent {
     return table.status === TableStatus.Available ? 'Available' : 'Occupied';
   }
 
-  private remainingBalance(order: Order, payments: Payment[]): number {
+  private remainingBalance(order: Order, paymentsByOrder: PaymentsByOrder): number {
     if (order.paymentStatus === PaymentStatus.Paid) {
       return 0;
     }
 
-    const totalPaid = payments
-      .filter((payment) => payment.orderId === order.id)
+    const totalPaid = (paymentsByOrder.get(order.id) ?? [])
       .reduce((sum, payment) => sum + payment.amount, 0);
 
     return Math.max(order.totalPrice - totalPaid, 0);

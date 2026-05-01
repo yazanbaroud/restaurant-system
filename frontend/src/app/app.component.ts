@@ -13,7 +13,7 @@ import { FeedbackToastComponent } from './shared/components/feedback-toast.compo
   template: `
     <app-feedback-toast />
     @if ((network.online$ | async) === false) {
-      <div class="offline-banner" role="alert">No connection</div>
+      <div class="offline-banner" role="alert">אין חיבור לאינטרנט</div>
     }
     <router-outlet />
   `,

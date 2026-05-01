@@ -21,7 +21,8 @@ import { RealtimeEventName, RealtimeService } from '../services/realtime.service
           </span>
         </a>
         <nav class="sidebar__nav" aria-label="מלצר">
-          <a routerLink="/waiter" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">הזמנות פעילות</a>
+          <a routerLink="/waiter" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">שולחנות</a>
+          <a routerLink="/waiter/kitchen" routerLinkActive="active">מטבח</a>
           <a routerLink="/waiter/create-order" routerLinkActive="active">הזמנה חדשה</a>
           <a routerLink="/waiter/reservations" routerLinkActive="active">הזמנות מקום</a>
         </nav>

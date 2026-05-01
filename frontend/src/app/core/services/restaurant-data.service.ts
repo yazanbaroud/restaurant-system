@@ -140,6 +140,7 @@ export class RestaurantDataService {
     const paymentStatus = this.normalizePaymentStatus(record['paymentStatus']);
     const status = 'orderStatus' in record ? this.normalizeOrderStatus(record['orderStatus']) : null;
     const kitchenStatus = 'kitchenStatus' in record ? this.normalizeKitchenStatus(record['kitchenStatus']) : null;
+    const existingOrder = this.ordersSubject.value.find((order) => order.id === orderId);
     this.ordersSubject.next(
       this.ordersSubject.value.map((order) =>
         order.id === orderId
@@ -152,6 +153,10 @@ export class RestaurantDataService {
           : order
       )
     );
+
+    if (status && existingOrder && this.shouldReleaseTables(status)) {
+      this.releaseOrderTables(existingOrder);
+    }
   }
 
   getMenuItems(): Observable<MenuItem[]> {
@@ -467,6 +472,30 @@ export class RestaurantDataService {
 
   cancelOrder(id: number): Observable<Order> {
     return this.applyOrderCommand(id, `${this.apiBaseUrl}/api/Orders/${id}/cancel`);
+  }
+
+  addOrderItem(orderId: number, item: CreateOrderItemInput): Observable<Order> {
+    return this.http.post<unknown>(`${this.apiBaseUrl}/api/Orders/${orderId}/items`, item).pipe(
+      map((response) => this.normalizeOrder(response)),
+      tap((order) => this.upsertOrder(order))
+    );
+  }
+
+  updateOrderItem(orderId: number, itemId: number, item: CreateOrderItemInput): Observable<Order> {
+    return this.http.put<unknown>(`${this.apiBaseUrl}/api/Orders/${orderId}/items/${itemId}`, {
+      quantity: item.quantity,
+      notes: item.notes
+    }).pipe(
+      map((response) => this.normalizeOrder(response)),
+      tap((order) => this.upsertOrder(order))
+    );
+  }
+
+  deleteOrderItem(orderId: number, itemId: number): Observable<Order> {
+    return this.http.delete<unknown>(`${this.apiBaseUrl}/api/Orders/${orderId}/items/${itemId}`).pipe(
+      map((response) => this.normalizeOrder(response)),
+      tap((order) => this.upsertOrder(order))
+    );
   }
 
   private applyOrderCommand(id: number, endpoint: string): Observable<Order> {
@@ -1507,9 +1536,22 @@ export class RestaurantDataService {
   }
 
   private fetchOrderFromApi(id: number): Observable<Order> {
+    const existingLocalOrder = this.ordersSubject.value.find((candidate) => candidate.id === id);
+
     return this.http.get<unknown>(`${this.apiBaseUrl}/api/Orders/${id}`).pipe(
       map((response) => this.normalizeOrder(response)),
-      tap((order) => this.upsertOrder(order))
+      tap((order) => {
+        this.upsertOrder(order);
+        this.syncTablesFromOrder(order);
+
+        if (
+          existingLocalOrder &&
+          this.shouldReleaseTables(order.status) &&
+          this.hasMissingReleasedTableState(order, existingLocalOrder)
+        ) {
+          this.releaseOrderTables(existingLocalOrder);
+        }
+      })
     );
   }
 
@@ -1904,7 +1946,7 @@ export class RestaurantDataService {
     const record = this.asRecord(value) ?? {};
     const nestedTable = this.asRecord(record['table']);
     const tableRecord = nestedTable ?? record;
-    const id = this.numberValue(tableRecord['id'] ?? record['tableId']);
+    const id = this.numberValue(record['tableId'] ?? tableRecord['id']);
 
     return {
       id,

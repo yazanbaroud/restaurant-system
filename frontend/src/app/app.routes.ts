@@ -31,7 +31,8 @@ export const routes: Routes = [
     canActivate: [roleGuard],
     data: { roles: [UserRole.Waiter] },
     children: [
-      { path: '', loadComponent: () => import('./features/waiter/active-orders-page.component').then((m) => m.ActiveOrdersPageComponent) },
+      { path: '', loadComponent: () => import('./features/waiter/tables-page.component').then((m) => m.TablesPageComponent) },
+      { path: 'kitchen', loadComponent: () => import('./features/waiter/kitchen-page.component').then((m) => m.KitchenPageComponent) },
       { path: 'create-order', loadComponent: () => import('./features/waiter/create-order-page.component').then((m) => m.CreateOrderPageComponent) },
       { path: 'orders/:id', loadComponent: () => import('./features/waiter/order-details-page.component').then((m) => m.OrderDetailsPageComponent) },
       { path: 'orders/:id/payment', loadComponent: () => import('./features/waiter/add-payment-page.component').then((m) => m.AddPaymentPageComponent) },

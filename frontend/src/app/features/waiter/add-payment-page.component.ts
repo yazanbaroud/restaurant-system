@@ -1,23 +1,21 @@
-import { AsyncPipe, CurrencyPipe, DatePipe, DecimalPipe } from '@angular/common';
+import { AsyncPipe, CurrencyPipe, DatePipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { Observable, catchError, combineLatest, finalize, map, of, startWith, tap } from 'rxjs';
+import { catchError, combineLatest, finalize, map, Observable, of, startWith, tap } from 'rxjs';
 
 import { Order, Payment, PaymentMethod, PaymentStatus } from '../../core/models';
 import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
-import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
-import { paymentMethodLabels, paymentStatusLabels, paymentStatusTones } from '../../shared/ui-labels';
+import { paymentMethodLabels, paymentStatusLabels } from '../../shared/ui-labels';
 
 interface PaymentViewModel {
   order: Order | null;
   payments: Payment[];
   totalPaid: number;
   remainingBalance: number;
-  progressPercent: number;
   isPaid: boolean;
   isLoading: boolean;
 }
@@ -25,161 +23,124 @@ interface PaymentViewModel {
 @Component({
   selector: 'app-add-payment-page',
   standalone: true,
-  imports: [AsyncPipe, CurrencyPipe, DatePipe, DecimalPipe, PageHeaderComponent, ReactiveFormsModule, RouterLink, StatusBadgeComponent],
+  imports: [AsyncPipe, CurrencyPipe, DatePipe, PageHeaderComponent, ReactiveFormsModule, RouterLink],
   template: `
     @if (vm$ | async; as vm) {
       @if (vm.isLoading) {
-        <section class="page-surface narrow-page empty-state">
+        <section class="page-surface empty-state">
           <h1>טוען תשלום...</h1>
         </section>
       } @else if (vm.order; as order) {
         <section class="page-surface payment-page">
           <app-page-header
             eyebrow="תשלום"
-            [title]="'גביית תשלום להזמנה #' + order.orderNumber"
+            [title]="'הזמנה #' + order.orderNumber"
             [subtitle]="customerName(order)"
           >
             <a class="btn btn-ghost" [routerLink]="[orderDetailsBaseLink, order.id]">חזרה להזמנה</a>
           </app-page-header>
 
-          @if (vm.isPaid) {
-            <div class="success-panel paid-state">
-              <strong>ההזמנה שולמה במלואה</strong>
-              <p>סטטוס התשלום התקבל מהשרת. אין יתרה פתוחה להזמנה זו.</p>
-            </div>
+          @if (errorMessage) {
+            <p class="validation-note">{{ errorMessage }}</p>
           }
-
-          @if (successMessage && !vm.isPaid) {
+          @if (successMessage) {
             <p class="success-note">{{ successMessage }}</p>
           }
 
-          @if (errorMessage) {
-            <div class="validation-note">{{ errorMessage }}</div>
-          }
-
-          <article class="panel payment-order-summary">
-            <div>
-              <p class="eyebrow">הזמנה #{{ order.orderNumber }}</p>
-              <h2>{{ customerName(order) }}</h2>
-              <span class="muted">{{ order.createdAt | date: 'medium' }}</span>
-            </div>
-            <div class="payment-summary-status">
-              <app-status-badge
-                [label]="paymentStatusLabels[order.paymentStatus]"
-                [tone]="paymentStatusTones[order.paymentStatus]"
-              />
-              <strong>{{ order.totalPrice | currency: 'ILS' : 'symbol' : '1.0-0' }}</strong>
-            </div>
-          </article>
-
-          <div class="payment-summary-grid">
-            <article class="payment-metric">
-              <span>סה״כ הזמנה</span>
+          <section class="payment-hero">
+            <article>
+              <span>סך הכל</span>
               <strong>{{ order.totalPrice | currency: 'ILS' : 'symbol' : '1.0-0' }}</strong>
             </article>
-            <article class="payment-metric">
-              <span>שולם עד כה</span>
+            <article>
+              <span>שולם</span>
               <strong>{{ vm.totalPaid | currency: 'ILS' : 'symbol' : '1.0-0' }}</strong>
             </article>
-            <article class="payment-metric payment-metric--due">
-              <span>יתרה שנותרה</span>
+            <article class="payment-hero__remaining">
+              <span>נותר לתשלום</span>
               <strong>{{ vm.remainingBalance | currency: 'ILS' : 'symbol' : '1.0-0' }}</strong>
             </article>
-          </div>
-
-          <article class="panel payment-progress-panel">
-            <div class="inline-between payment-section-title">
-              <div>
-                <h2>התקדמות תשלום</h2>
-                <p class="muted">שולם {{ vm.progressPercent | number: '1.0-0' }}% מההזמנה</p>
-              </div>
-              <strong>{{ vm.remainingBalance | currency: 'ILS' : 'symbol' : '1.0-0' }} נותרו</strong>
-            </div>
-            <div class="payment-progress">
-              <i [style.width.%]="vm.progressPercent"></i>
-            </div>
-            <div class="payment-progress-labels">
-              <span>{{ vm.totalPaid | currency: 'ILS' : 'symbol' : '1.0-0' }} שולם</span>
-              <span>{{ order.totalPrice | currency: 'ILS' : 'symbol' : '1.0-0' }} סה״כ</span>
-            </div>
-          </article>
+          </section>
 
           <div class="payment-layout">
-            <article class="panel previous-payments">
-              <div class="inline-between payment-section-title">
-                <h2>תשלומים קיימים</h2>
-                <span class="muted">{{ vm.payments.length }} תשלומים</span>
+            <section class="panel payment-actions-panel">
+              <div class="inline-between">
+                <h2>גבייה</h2>
+                <span>{{ paymentStatusLabels[order.paymentStatus] }}</span>
               </div>
-              @if (vm.payments.length) {
-                <div class="previous-payments-table">
-                  <div class="previous-payments-table__head">
-                    <span>סכום</span>
-                    <span>אמצעי</span>
-                    <span>תאריך</span>
-                  </div>
-                  @for (payment of vm.payments; track payment.id) {
-                    <div class="previous-payments-table__row">
-                      <strong>{{ payment.amount | currency: 'ILS' : 'symbol' : '1.0-0' }}</strong>
-                      <span>{{ paymentMethodLabels[payment.method] }}</span>
-                      <time>{{ payment.paidAt | date: 'short' }}</time>
-                    </div>
-                  }
+
+              @if (vm.isPaid) {
+                <div class="paid-message">
+                  ההזמנה שולמה במלואה.
                 </div>
               } @else {
-                <div class="payment-empty-state">
-                  <h2>לא בוצעו תשלומים עדיין</h2>
+                <div class="quick-payment-grid">
+                  <button type="button" class="btn btn-gold" [disabled]="isSubmitting" (click)="payRemaining(vm, PaymentMethod.Cash)">
+                    מזומן
+                  </button>
+                  <button type="button" class="btn btn-dark" [disabled]="isSubmitting" (click)="payRemaining(vm, PaymentMethod.CreditCard)">
+                    אשראי
+                  </button>
+                  <button type="button" class="btn btn-ghost" [disabled]="isSubmitting" (click)="toggleCustom(vm)">
+                    סכום אחר
+                  </button>
                 </div>
+
+                @if (customOpen) {
+                  <form class="custom-payment-form" [formGroup]="form" (ngSubmit)="submitCustom(vm)">
+                    <label>
+                      סכום מפוצל
+                      <input type="number" min="0.01" step="0.01" inputmode="decimal" formControlName="amount" />
+                    </label>
+                    <div class="segmented-control">
+                      <button
+                        type="button"
+                        [class.active]="form.controls.method.value === PaymentMethod.Cash"
+                        (click)="form.controls.method.setValue(PaymentMethod.Cash)"
+                      >
+                        מזומן
+                      </button>
+                      <button
+                        type="button"
+                        [class.active]="form.controls.method.value === PaymentMethod.CreditCard"
+                        (click)="form.controls.method.setValue(PaymentMethod.CreditCard)"
+                      >
+                        אשראי
+                      </button>
+                    </div>
+                    <button class="btn btn-gold full" type="submit" [disabled]="isSubmitting">
+                      {{ isSubmitting ? 'שומר...' : 'שמירת תשלום' }}
+                    </button>
+                  </form>
+                }
               }
-            </article>
+            </section>
 
-            <form class="panel payment-form" [formGroup]="form" (ngSubmit)="submit()">
-              <fieldset [disabled]="vm.isPaid || isSubmitting">
-                <legend>הוספת תשלום</legend>
-
-                <label>
-                  סכום לתשלום
-                  <input
-                    type="number"
-                    min="0.01"
-                    step="0.01"
-                    [max]="vm.remainingBalance"
-                    formControlName="amount"
-                    inputmode="decimal"
-                  />
-                </label>
-                @if (showAmountRequiredError()) {
-                  <p class="validation-note">סכום חובה</p>
+            <section class="panel payment-history-panel">
+              <div class="inline-between">
+                <h2>תשלומים</h2>
+                <span>{{ vm.payments.length }}</span>
+              </div>
+              <div class="payment-history">
+                @for (payment of vm.payments; track payment.id) {
+                  <article>
+                    <strong>{{ payment.amount | currency: 'ILS' : 'symbol' : '1.0-0' }}</strong>
+                    <span>{{ paymentMethodLabels[payment.method] }}</span>
+                    <time>{{ payment.paidAt | date: 'short' }}</time>
+                  </article>
+                } @empty {
+                  <div class="empty-state empty-state--compact">
+                    <h2>אין תשלומים עדיין</h2>
+                  </div>
                 }
-                @if (showAmountPositiveError()) {
-                  <p class="validation-note">הסכום חייב להיות גדול מ־0</p>
-                }
-                @if (showAmountOverBalance(vm)) {
-                  <p class="validation-note">לא ניתן לשלם יותר מהיתרה שנותרה</p>
-                }
-
-                <label>
-                  אמצעי תשלום
-                  <select formControlName="method">
-                    <option [ngValue]="PaymentMethod.Cash">מזומן</option>
-                    <option [ngValue]="PaymentMethod.CreditCard">אשראי</option>
-                  </select>
-                </label>
-
-                <button class="btn btn-gold full" type="submit" [disabled]="isSubmitting || vm.isPaid">
-                  {{ isSubmitting ? 'שומרים תשלום...' : 'הוספת תשלום' }}
-                </button>
-
-                @if (vm.isPaid) {
-                  <p class="success-note">ההזמנה שולמה במלואה</p>
-                }
-              </fieldset>
-            </form>
+              </div>
+            </section>
           </div>
         </section>
       } @else {
-        <section class="page-surface narrow-page empty-state">
+        <section class="page-surface empty-state">
           <h1>{{ loadErrorMessage || 'ההזמנה לא נמצאה' }}</h1>
-          <a class="btn btn-dark" [routerLink]="ordersHomeLink">חזרה להזמנות</a>
+          <a class="btn btn-dark" [routerLink]="ordersHomeLink">חזרה לשולחנות</a>
         </section>
       }
     }
@@ -190,243 +151,110 @@ interface PaymentViewModel {
       gap: 1rem;
     }
 
-    .payment-order-summary {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 1rem;
-      align-items: center;
-      background:
-        linear-gradient(135deg, rgba(31, 21, 17, 0.96), rgba(61, 37, 25, 0.9)),
-        var(--brown-950);
-      color: var(--ivory);
-    }
-
-    .payment-order-summary h2,
-    .payment-order-summary .eyebrow {
-      color: var(--ivory);
-    }
-
-    .payment-order-summary h2 {
-      margin-block: 0 0.3rem;
-      font-size: 2rem;
-    }
-
-    .payment-summary-status {
-      display: grid;
-      justify-items: end;
-      gap: 0.65rem;
-    }
-
-    .payment-summary-status strong {
-      color: var(--ivory);
-      font-size: 2rem;
-      line-height: 1.1;
-    }
-
-    .payment-summary-grid {
+    .payment-hero {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 18px;
+      gap: 0.75rem;
     }
 
-    .payment-metric {
+    .payment-hero article {
       display: grid;
-      gap: 0.3rem;
-      min-height: 112px;
-      padding: 18px;
+      gap: 0.25rem;
+      min-height: 104px;
+      padding: 1rem;
       border: 1px solid var(--line);
       border-radius: var(--radius);
       background: rgba(255, 248, 237, 0.84);
-      box-shadow: 0 10px 26px rgba(31, 21, 17, 0.08);
+      box-shadow: 0 10px 24px rgba(31, 21, 17, 0.08);
     }
 
-    .payment-metric span {
+    .payment-hero span,
+    .payment-actions-panel span,
+    .payment-history-panel span,
+    .payment-history time {
       color: var(--muted);
       font-weight: 850;
     }
 
-    .payment-metric strong {
+    .payment-hero strong {
       color: var(--brown-950);
       font-size: 1.55rem;
       line-height: 1.1;
     }
 
-    .payment-metric--due {
-      border-color: rgba(199, 154, 59, 0.42);
-      background: rgba(199, 154, 59, 0.12);
-    }
-
-    .payment-section-title {
-      align-items: center;
-      margin-bottom: 0.85rem;
-    }
-
-    .payment-section-title h2,
-    .payment-section-title p {
-      margin: 0;
-    }
-
-    .payment-progress {
-      height: 14px;
-      overflow: hidden;
-      border-radius: 999px;
-      background: rgba(61, 37, 25, 0.1);
-    }
-
-    .payment-progress i {
-      display: block;
-      height: 100%;
-      min-width: 0;
-      border-radius: inherit;
-      background: linear-gradient(90deg, var(--gold), var(--olive));
-    }
-
-    .payment-progress-labels {
-      display: flex;
-      justify-content: space-between;
-      gap: 1rem;
-      margin-top: 0.6rem;
-      color: var(--muted);
-      font-weight: 850;
+    .payment-hero__remaining {
+      border-color: rgba(199, 154, 59, 0.42) !important;
+      background: rgba(199, 154, 59, 0.12) !important;
     }
 
     .payment-layout {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
-      gap: 18px;
+      grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+      gap: 1rem;
       align-items: start;
     }
 
-    .previous-payments-table {
+    .payment-actions-panel,
+    .payment-history-panel,
+    .custom-payment-form {
       display: grid;
-      overflow: hidden;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
+      gap: 1rem;
     }
 
-    .previous-payments-table__head,
-    .previous-payments-table__row {
+    .payment-actions-panel h2,
+    .payment-history-panel h2 {
+      margin: 0;
+    }
+
+    .quick-payment-grid {
       display: grid;
-      grid-template-columns: 140px 140px minmax(0, 1fr);
-      gap: 0.8rem;
-      align-items: center;
-      padding: 0.85rem 1rem;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.65rem;
     }
 
-    .previous-payments-table__head {
-      background: rgba(31, 21, 17, 0.06);
-      color: var(--muted);
-      font-size: 0.86rem;
-      font-weight: 900;
+    .quick-payment-grid .btn,
+    .custom-payment-form .btn {
+      min-height: 56px;
     }
 
-    .previous-payments-table__row + .previous-payments-table__row {
-      border-top: 1px solid var(--line);
-    }
-
-    .previous-payments-table__row strong {
-      color: var(--brown-950);
-    }
-
-    .previous-payments-table__row span,
-    .previous-payments-table__row time {
-      color: var(--muted);
-      font-weight: 800;
-    }
-
-    .payment-empty-state {
+    .paid-message {
       display: grid;
       place-items: center;
-      min-height: 180px;
-      border: 1px dashed var(--line);
+      min-height: 120px;
+      border: 1px solid rgba(102, 112, 68, 0.26);
       border-radius: var(--radius);
-      color: var(--muted);
+      background: rgba(102, 112, 68, 0.12);
+      color: var(--olive-dark);
+      font-weight: 950;
       text-align: center;
     }
 
-    .payment-empty-state h2 {
-      margin: 0;
-      color: var(--muted);
-      font-size: 1.1rem;
-    }
-
-    .payment-form fieldset {
+    .payment-history {
       display: grid;
-      gap: 1rem;
-      min-width: 0;
-      margin: 0;
-      padding: 0;
-      border: 0;
+      gap: 0.6rem;
     }
 
-    .payment-form {
-      position: sticky;
-      top: 92px;
+    .payment-history article {
+      display: grid;
+      grid-template-columns: minmax(90px, auto) minmax(0, 1fr) auto;
+      gap: 0.75rem;
+      align-items: center;
+      padding: 0.8rem;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 248, 237, 0.68);
     }
 
-    .payment-form input,
-    .payment-form select,
-    .payment-form button {
-      min-height: 50px;
-    }
-
-    .payment-form legend {
-      margin-bottom: 0.25rem;
+    .payment-history strong {
       color: var(--brown-950);
-      font-size: 1.35rem;
-      font-weight: 900;
     }
 
-    .paid-state {
-      margin-bottom: 0;
-    }
-
-    @media (max-width: 860px) {
-      .payment-order-summary,
-      .payment-summary-grid,
-      .payment-layout {
+    @media (max-width: 760px) {
+      .payment-hero,
+      .payment-layout,
+      .quick-payment-grid,
+      .payment-history article {
         grid-template-columns: 1fr;
-      }
-
-      .payment-form {
-        position: static;
-      }
-
-      .payment-summary-status {
-        justify-items: start;
-      }
-    }
-
-    @media (max-width: 620px) {
-      .previous-payments-table__head {
-        display: none;
-      }
-
-      .previous-payments-table__row {
-        grid-template-columns: 1fr;
-        gap: 0.3rem;
-      }
-
-      .previous-payments-table__row strong::before {
-        content: 'סכום: ';
-        color: var(--muted);
-      }
-
-      .previous-payments-table__row span::before {
-        content: 'אמצעי: ';
-        color: var(--muted);
-      }
-
-      .previous-payments-table__row time::before {
-        content: 'תאריך: ';
-        color: var(--muted);
-        font-weight: 850;
-      }
-
-      .payment-progress-labels,
-      .payment-section-title {
-        align-items: flex-start;
-        flex-direction: column;
       }
     }
   `]
@@ -440,12 +268,10 @@ export class AddPaymentPageComponent {
   private readonly id = Number(this.route.snapshot.paramMap.get('id'));
   private readonly isAdminRoute = this.route.snapshot.pathFromRoot.some((route) => route.routeConfig?.path === 'admin') ||
     this.router.url.startsWith('/admin');
-  private latestViewModel: PaymentViewModel | null = null;
 
   readonly PaymentMethod = PaymentMethod;
   readonly paymentMethodLabels = paymentMethodLabels;
   readonly paymentStatusLabels = paymentStatusLabels;
-  readonly paymentStatusTones = paymentStatusTones;
   readonly orderDetailsBaseLink = this.isAdminRoute ? '/admin/orders' : '/waiter/orders';
   readonly ordersHomeLink = this.isAdminRoute ? ['/admin/orders'] : ['/waiter'];
   readonly form = this.fb.nonNullable.group({
@@ -455,9 +281,9 @@ export class AddPaymentPageComponent {
   readonly vm$: Observable<PaymentViewModel> = Number.isFinite(this.id) && this.id > 0
     ? combineLatest([this.data.getOrder(this.id), this.data.getPaymentsForOrder(this.id)]).pipe(
         map(([order, payments]) => this.createViewModel(order ?? null, payments)),
-        tap((vm) => this.syncFormWithViewModel(vm)),
+        tap((vm) => this.syncForm(vm)),
         catchError(() => {
-          this.loadErrorMessage = 'לא הצלחנו לטעון את פרטי התשלום. נסו שוב בעוד רגע.';
+          this.loadErrorMessage = 'לא הצלחנו לטעון את פרטי התשלום.';
           return of(this.createViewModel(null, []));
         }),
         startWith({
@@ -465,7 +291,6 @@ export class AddPaymentPageComponent {
           payments: [],
           totalPaid: 0,
           remainingBalance: 0,
-          progressPercent: 0,
           isPaid: false,
           isLoading: true
         })
@@ -473,80 +298,65 @@ export class AddPaymentPageComponent {
     : of(this.createViewModel(null, []));
 
   isSubmitting = false;
+  customOpen = false;
   errorMessage = '';
   successMessage = '';
   loadErrorMessage = '';
-  submitted = false;
-
-  get amountValue(): number {
-    return Number(this.form.controls.amount.value) || 0;
-  }
 
   customerName(order: Order): string {
     return `${order.customerFirstName ?? ''} ${order.customerLastName ?? ''}`.trim() || 'לקוח ללא שם';
   }
 
-  showAmountRequiredError(): boolean {
-    const control = this.form.controls.amount;
-    return this.shouldShowAmountError() && control.hasError('required');
+  payRemaining(vm: PaymentViewModel, method: PaymentMethod): void {
+    this.submitPayment(vm, vm.remainingBalance, method);
   }
 
-  showAmountPositiveError(): boolean {
-    return this.shouldShowAmountError() && !this.showAmountRequiredError() && this.amountValue <= 0;
+  toggleCustom(vm: PaymentViewModel): void {
+    this.customOpen = !this.customOpen;
+    if (this.customOpen) {
+      this.form.controls.amount.setValue(vm.remainingBalance, { emitEvent: false });
+    }
   }
 
-  showAmountOverBalance(vm: PaymentViewModel): boolean {
-    return this.shouldShowAmountError() && !vm.isPaid && this.amountValue > vm.remainingBalance;
+  submitCustom(vm: PaymentViewModel): void {
+    this.submitPayment(vm, Number(this.form.controls.amount.value) || 0, this.form.controls.method.value);
   }
 
-  canSubmit(vm: PaymentViewModel): boolean {
-    return (
-      Boolean(vm.order) &&
-      this.form.valid &&
-      !this.isSubmitting &&
-      !vm.isPaid &&
-      vm.remainingBalance > 0 &&
-      this.amountValue > 0 &&
-      this.amountValue <= vm.remainingBalance
-    );
-  }
-
-  submit(): void {
-    const vm = this.latestViewModel;
-    this.submitted = true;
-
-    if (this.isSubmitting) {
+  private submitPayment(vm: PaymentViewModel, amount: number, method: PaymentMethod): void {
+    if (this.isSubmitting || !vm.order) {
       return;
     }
 
-    if (!vm || !this.canSubmit(vm)) {
-      this.form.markAllAsTouched();
-      this.errorMessage = this.createSubmitErrorMessage(vm);
-      this.feedback.error(null, this.errorMessage);
+    if (vm.isPaid || vm.remainingBalance <= 0) {
+      this.errorMessage = 'ההזמנה שולמה במלואה.';
       return;
     }
 
-    const amount = this.form.controls.amount.value;
+    if (amount <= 0 || amount > vm.remainingBalance) {
+      this.errorMessage = 'סכום התשלום חייב להיות חיובי ולא גבוה מהיתרה.';
+      return;
+    }
+
     this.isSubmitting = true;
     this.errorMessage = '';
     this.successMessage = '';
 
-    this.data.addPayment(this.id, amount, this.form.controls.method.value).pipe(
+    this.data.addPayment(vm.order.id, amount, method).pipe(
       finalize(() => {
         this.isSubmitting = false;
       })
     ).subscribe({
       next: () => {
-        this.successMessage = 'התשלום נוסף בהצלחה';
         this.feedback.success();
-        this.submitted = false;
-        this.form.markAsPristine();
-        this.form.markAsUntouched();
-        const remainingBalance = this.latestViewModel?.remainingBalance ?? 0;
-        this.form.controls.amount.setValue(remainingBalance, { emitEvent: false });
+        this.customOpen = false;
+        const isClosingPayment = amount >= vm.remainingBalance;
+        this.successMessage = isClosingPayment ? 'התשלום הושלם. חוזרים לשולחנות...' : 'התשלום נשמר.';
+        if (isClosingPayment && !this.isAdminRoute && typeof window !== 'undefined') {
+          window.setTimeout(() => void this.router.navigate(['/waiter']), 700);
+        }
       },
       error: (error: unknown) => {
-        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לשמור את התשלום. נסו שוב בעוד רגע.');
+        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לשמור את התשלום.');
         this.feedback.error(error, this.errorMessage);
       }
     });
@@ -559,7 +369,6 @@ export class AddPaymentPageComponent {
         payments,
         totalPaid: 0,
         remainingBalance: 0,
-        progressPercent: 0,
         isPaid: false,
         isLoading: false
       };
@@ -567,60 +376,25 @@ export class AddPaymentPageComponent {
 
     const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0);
     const remainingBalance = Math.max(order.totalPrice - totalPaid, 0);
-    const progressPercent = order.totalPrice > 0
-      ? Math.min(100, Math.max(0, (totalPaid / order.totalPrice) * 100))
-      : 0;
 
     return {
       order,
       payments,
       totalPaid,
       remainingBalance,
-      progressPercent,
-      isPaid: order.paymentStatus === PaymentStatus.Paid,
+      isPaid: order.paymentStatus === PaymentStatus.Paid || remainingBalance <= 0,
       isLoading: false
     };
   }
 
-  private syncFormWithViewModel(vm: PaymentViewModel): void {
-    this.latestViewModel = vm;
-    if (!vm.order) {
-      return;
-    }
-
-    if (vm.isPaid) {
+  private syncForm(vm: PaymentViewModel): void {
+    if (!vm.order || vm.isPaid) {
       this.form.controls.amount.setValue(0, { emitEvent: false });
       return;
     }
 
-    const amount = this.amountValue;
-    if (!this.form.controls.amount.dirty || amount <= 0 || amount > vm.remainingBalance) {
+    if (!this.form.controls.amount.dirty || this.form.controls.amount.value > vm.remainingBalance) {
       this.form.controls.amount.setValue(vm.remainingBalance, { emitEvent: false });
     }
-  }
-
-  private shouldShowAmountError(): boolean {
-    const control = this.form.controls.amount;
-    return this.submitted || control.touched || control.dirty;
-  }
-
-  private createSubmitErrorMessage(vm: PaymentViewModel | null): string {
-    if (!vm?.order) {
-      return 'לא מצאנו את ההזמנה לתשלום.';
-    }
-
-    if (vm.isPaid || vm.remainingBalance <= 0) {
-      return 'ההזמנה שולמה במלואה.';
-    }
-
-    if (this.amountValue <= 0 || this.form.controls.amount.invalid) {
-      return 'סכום התשלום חייב להיות גדול מ־0.';
-    }
-
-    if (this.amountValue > vm.remainingBalance) {
-      return 'לא ניתן לשלם יותר מהיתרה שנותרה.';
-    }
-
-    return 'בדקו את פרטי התשלום ונסו שוב.';
   }
 }

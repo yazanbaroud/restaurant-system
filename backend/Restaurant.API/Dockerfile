@@ -3,11 +3,11 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-COPY Restaurant.API.csproj ./
-RUN dotnet restore Restaurant.API.csproj
+COPY backend/Restaurant.API/Restaurant.API.csproj backend/Restaurant.API/
+RUN dotnet restore backend/Restaurant.API/Restaurant.API.csproj
 
-COPY . ./
-RUN dotnet publish Restaurant.API.csproj -c Release -o /app/publish -p:UseAppHost=false
+COPY backend/Restaurant.API/ backend/Restaurant.API/
+RUN dotnet publish backend/Restaurant.API/Restaurant.API.csproj -c Release -o /app/publish --no-restore -p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS final
 WORKDIR /app

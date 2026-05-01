@@ -64,10 +64,10 @@ Vercel setup:
 5. Add environment variable:
 
 ```text
-APP_API_BASE_URL=https://your-render-service.onrender.com
+API_URL=https://your-render-service.onrender.com
 ```
 
-The build script writes `public/app-config.js` from `APP_API_BASE_URL`, and the Angular app reads that runtime config before bootstrapping.
+The build script writes `public/app-config.js` from `API_URL`, and the Angular app reads that runtime config before bootstrapping. Set `API_URL` to the backend origin without `/api`; the frontend services append `/api/...` themselves. If `/api` is accidentally included, the build script strips the trailing `/api` to avoid double `/api/api/...` URLs.
 
 ## SQLite Limitations
 

@@ -29,7 +29,10 @@ public sealed class DashboardService(AppDbContext db, IReportsService reports) :
             await db.Orders.CountAsync(x => x.Status == OrderStatus.Open, cancellationToken),
             await db.Orders.CountAsync(x => x.Status == OrderStatus.Completed, cancellationToken),
             await db.Orders.CountAsync(x => x.Status == OrderStatus.Cancelled, cancellationToken),
-            await db.Orders.CountAsync(x => x.PaymentStatus == PaymentStatus.Unpaid || x.PaymentStatus == PaymentStatus.Partial, cancellationToken),
+            await db.Orders.CountAsync(x =>
+                x.Status == OrderStatus.Open &&
+                (x.PaymentStatus == PaymentStatus.Unpaid || x.PaymentStatus == PaymentStatus.Partial),
+                cancellationToken),
             await reservations.CountAsync(x => x.ReservationDate == today, cancellationToken),
             await reservations.CountAsync(x => x.Status == ReservationStatus.Pending, cancellationToken),
             await reservations.CountAsync(x => x.Status == ReservationStatus.Approved, cancellationToken),

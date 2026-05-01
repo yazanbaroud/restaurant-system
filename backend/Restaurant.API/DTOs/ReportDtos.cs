@@ -4,10 +4,22 @@ public sealed record DailyReportDto(DateOnly Date, decimal Revenue, int OrdersCo
 public sealed record WeeklyReportDto(DateOnly WeekStartDate, DateOnly WeekEndDate, decimal Revenue, int OrdersCount);
 public sealed record MonthlyReportDto(int Year, int Month, decimal Revenue, int OrdersCount);
 public sealed record YearlyReportDto(int Year, decimal Revenue, int OrdersCount);
-public sealed record SalesReportDto(DateOnly From, DateOnly To, decimal Revenue, int OrdersCount, decimal AverageOrderValue);
-public sealed record TopDishDto(int MenuItemId, string Name, int QuantitySold, decimal Revenue);
-public sealed record LeastOrderedDishDto(int MenuItemId, string Name, int QuantitySold, decimal Revenue);
-public sealed record PaymentBreakdownDto(string Method, decimal Amount, int PaymentsCount);
+public sealed record SalesReportDto(DateOnly From, DateOnly To, decimal Revenue, int OrdersCount, decimal AverageOrderValue, decimal ItemsSold = 0);
+
+public sealed record TopDishDto(int MenuItemId, string Name, decimal QuantitySold, decimal Revenue)
+{
+    public decimal Quantity => QuantitySold;
+}
+
+public sealed record LeastOrderedDishDto(int MenuItemId, string Name, decimal QuantitySold, decimal Revenue)
+{
+    public decimal Quantity => QuantitySold;
+}
+
+public sealed record PaymentBreakdownDto(string Method, decimal Amount, int PaymentsCount)
+{
+    public int Count => PaymentsCount;
+}
 public sealed record PeakHourDto(int Hour, int OrdersCount, decimal Revenue);
 public sealed record WaiterPerformanceDto(int? UserId, string WaiterName, int OrdersCount, decimal Revenue);
 public sealed record ReservationSummaryDto(int Pending, int Approved, int Rejected, int Cancelled, int Arrived, int NoShow);

@@ -10,126 +10,193 @@ namespace Restaurant.API.Services;
 
 public sealed class ReportsService(AppDbContext db) : IReportsService
 {
-    private static readonly DateTime HourEpoch = new(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly TimeZoneInfo BusinessTimeZone = TimeZoneInfo.Utc;
 
     public async Task<DailyReportDto> GetDailyAsync(DateOnly? date, CancellationToken cancellationToken)
     {
-        var day = date ?? DateOnly.FromDateTime(DateTime.UtcNow);
-        var (start, end) = Range(day, day.AddDays(1));
-        var orders = db.Orders.AsNoTracking().Where(x => x.CreatedAt >= start && x.CreatedAt < end);
-        var nonCancelledOrders = orders.Where(x => x.Status != OrderStatus.Cancelled);
+        var day = date ?? CurrentBusinessDay();
+        var payments = QueryPayments(day, day);
+        var orders = QueryOrdersCreatedDuring(day, day);
+
         return new DailyReportDto(
             day,
-            await Revenue(nonCancelledOrders, cancellationToken),
-            await nonCancelledOrders.CountAsync(cancellationToken),
+            await NetRevenueAsync(payments, cancellationToken),
+            await PaidOrderCountAsync(payments, cancellationToken),
             await orders.CountAsync(x => x.Status == OrderStatus.Completed, cancellationToken),
             await orders.CountAsync(x => x.Status == OrderStatus.Cancelled, cancellationToken));
     }
 
     public async Task<WeeklyReportDto> GetWeeklyAsync(DateOnly? weekStart, CancellationToken cancellationToken)
     {
-        var startDay = weekStart ?? DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-(int)DateTime.UtcNow.DayOfWeek);
-        var endDay = startDay.AddDays(7);
-        var (start, end) = Range(startDay, endDay);
-        var orders = db.Orders.AsNoTracking().Where(x => x.CreatedAt >= start && x.CreatedAt < end);
-        var nonCancelledOrders = orders.Where(x => x.Status != OrderStatus.Cancelled);
-        return new WeeklyReportDto(startDay, endDay.AddDays(-1), await Revenue(nonCancelledOrders, cancellationToken), await nonCancelledOrders.CountAsync(cancellationToken));
+        var currentBusinessDay = CurrentBusinessDay();
+        var startDay = weekStart ?? currentBusinessDay.AddDays(-(int)currentBusinessDay.DayOfWeek);
+        var endDay = startDay.AddDays(6);
+        var payments = QueryPayments(startDay, endDay);
+
+        return new WeeklyReportDto(
+            startDay,
+            endDay,
+            await NetRevenueAsync(payments, cancellationToken),
+            await PaidOrderCountAsync(payments, cancellationToken));
     }
 
     public async Task<MonthlyReportDto> GetMonthlyAsync(int? year, int? month, CancellationToken cancellationToken)
     {
-        var now = DateTime.UtcNow;
-        var y = year ?? now.Year;
-        var m = month ?? now.Month;
+        var today = CurrentBusinessDay();
+        var y = year ?? today.Year;
+        var m = month ?? today.Month;
         ValidateYear(y);
         if (m is < 1 or > 12)
         {
             throw new ApiException("החודש חייב להיות בין 1 ל־12.");
         }
 
-        var start = new DateTime(y, m, 1, 0, 0, 0, DateTimeKind.Utc);
-        var end = start.AddMonths(1);
-        var orders = db.Orders.AsNoTracking().Where(x => x.CreatedAt >= start && x.CreatedAt < end);
-        var nonCancelledOrders = orders.Where(x => x.Status != OrderStatus.Cancelled);
-        return new MonthlyReportDto(y, m, await Revenue(nonCancelledOrders, cancellationToken), await nonCancelledOrders.CountAsync(cancellationToken));
+        var startDay = new DateOnly(y, m, 1);
+        var endDay = startDay.AddMonths(1).AddDays(-1);
+        var payments = QueryPayments(startDay, endDay);
+
+        return new MonthlyReportDto(
+            y,
+            m,
+            await NetRevenueAsync(payments, cancellationToken),
+            await PaidOrderCountAsync(payments, cancellationToken));
     }
 
     public async Task<YearlyReportDto> GetYearlyAsync(int? year, CancellationToken cancellationToken)
     {
-        var y = year ?? DateTime.UtcNow.Year;
+        var y = year ?? CurrentBusinessDay().Year;
         ValidateYear(y);
-        var start = new DateTime(y, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        var end = start.AddYears(1);
-        var orders = db.Orders.AsNoTracking().Where(x => x.CreatedAt >= start && x.CreatedAt < end);
-        var nonCancelledOrders = orders.Where(x => x.Status != OrderStatus.Cancelled);
-        return new YearlyReportDto(y, await Revenue(nonCancelledOrders, cancellationToken), await nonCancelledOrders.CountAsync(cancellationToken));
+        var startDay = new DateOnly(y, 1, 1);
+        var endDay = new DateOnly(y, 12, 31);
+        var payments = QueryPayments(startDay, endDay);
+
+        return new YearlyReportDto(
+            y,
+            await NetRevenueAsync(payments, cancellationToken),
+            await PaidOrderCountAsync(payments, cancellationToken));
     }
 
     public async Task<SalesReportDto> GetSalesAsync(DateOnly? from, DateOnly? to, CancellationToken cancellationToken)
     {
-        var fromDay = from ?? DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-30);
-        var toDay = to ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var today = CurrentBusinessDay();
+        var fromDay = from ?? today.AddDays(-30);
+        var toDay = to ?? today;
         ValidateDateRange(fromDay, toDay);
-        var orders = QueryOrders(fromDay, toDay).Where(x => x.Status != OrderStatus.Cancelled);
-        var count = await orders.CountAsync(cancellationToken);
-        var revenue = await orders.SumAsync(x => x.TotalAmount, cancellationToken);
-        return new SalesReportDto(fromDay, toDay, revenue, count, count == 0 ? 0 : revenue / count);
+
+        var payments = QueryPayments(fromDay, toDay);
+        var ordersCount = await PaidOrderCountAsync(payments, cancellationToken);
+        var revenue = await NetRevenueAsync(payments, cancellationToken);
+        var dishTotals = await PaidDishTotalsAsync(fromDay, toDay, cancellationToken);
+        var itemsSold = NormalizeQuantity(dishTotals.Sum(x => x.QuantitySold));
+
+        return new SalesReportDto(
+            fromDay,
+            toDay,
+            revenue,
+            ordersCount,
+            ordersCount == 0 ? 0 : revenue / ordersCount,
+            itemsSold);
     }
 
-    public async Task<IReadOnlyCollection<TopDishDto>> GetTopDishesAsync(DateOnly? from, DateOnly? to, int take, CancellationToken cancellationToken) =>
-        await DishQuery(from, to)
+    public async Task<IReadOnlyCollection<TopDishDto>> GetTopDishesAsync(DateOnly? from, DateOnly? to, int take, CancellationToken cancellationToken)
+    {
+        var dishes = await PaidDishTotalsAsync(from, to, cancellationToken);
+
+        return dishes
             .OrderByDescending(x => x.QuantitySold)
+            .ThenByDescending(x => x.Revenue)
             .Take(take)
             .Select(x => new TopDishDto(x.MenuItemId, x.Name, x.QuantitySold, x.Revenue))
-            .ToArrayAsync(cancellationToken);
+            .ToArray();
+    }
 
-    public async Task<IReadOnlyCollection<LeastOrderedDishDto>> GetLeastOrderedAsync(DateOnly? from, DateOnly? to, int take, CancellationToken cancellationToken) =>
-        await DishQuery(from, to)
+    public async Task<IReadOnlyCollection<LeastOrderedDishDto>> GetLeastOrderedAsync(DateOnly? from, DateOnly? to, int take, CancellationToken cancellationToken)
+    {
+        var dishes = await PaidDishTotalsAsync(from, to, cancellationToken);
+
+        return dishes
             .OrderBy(x => x.QuantitySold)
+            .ThenBy(x => x.Revenue)
             .Take(take)
             .Select(x => new LeastOrderedDishDto(x.MenuItemId, x.Name, x.QuantitySold, x.Revenue))
-            .ToArrayAsync(cancellationToken);
+            .ToArray();
+    }
 
     public async Task<IReadOnlyCollection<PaymentBreakdownDto>> GetPaymentBreakdownAsync(DateOnly? from, DateOnly? to, CancellationToken cancellationToken)
     {
-        var query = db.Payments.AsNoTracking().AsQueryable();
-        if (from.HasValue && to.HasValue)
+        var query = QueryPayments(from, to);
+        if (UseClientDecimalAggregation())
         {
-            ValidateDateRange(from.Value, to.Value);
-            var (start, end) = Range(from.Value, to.Value.AddDays(1));
-            query = query.Where(x => x.CreatedAt >= start && x.CreatedAt < end);
+            var paymentRows = await query
+                .Select(x => new PaymentBreakdownRow(x.Method, x.Amount, x.Order.PaymentStatus))
+                .ToArrayAsync(cancellationToken);
+
+            return paymentRows
+                .GroupBy(x => x.Method)
+                .Select(x => new PaymentBreakdownDto(
+                    x.Key.ToString(),
+                    NormalizeMoney(x.Sum(p => SignedAmount(p.Amount, p.PaymentStatus))),
+                    x.Count()))
+                .ToArray();
         }
 
-        return await query.GroupBy(x => x.Method)
-            .Select(x => new PaymentBreakdownDto(x.Key.ToString(), x.Sum(p => p.Amount), x.Count()))
+        var rows = await query
+            .GroupBy(x => x.Method)
+            .Select(x => new
+            {
+                Method = x.Key,
+                Amount = x.Sum(p => p.Order.PaymentStatus == PaymentStatus.Refunded ? -p.Amount : p.Amount),
+                PaymentsCount = x.Count()
+            })
             .ToArrayAsync(cancellationToken);
+
+        return rows
+            .Select(x => new PaymentBreakdownDto(x.Method.ToString(), NormalizeMoney(x.Amount), x.PaymentsCount))
+            .ToArray();
     }
 
-    public async Task<IReadOnlyCollection<PeakHourDto>> GetPeakHoursAsync(DateOnly? from, DateOnly? to, CancellationToken cancellationToken) =>
-        await QueryOrders(from ?? DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-30), to ?? DateOnly.FromDateTime(DateTime.UtcNow))
-            .Where(x => x.Status != OrderStatus.Cancelled)
-            .Select(x => new
-            {
-                Hour = EF.Functions.DateDiffHour(HourEpoch, x.CreatedAt) % 24,
-                x.TotalAmount
-            })
-            .GroupBy(x => x.Hour)
-            .Select(x => new
-            {
-                Hour = x.Key,
-                OrdersCount = x.Count(),
-                Revenue = x.Sum(o => o.TotalAmount)
-            })
-            .OrderByDescending(x => x.OrdersCount)
-            .Select(x => new PeakHourDto(x.Hour, x.OrdersCount, x.Revenue))
+    public async Task<IReadOnlyCollection<PeakHourDto>> GetPeakHoursAsync(DateOnly? from, DateOnly? to, CancellationToken cancellationToken)
+    {
+        var today = CurrentBusinessDay();
+        var rows = await QueryPayments(from ?? today.AddDays(-30), to ?? today)
+            .Select(x => new PaymentTimeRow(x.OrderId, x.CreatedAt, x.Amount, x.Order.PaymentStatus))
             .ToArrayAsync(cancellationToken);
 
-    public async Task<IReadOnlyCollection<WaiterPerformanceDto>> GetWaiterPerformanceAsync(DateOnly? from, DateOnly? to, CancellationToken cancellationToken) =>
-        await QueryOrders(from ?? DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-30), to ?? DateOnly.FromDateTime(DateTime.UtcNow))
-            .Where(x => x.Status != OrderStatus.Cancelled && x.UserId != null && x.User != null && x.User.Role == UserRole.Waiter)
-            .GroupBy(x => new { x.UserId, x.User!.FirstName, x.User.LastName })
-            .Select(x => new WaiterPerformanceDto(x.Key.UserId, x.Key.FirstName + " " + x.Key.LastName, x.Count(), x.Sum(o => o.TotalAmount)))
+        return rows
+            .GroupBy(x => BusinessHour(x.CreatedAt))
+            .Select(x => new PeakHourDto(
+                x.Key,
+                x.Select(p => p.OrderId).Distinct().Count(),
+                NormalizeMoney(x.Sum(p => SignedAmount(p.Amount, p.PaymentStatus)))))
+            .OrderByDescending(x => x.OrdersCount)
+            .ThenByDescending(x => x.Revenue)
+            .ToArray();
+    }
+
+    public async Task<IReadOnlyCollection<WaiterPerformanceDto>> GetWaiterPerformanceAsync(DateOnly? from, DateOnly? to, CancellationToken cancellationToken)
+    {
+        var today = CurrentBusinessDay();
+        var rows = await QueryPayments(from ?? today.AddDays(-30), to ?? today)
+            .Where(x => x.Order.UserId != null && x.Order.User != null && x.Order.User.Role == UserRole.Waiter)
+            .Select(x => new WaiterPaymentRow(
+                x.Order.UserId,
+                x.Order.User!.FirstName,
+                x.Order.User.LastName,
+                x.OrderId,
+                x.Amount,
+                x.Order.PaymentStatus))
             .ToArrayAsync(cancellationToken);
+
+        return rows
+            .GroupBy(x => new { x.UserId, x.FirstName, x.LastName })
+            .Select(x => new WaiterPerformanceDto(
+                x.Key.UserId,
+                $"{x.Key.FirstName} {x.Key.LastName}".Trim(),
+                x.Select(p => p.OrderId).Distinct().Count(),
+                NormalizeMoney(x.Sum(p => SignedAmount(p.Amount, p.PaymentStatus)))))
+            .OrderByDescending(x => x.Revenue)
+            .ToArray();
+    }
 
     public async Task<ReservationSummaryDto> GetReservationsSummaryAsync(DateOnly? from, DateOnly? to, CancellationToken cancellationToken)
     {
@@ -156,51 +223,208 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
             await db.Tables.CountAsync(x => x.Status == TableStatus.Occupied, cancellationToken),
             await db.Tables.CountAsync(x => x.Status == TableStatus.Reserved, cancellationToken));
 
-    private IQueryable<Order> QueryOrders(DateOnly from, DateOnly to)
+    private IQueryable<Payment> QueryPayments(DateOnly from, DateOnly to)
     {
         ValidateDateRange(from, to);
-        var (start, end) = Range(from, to.AddDays(1));
-        return db.Orders.AsNoTracking().Include(x => x.User).Where(x => x.CreatedAt >= start && x.CreatedAt < end);
+        var (start, end) = BusinessRange(from, to.AddDays(1));
+
+        return QueryValidCompletedPayments()
+            .Where(x => x.CreatedAt >= start && x.CreatedAt < end);
     }
 
-    private IQueryable<DishTotalRow> DishQuery(DateOnly? from, DateOnly? to)
+    private IQueryable<Payment> QueryPayments(DateOnly? from, DateOnly? to)
     {
-        var query = db.OrderItems.AsNoTracking().AsQueryable();
-        if (from.HasValue && to.HasValue)
+        var query = QueryValidCompletedPayments();
+        if (!from.HasValue || !to.HasValue)
         {
-            ValidateDateRange(from.Value, to.Value);
-            var (start, end) = Range(from.Value, to.Value.AddDays(1));
-            query = query.Where(x => x.Order.CreatedAt >= start && x.Order.CreatedAt < end);
+            return query;
         }
 
-        query = query.Where(x => x.Order.Status != OrderStatus.Cancelled);
-
-        var dishTotals = query.GroupBy(x => x.MenuItemId)
-            .Select(x => new
-            {
-                MenuItemId = x.Key,
-                QuantitySold = x.Sum(i => i.Quantity),
-                Revenue = x.Sum(i => i.Quantity * i.UnitPrice)
-            });
-
-        return from dish in dishTotals
-               join menuItem in db.MenuItems.AsNoTracking()
-                   on dish.MenuItemId equals menuItem.Id into menuItems
-               from menuItem in menuItems.DefaultIfEmpty()
-               select new DishTotalRow
-               {
-                   MenuItemId = dish.MenuItemId,
-                   Name = menuItem == null ? string.Empty : menuItem.Name,
-                   QuantitySold = dish.QuantitySold,
-                   Revenue = dish.Revenue
-               };
+        ValidateDateRange(from.Value, to.Value);
+        var (start, end) = BusinessRange(from.Value, to.Value.AddDays(1));
+        return query.Where(x => x.CreatedAt >= start && x.CreatedAt < end);
     }
 
-    private static async Task<decimal> Revenue(IQueryable<Order> orders, CancellationToken cancellationToken) =>
-        await orders.Where(x => x.Status != OrderStatus.Cancelled).SumAsync(x => x.TotalAmount, cancellationToken);
+    private IQueryable<Payment> QueryValidCompletedPayments() =>
+        db.Payments
+            .AsNoTracking()
+            .Where(x => x.Amount > 0)
+            .Where(x =>
+                x.Order.PaymentStatus == PaymentStatus.Paid ||
+                x.Order.PaymentStatus == PaymentStatus.Partial ||
+                x.Order.PaymentStatus == PaymentStatus.Refunded)
+            .Where(x => x.Order.Status != OrderStatus.Cancelled || x.Order.PaymentStatus == PaymentStatus.Refunded);
 
-    private static (DateTime Start, DateTime End) Range(DateOnly from, DateOnly to) =>
-        (from.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc), to.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+    private IQueryable<Order> QueryOrdersCreatedDuring(DateOnly from, DateOnly to)
+    {
+        ValidateDateRange(from, to);
+        var (start, end) = BusinessRange(from, to.AddDays(1));
+
+        return db.Orders
+            .AsNoTracking()
+            .Where(x => x.CreatedAt >= start && x.CreatedAt < end);
+    }
+
+    private async Task<IReadOnlyCollection<DishTotalRow>> PaidDishTotalsAsync(DateOnly? from, DateOnly? to, CancellationToken cancellationToken)
+    {
+        var paymentRows = await QueryPayments(from, to)
+            .Select(x => new PaymentAggregationRow(x.OrderId, x.Amount, x.Order.PaymentStatus))
+            .ToArrayAsync(cancellationToken);
+
+        return await PaidDishTotalsAsync(paymentRows, cancellationToken);
+    }
+
+    private async Task<IReadOnlyCollection<DishTotalRow>> PaidDishTotalsAsync(DateOnly from, DateOnly to, CancellationToken cancellationToken)
+    {
+        var paymentRows = await QueryPayments(from, to)
+            .Select(x => new PaymentAggregationRow(x.OrderId, x.Amount, x.Order.PaymentStatus))
+            .ToArrayAsync(cancellationToken);
+
+        return await PaidDishTotalsAsync(paymentRows, cancellationToken);
+    }
+
+    private async Task<IReadOnlyCollection<DishTotalRow>> PaidDishTotalsAsync(
+        IReadOnlyCollection<PaymentAggregationRow> paymentRows,
+        CancellationToken cancellationToken)
+    {
+        var paidByOrder = paymentRows
+            .GroupBy(x => x.OrderId)
+            .Select(x => new
+            {
+                OrderId = x.Key,
+                NetPaidAmount = NormalizeMoney(x.Sum(p => SignedAmount(p.Amount, p.PaymentStatus)))
+            })
+            .Where(x => x.NetPaidAmount != 0)
+            .ToDictionary(x => x.OrderId, x => x.NetPaidAmount);
+
+        if (paidByOrder.Count == 0)
+        {
+            return Array.Empty<DishTotalRow>();
+        }
+
+        var orderIds = paidByOrder.Keys.ToArray();
+        var items = await db.OrderItems
+            .AsNoTracking()
+            .Where(x => orderIds.Contains(x.OrderId))
+            .Select(x => new OrderItemAggregationRow(
+                x.OrderId,
+                x.MenuItemId,
+                x.MenuItem.Name,
+                x.Quantity,
+                x.UnitPrice))
+            .ToArrayAsync(cancellationToken);
+
+        var orderLineTotals = items
+            .GroupBy(x => x.OrderId)
+            .ToDictionary(x => x.Key, x => x.Sum(i => i.LineTotal));
+
+        var dishes = new Dictionary<int, DishTotalRow>();
+        foreach (var item in items)
+        {
+            if (!paidByOrder.TryGetValue(item.OrderId, out var netPaidAmount) ||
+                !orderLineTotals.TryGetValue(item.OrderId, out var orderLineTotal) ||
+                orderLineTotal <= 0)
+            {
+                continue;
+            }
+
+            var paidRatio = PaidRatio(netPaidAmount, orderLineTotal);
+            if (paidRatio == 0)
+            {
+                continue;
+            }
+
+            if (!dishes.TryGetValue(item.MenuItemId, out var dish))
+            {
+                dish = new DishTotalRow
+                {
+                    MenuItemId = item.MenuItemId,
+                    Name = item.Name
+                };
+                dishes.Add(item.MenuItemId, dish);
+            }
+
+            dish.QuantitySold += item.Quantity * paidRatio;
+            dish.Revenue += item.LineTotal * paidRatio;
+        }
+
+        return dishes.Values
+            .Where(x => x.QuantitySold != 0 || x.Revenue != 0)
+            .Select(x =>
+            {
+                x.QuantitySold = NormalizeQuantity(x.QuantitySold);
+                x.Revenue = NormalizeMoney(x.Revenue);
+                return x;
+            })
+            .ToArray();
+    }
+
+    private static Task<int> PaidOrderCountAsync(IQueryable<Payment> payments, CancellationToken cancellationToken) =>
+        payments.Select(x => x.OrderId).Distinct().CountAsync(cancellationToken);
+
+    private async Task<decimal> NetRevenueAsync(IQueryable<Payment> payments, CancellationToken cancellationToken)
+    {
+        if (UseClientDecimalAggregation())
+        {
+            var rows = await payments
+                .Select(x => new PaymentAmountRow(x.Amount, x.Order.PaymentStatus))
+                .ToArrayAsync(cancellationToken);
+
+            return NormalizeMoney(rows.Sum(x => SignedAmount(x.Amount, x.PaymentStatus)));
+        }
+
+        var revenue = await payments.SumAsync(
+            x => x.Order.PaymentStatus == PaymentStatus.Refunded ? -x.Amount : x.Amount,
+            cancellationToken);
+
+        return NormalizeMoney(revenue);
+    }
+
+    private static decimal SignedAmount(decimal amount, PaymentStatus paymentStatus) =>
+        paymentStatus == PaymentStatus.Refunded ? -amount : amount;
+
+    private static decimal PaidRatio(decimal netPaidAmount, decimal orderLineTotal)
+    {
+        if (orderLineTotal <= 0)
+        {
+            return 0;
+        }
+
+        var ratio = netPaidAmount / orderLineTotal;
+        return Math.Clamp(ratio, -1m, 1m);
+    }
+
+    private static (DateTime Start, DateTime End) BusinessRange(DateOnly from, DateOnly toExclusive) =>
+        (BusinessDateStartUtc(from), BusinessDateStartUtc(toExclusive));
+
+    private static DateTime BusinessDateStartUtc(DateOnly date)
+    {
+        var localStart = DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified);
+        return TimeZoneInfo.ConvertTimeToUtc(localStart, BusinessTimeZone);
+    }
+
+    private static DateOnly CurrentBusinessDay() =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, BusinessTimeZone));
+
+    private static int BusinessHour(DateTime value) =>
+        TimeZoneInfo.ConvertTimeFromUtc(AsUtc(value), BusinessTimeZone).Hour;
+
+    private static DateTime AsUtc(DateTime value) =>
+        value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
+
+    private static decimal NormalizeMoney(decimal amount) =>
+        decimal.Round(amount, 2, MidpointRounding.AwayFromZero);
+
+    private static decimal NormalizeQuantity(decimal quantity) =>
+        decimal.Round(quantity, 4, MidpointRounding.AwayFromZero);
+
+    private bool UseClientDecimalAggregation() =>
+        string.Equals(db.Database.ProviderName, "Microsoft.EntityFrameworkCore.Sqlite", StringComparison.Ordinal);
 
     private static void ValidateDateRange(DateOnly from, DateOnly to)
     {
@@ -218,13 +442,39 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
         }
     }
 
+    private sealed record PaymentAggregationRow(int OrderId, decimal Amount, PaymentStatus PaymentStatus);
+
+    private sealed record PaymentAmountRow(decimal Amount, PaymentStatus PaymentStatus);
+
+    private sealed record PaymentBreakdownRow(PaymentMethod Method, decimal Amount, PaymentStatus PaymentStatus);
+
+    private sealed record PaymentTimeRow(int OrderId, DateTime CreatedAt, decimal Amount, PaymentStatus PaymentStatus);
+
+    private sealed record WaiterPaymentRow(
+        int? UserId,
+        string FirstName,
+        string LastName,
+        int OrderId,
+        decimal Amount,
+        PaymentStatus PaymentStatus);
+
+    private sealed record OrderItemAggregationRow(
+        int OrderId,
+        int MenuItemId,
+        string Name,
+        int Quantity,
+        decimal UnitPrice)
+    {
+        public decimal LineTotal => Quantity * UnitPrice;
+    }
+
     private sealed class DishTotalRow
     {
         public int MenuItemId { get; set; }
 
         public string Name { get; set; } = string.Empty;
 
-        public int QuantitySold { get; set; }
+        public decimal QuantitySold { get; set; }
 
         public decimal Revenue { get; set; }
     }

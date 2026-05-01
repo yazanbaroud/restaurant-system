@@ -6,6 +6,17 @@ using Restaurant.API.Seed;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(port) && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("ASPNETCORE_URLS")))
+{
+    if (!int.TryParse(port, out var portNumber) || portNumber <= 0)
+    {
+        throw new InvalidOperationException("PORT environment variable must be a positive integer.");
+    }
+
+    builder.WebHost.UseUrls($"http://0.0.0.0:{portNumber}");
+}
+
 builder.Services.AddRestaurantBackend(builder.Configuration, builder.Environment);
 
 var app = builder.Build();

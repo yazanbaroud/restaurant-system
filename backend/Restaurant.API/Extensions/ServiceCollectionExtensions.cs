@@ -5,6 +5,7 @@ using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -20,6 +21,9 @@ namespace Restaurant.API.Extensions;
 
 public static class ServiceCollectionExtensions
 {
+    private const string SqlServerProvider = "SqlServer";
+    private const string SqliteProvider = "SQLite";
+
     public static IServiceCollection AddRestaurantBackend(this IServiceCollection services, IConfiguration configuration, IHostEnvironment environment)
     {
         var jwt = configuration.GetSection("Jwt").Get<JwtSettings>() ?? new JwtSettings();
@@ -44,15 +48,11 @@ public static class ServiceCollectionExtensions
         services.Configure<SeedAdminOptions>(configuration.GetSection("SeedAdmin"));
         services.Configure<OrderLifecycleOptions>(configuration.GetSection("OrderLifecycle"));
 
-        services.AddDbContext<AppDbContext>(options =>
-            options.UseSqlServer(configuration.GetConnectionString("DefaultConnection")));
+        ConfigureDatabase(services, configuration);
         services.AddHttpContextAccessor();
 
-        var allowedOrigins = configuration.GetSection("Cors:AllowedOrigins")
-            .Get<string[]>()
-            ?.Where(origin => !string.IsNullOrWhiteSpace(origin))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        var allowedOrigins = ReadAllowedOrigins(configuration, "AllowedOrigins")
+            ?? ReadAllowedOrigins(configuration, "Cors:AllowedOrigins");
 
         if (allowedOrigins is null || allowedOrigins.Length == 0)
         {
@@ -207,6 +207,71 @@ public static class ServiceCollectionExtensions
         services.AddAuthorization();
 
         return services;
+    }
+
+    private static void ConfigureDatabase(IServiceCollection services, IConfiguration configuration)
+    {
+        var provider = configuration["DatabaseProvider"];
+        provider = string.IsNullOrWhiteSpace(provider) ? SqlServerProvider : provider.Trim();
+
+        if (provider.Equals(SqlServerProvider, StringComparison.OrdinalIgnoreCase))
+        {
+            var connectionString = GetRequiredConnectionString(configuration, "DefaultConnection", SqlServerProvider);
+            services.AddDbContext<AppDbContext>(options => options.UseSqlServer(connectionString));
+            return;
+        }
+
+        if (provider.Equals(SqliteProvider, StringComparison.OrdinalIgnoreCase)
+            || provider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
+        {
+            var connectionString = configuration.GetConnectionString("SqliteConnection");
+            connectionString = string.IsNullOrWhiteSpace(connectionString)
+                ? "Data Source=app.db"
+                : connectionString.Trim();
+            EnsureSqliteDirectoryExists(connectionString);
+            services.AddDbContext<AppDbContext>(options => options.UseSqlite(connectionString));
+            return;
+        }
+
+        throw new InvalidOperationException("DatabaseProvider must be either SqlServer or SQLite.");
+    }
+
+    private static string GetRequiredConnectionString(IConfiguration configuration, string name, string provider)
+    {
+        var connectionString = configuration.GetConnectionString(name);
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException($"{provider} requires ConnectionStrings:{name}.");
+        }
+
+        return connectionString;
+    }
+
+    private static void EnsureSqliteDirectoryExists(string connectionString)
+    {
+        var builder = new SqliteConnectionStringBuilder(connectionString);
+        var dataSource = builder.DataSource;
+        if (string.IsNullOrWhiteSpace(dataSource)
+            || dataSource.Equals(":memory:", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var directory = Path.GetDirectoryName(Path.GetFullPath(dataSource));
+        if (!string.IsNullOrWhiteSpace(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+    }
+
+    private static string[]? ReadAllowedOrigins(IConfiguration configuration, string sectionName)
+    {
+        return configuration.GetSection(sectionName)
+            .Get<string[]>()
+            ?.Where(origin => !string.IsNullOrWhiteSpace(origin))
+            .Select(origin => origin.Trim().TrimEnd('/'))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     private static void ValidateJwtSettings(JwtSettings settings, IHostEnvironment environment)

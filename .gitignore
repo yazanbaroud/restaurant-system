@@ -7,3 +7,4 @@ dist/
 appsettings.Development.json
 .dotnet-home/
 backend-api*.log
+frontend/public/app-config.js

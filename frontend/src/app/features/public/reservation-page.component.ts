@@ -364,7 +364,7 @@ const MAX_GUEST_COUNT = 30;
 
     .reservation-summary-card {
       position: sticky;
-      top: 92px;
+      top: calc(var(--topbar-height) + 16px);
       display: grid;
       background: var(--brown-950);
       color: var(--ivory);

@@ -199,7 +199,7 @@ interface MenuViewModel {
 
     .menu-category-nav {
       position: sticky;
-      top: 78px;
+      top: calc(var(--topbar-height) + 8px);
       z-index: 4;
       display: flex;
       gap: 6px;
@@ -284,10 +284,6 @@ interface MenuViewModel {
       .menu-toolbar,
       .menu-skeleton-grid {
         grid-template-columns: 1fr;
-      }
-
-      .menu-category-nav {
-        top: 72px;
       }
     }
 

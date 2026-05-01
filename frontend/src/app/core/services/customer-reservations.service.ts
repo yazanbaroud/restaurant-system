@@ -38,6 +38,7 @@ export class CustomerReservationsService {
       phoneNumber: this.stringValue(record['phoneNumber'] ?? record['phone']),
       reservationDate: this.stringValue(record['reservationDate'] ?? record['date']),
       reservationTime: this.stringValue(record['reservationTime'] ?? record['time']),
+      durationMinutes: this.numberValue(record['durationMinutes'], 120),
       guestCount: this.numberValue(record['guestCount'] ?? record['guestsCount']),
       notes: this.stringValue(record['notes'] ?? record['customerNotes']),
       tableId: this.nullableNumberValue(record['tableId']),
@@ -55,9 +56,9 @@ export class CustomerReservationsService {
       : ReservationStatus.Pending;
   }
 
-  private numberValue(value: unknown): number {
+  private numberValue(value: unknown, fallback = 0): number {
     const next = Number(value);
-    return Number.isFinite(next) ? next : 0;
+    return Number.isFinite(next) ? next : fallback;
   }
 
   private nullableNumberValue(value: unknown): number | null {

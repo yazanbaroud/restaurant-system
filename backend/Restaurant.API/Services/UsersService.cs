@@ -21,6 +21,24 @@ public sealed class UsersService(
             .Select(x => x.ToUserResponse())
             .ToArrayAsync(cancellationToken);
 
+    public async Task<PagedResponseDto<UserResponseDto>> GetPagedAsync(int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var safePage = Math.Max(page, 1);
+        var safePageSize = Math.Clamp(pageSize, 1, 100);
+        var query = db.Users.AsNoTracking();
+        var totalCount = await query.CountAsync(cancellationToken);
+        var users = await query
+            .OrderBy(x => x.Role)
+            .ThenBy(x => x.LastName)
+            .ThenBy(x => x.Id)
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
+            .Select(x => x.ToUserResponse())
+            .ToArrayAsync(cancellationToken);
+
+        return new PagedResponseDto<UserResponseDto>(safePage, safePageSize, totalCount, users);
+    }
+
     public async Task<UserResponseDto> GetByIdAsync(int id, CancellationToken cancellationToken)
     {
         var user = await db.Users.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, cancellationToken)

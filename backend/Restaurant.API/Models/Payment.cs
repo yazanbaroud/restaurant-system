@@ -10,6 +10,7 @@ public sealed class Payment
     public Guid IdempotencyKey { get; set; }
     public decimal Amount { get; set; }
     public PaymentMethod Method { get; set; }
+    public string? Note { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public int CreatedByUserId { get; set; }
     public User CreatedByUser { get; set; } = null!;

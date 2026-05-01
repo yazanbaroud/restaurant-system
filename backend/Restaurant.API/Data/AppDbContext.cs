@@ -14,6 +14,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<OrderStatusChange> OrderStatusChanges => Set<OrderStatusChange>();
     public DbSet<Payment> Payments => Set<Payment>();
+    public DbSet<PaymentRefund> PaymentRefunds => Set<PaymentRefund>();
     public DbSet<OrderTable> OrderTables => Set<OrderTable>();
     public DbSet<Reservation> Reservations => Set<Reservation>();
     public DbSet<RestaurantBusinessHour> BusinessHours => Set<RestaurantBusinessHour>();
@@ -146,6 +147,15 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         {
             entity.Property(x => x.UnitPrice).HasPrecision(18, 2);
             entity.Property(x => x.Notes).HasMaxLength(500);
+            entity.Property(x => x.Status).HasConversion<int>().IsRequired();
+            if (IsSqlite())
+            {
+                entity.Property(x => x.RowVersion).IsConcurrencyToken();
+            }
+            else
+            {
+                entity.Property(x => x.RowVersion).IsRowVersion();
+            }
             entity.HasOne(x => x.Order)
                 .WithMany(x => x.Items)
                 .HasForeignKey(x => x.OrderId)
@@ -162,6 +172,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.Amount).HasPrecision(18, 2);
             entity.Property(x => x.IdempotencyKey).IsRequired();
             entity.Property(x => x.Method).HasConversion<int>().IsRequired();
+            entity.Property(x => x.Note).HasMaxLength(500);
             entity.Property(x => x.CreatedAt).IsRequired();
             if (IsSqlite())
             {
@@ -181,6 +192,33 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
+        modelBuilder.Entity<PaymentRefund>(entity =>
+        {
+            entity.HasIndex(x => x.IdempotencyKey).IsUnique();
+            entity.HasIndex(x => x.OrderId);
+            entity.Property(x => x.Amount).HasPrecision(18, 2);
+            entity.Property(x => x.IdempotencyKey).IsRequired();
+            entity.Property(x => x.Method).HasConversion<int>().IsRequired();
+            entity.Property(x => x.Reason).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.RefundedAt).IsRequired();
+            if (IsSqlite())
+            {
+                entity.Property(x => x.RowVersion).IsConcurrencyToken();
+            }
+            else
+            {
+                entity.Property(x => x.RowVersion).IsRowVersion();
+            }
+            entity.HasOne(x => x.Order)
+                .WithMany(x => x.Refunds)
+                .HasForeignKey(x => x.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.PerformedByUser)
+                .WithMany()
+                .HasForeignKey(x => x.PerformedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<OrderTable>(entity =>
         {
             entity.HasIndex(x => new { x.OrderId, x.TableId }).IsUnique();
@@ -197,15 +235,29 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
         modelBuilder.Entity<Reservation>(entity =>
         {
             entity.HasIndex(x => x.UserId);
+            entity.HasIndex(x => new { x.TableId, x.ReservationDate, x.ReservationTime });
             entity.Property(x => x.FirstName).HasMaxLength(100).IsRequired();
             entity.Property(x => x.LastName).HasMaxLength(100).IsRequired();
             entity.Property(x => x.PhoneNumber).HasMaxLength(40).IsRequired();
+            entity.Property(x => x.DurationMinutes).IsRequired().HasDefaultValue(120);
             entity.Property(x => x.CustomerNotes).HasMaxLength(1000);
             entity.Property(x => x.RestaurantNotes).HasMaxLength(1000);
             entity.Property(x => x.Status).HasConversion<int>().IsRequired();
+            if (IsSqlite())
+            {
+                entity.Property(x => x.RowVersion).IsConcurrencyToken();
+            }
+            else
+            {
+                entity.Property(x => x.RowVersion).IsRowVersion();
+            }
             entity.HasOne(x => x.User)
                 .WithMany(x => x.Reservations)
                 .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(x => x.Table)
+                .WithMany(x => x.Reservations)
+                .HasForeignKey(x => x.TableId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 

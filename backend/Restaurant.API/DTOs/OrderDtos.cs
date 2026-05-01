@@ -15,7 +15,8 @@ public sealed record AddOrderItemDto(int MenuItemId, int Quantity, string? Notes
 public sealed record UpdateOrderDto(string? CustomerFirstName, string? CustomerLastName, string? Notes, OrderType OrderType);
 public sealed record UpdateOrderTablesDto(IReadOnlyCollection<int> TableIds);
 public sealed record UpdateOrderItemDto(int Quantity, string? Notes);
-public sealed record OrderItemResponseDto(int Id, int MenuItemId, string MenuItemName, int Quantity, decimal UnitPrice, decimal LineTotal, string? Notes);
+public sealed record UpdateOrderItemStatusDto(OrderItemStatus Status);
+public sealed record OrderItemResponseDto(int Id, int MenuItemId, string MenuItemName, int Quantity, decimal UnitPrice, decimal LineTotal, OrderItemStatus Status, string? Notes);
 public sealed record OrderTableResponseDto(int Id, int TableId, string TableName);
 public sealed record OrderStatusChangeResponseDto(
     int Id,
@@ -42,3 +43,5 @@ public sealed record OrderResponseDto(
     IReadOnlyCollection<OrderItemResponseDto> Items,
     IReadOnlyCollection<OrderTableResponseDto> Tables,
     IReadOnlyCollection<OrderStatusChangeResponseDto> StatusChanges);
+
+public sealed record PagedResponseDto<T>(int Page, int PageSize, int TotalCount, IReadOnlyCollection<T> Items);

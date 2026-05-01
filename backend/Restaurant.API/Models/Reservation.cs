@@ -12,9 +12,13 @@ public sealed class Reservation
     public string PhoneNumber { get; set; } = string.Empty;
     public DateOnly ReservationDate { get; set; }
     public TimeOnly ReservationTime { get; set; }
+    public int DurationMinutes { get; set; } = 120;
     public int GuestsCount { get; set; }
+    public int? TableId { get; set; }
+    public Table? Table { get; set; }
     public string? CustomerNotes { get; set; }
     public string? RestaurantNotes { get; set; }
     public ReservationStatus Status { get; set; } = ReservationStatus.Pending;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public byte[] RowVersion { get; set; } = [];
 }

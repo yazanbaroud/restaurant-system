@@ -10,6 +10,7 @@ import {
   CustomerTableOption,
   Order,
   OrderItem,
+  OrderItemStatus,
   OrderStatus,
   OrderType,
   PaymentStatus,
@@ -113,8 +114,16 @@ export class CustomerOrdersService {
       quantity: this.numberValue(record['quantity']),
       unitPrice: this.numberValue(record['unitPrice']),
       lineTotal: this.numberValue(record['lineTotal']),
+      status: this.normalizeOrderItemStatus(record['status']),
       notes: this.stringValue(record['notes'])
     };
+  }
+
+  private normalizeOrderItemStatus(value: unknown): OrderItemStatus {
+    const numericValue = Number(value);
+    return Object.values(OrderItemStatus).includes(numericValue as OrderItemStatus)
+      ? numericValue as OrderItemStatus
+      : OrderItemStatus.Pending;
   }
 
   private normalizeOrderTable(value: unknown): Table {

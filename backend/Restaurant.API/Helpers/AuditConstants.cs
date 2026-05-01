@@ -4,6 +4,7 @@ public static class AuditEntityTypes
 {
     public const string Order = "Order";
     public const string Payment = "Payment";
+    public const string PaymentRefund = "PaymentRefund";
     public const string User = "User";
     public const string Table = "Table";
     public const string MenuItem = "MenuItem";
@@ -17,6 +18,7 @@ public static class AuditActions
     public const string Delete = "Delete";
     public const string StatusChange = "StatusChange";
     public const string PaymentCreated = "PaymentCreated";
+    public const string PaymentRefunded = "PaymentRefunded";
     public const string Cancelled = "Cancelled";
     public const string TableAssignmentChanged = "TableAssignmentChanged";
     public const string ManualStatusChange = "ManualStatusChange";

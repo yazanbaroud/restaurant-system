@@ -55,7 +55,8 @@ public sealed class PaymentsService(
             var oldTableIds = TableIds(order);
 
             var totalAmount = NormalizeMoney(order.TotalAmount);
-            var paidBeforePayment = NormalizeMoney(order.Payments.Sum(x => x.Amount));
+            var refundedBeforePayment = NormalizeMoney(order.Refunds.Sum(x => x.Amount));
+            var paidBeforePayment = NormalizeMoney(order.Payments.Sum(x => x.Amount) - refundedBeforePayment);
             var remainingBeforePayment = RemainingAmount(totalAmount, paidBeforePayment);
 
             if (remainingBeforePayment <= 0)
@@ -80,6 +81,7 @@ public sealed class PaymentsService(
                 IdempotencyKey = dto.IdempotencyKey,
                 Amount = amount,
                 Method = dto.Method,
+                Note = dto.Note?.Trim(),
                 CreatedAt = now,
                 CreatedByUserId = createdByUserId
             };
@@ -211,13 +213,185 @@ public sealed class PaymentsService(
             .ToArrayAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyCollection<PaymentRefundResponseDto>> GetRefundsByOrderAsync(int orderId, CancellationToken cancellationToken)
+    {
+        if (!await db.Orders.AnyAsync(x => x.Id == orderId, cancellationToken))
+        {
+            throw new ApiException("ההזמנה לא נמצאה.", StatusCodes.Status404NotFound);
+        }
+
+        return await db.PaymentRefunds.AsNoTracking()
+            .Where(x => x.OrderId == orderId)
+            .OrderByDescending(x => x.RefundedAt)
+            .Select(x => x.ToPaymentRefundResponse())
+            .ToArrayAsync(cancellationToken);
+    }
+
+    public async Task<CreatePaymentRefundResponseDto> RefundAsync(int performedByUserId, CreatePaymentRefundDto dto, CancellationToken cancellationToken)
+    {
+        if (performedByUserId <= 0)
+        {
+            throw RejectRefund(dto, performedByUserId, "UnauthenticatedUser", "המשתמש לא מזוהה.", StatusCodes.Status401Unauthorized);
+        }
+
+        if (dto.IdempotencyKey == Guid.Empty)
+        {
+            throw RejectRefund(dto, performedByUserId, "MissingIdempotencyKey", "מפתח בקשת ההחזר אינו תקין.", StatusCodes.Status400BadRequest);
+        }
+
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+
+        try
+        {
+            var existingRefund = await LoadExistingRefundForUpdateAsync(dto.IdempotencyKey, cancellationToken);
+            if (existingRefund is not null)
+            {
+                EnsureRefundReplayMatches(existingRefund, dto, performedByUserId);
+                var existingResult = await BuildRefundResultAsync(existingRefund, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return existingResult;
+            }
+
+            var amount = NormalizeMoney(dto.Amount);
+            if (amount <= 0)
+            {
+                throw RejectRefund(dto, performedByUserId, "InvalidAmount", "סכום ההחזר חייב להיות חיובי.", StatusCodes.Status400BadRequest);
+            }
+
+            if (!Enum.IsDefined(dto.Method))
+            {
+                throw RejectRefund(dto, performedByUserId, "InvalidPaymentMethod", "אמצעי ההחזר אינו תקין.", StatusCodes.Status400BadRequest);
+            }
+
+            var reason = dto.Reason.Trim();
+            if (string.IsNullOrWhiteSpace(reason))
+            {
+                throw RejectRefund(dto, performedByUserId, "MissingReason", "יש להזין סיבת החזר.", StatusCodes.Status400BadRequest);
+            }
+
+            var order = await LoadOrderForPaymentAsync(dto.OrderId, cancellationToken)
+                ?? throw RejectRefund(dto, performedByUserId, "OrderNotFound", "ההזמנה לא נמצאה.", StatusCodes.Status404NotFound);
+
+            var totalPaid = NormalizeMoney(order.Payments.Sum(x => x.Amount));
+            var totalRefundedBefore = NormalizeMoney(order.Refunds.Sum(x => x.Amount));
+            var netPaidBefore = NormalizeMoney(totalPaid - totalRefundedBefore);
+            if (netPaidBefore <= 0)
+            {
+                throw RejectRefund(dto, performedByUserId, "NothingToRefund", "אין יתרת תשלומים להחזר.", StatusCodes.Status409Conflict);
+            }
+
+            if (amount > netPaidBefore)
+            {
+                throw RejectRefund(dto, performedByUserId, "RefundOverPaidAmount", $"סכום ההחזר גבוה מהסכום ששולם בפועל: {netPaidBefore:0.00}.", StatusCodes.Status400BadRequest);
+            }
+
+            var oldOrderStatusValues = OrderStatusSnapshot(order);
+            var now = DateTime.UtcNow;
+            var refund = new PaymentRefund
+            {
+                OrderId = dto.OrderId,
+                IdempotencyKey = dto.IdempotencyKey,
+                Amount = amount,
+                Method = dto.Method,
+                Reason = reason,
+                RefundedAt = now,
+                PerformedByUserId = performedByUserId
+            };
+
+            order.Refunds.Add(refund);
+            var totalRefundedAfter = NormalizeMoney(totalRefundedBefore + amount);
+            var netPaidAfter = NormalizeMoney(totalPaid - totalRefundedAfter);
+            order.PaymentStatus = PaymentStatusAfterRefund(order.TotalAmount, netPaidAfter, totalRefundedAfter);
+            order.PaymentStatusChangedAt = now;
+            order.PaymentStatusChangedByUserId = performedByUserId;
+            order.StatusChanges.Add(new OrderStatusChange
+            {
+                ChangeType = OrderStatusChangeType.Payment,
+                FromValue = oldOrderStatusValues.PaymentStatus,
+                ToValue = order.PaymentStatus.ToString(),
+                ChangedAt = now,
+                ChangedByUserId = performedByUserId
+            });
+
+            db.Entry(order).Property(x => x.PaymentStatus).IsModified = true;
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            var result = new CreatePaymentRefundResponseDto(
+                refund.ToPaymentRefundResponse(),
+                order.Id,
+                order.Status,
+                order.KitchenStatus,
+                order.PaymentStatus,
+                NormalizeMoney(order.TotalAmount),
+                netPaidAfter,
+                totalRefundedAfter,
+                RemainingAmount(order.TotalAmount, netPaidAfter));
+
+            await audit.TryLogAsync(
+                new AuditLogEntry(
+                    AuditEntityTypes.PaymentRefund,
+                    refund.Id,
+                    AuditActions.PaymentRefunded,
+                    performedByUserId,
+                    NewValues: new
+                    {
+                        refund.OrderId,
+                        refund.Amount,
+                        Method = refund.Method.ToString(),
+                        refund.Reason,
+                        result.PaymentStatus,
+                        result.PaidAmount,
+                        result.RefundedAmount
+                    }),
+                cancellationToken);
+            await LogOrderStatusChangeAsync(order, performedByUserId, oldOrderStatusValues, cancellationToken);
+
+            return result;
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            logger.LogWarning(exception, "Refund concurrency conflict for order {OrderId}", dto.OrderId);
+            throw new ApiException("ההזמנה עודכנה במקביל. רעננו את היתרה ונסו שוב.", StatusCodes.Status409Conflict);
+        }
+        catch (DbUpdateException exception) when (IsUniqueConstraintViolation(exception))
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            var existingRefund = await LoadExistingRefundAsync(dto.IdempotencyKey, cancellationToken);
+            if (existingRefund is not null)
+            {
+                EnsureRefundReplayMatches(existingRefund, dto, performedByUserId);
+                return await BuildRefundResultAsync(existingRefund, cancellationToken);
+            }
+
+            throw new ApiException("בקשת ההחזר כבר עובדה. רעננו את ההזמנה ונסו שוב.", StatusCodes.Status409Conflict);
+        }
+        catch (DbUpdateException exception) when (IsSqlConcurrencyFailure(exception))
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            logger.LogWarning(exception, "Refund SQL concurrency conflict for order {OrderId}", dto.OrderId);
+            throw new ApiException("ההזמנה עודכנה במקביל. רעננו את היתרה ונסו שוב.", StatusCodes.Status409Conflict);
+        }
+        catch
+        {
+            await RollbackQuietlyAsync(transaction, cancellationToken);
+            throw;
+        }
+    }
+
     private async Task<Payment?> LoadExistingPaymentForUpdateAsync(Guid idempotencyKey, CancellationToken cancellationToken) =>
         await PaymentsForUpdate(idempotencyKey)
+            .SingleOrDefaultAsync(cancellationToken);
+
+    private async Task<PaymentRefund?> LoadExistingRefundForUpdateAsync(Guid idempotencyKey, CancellationToken cancellationToken) =>
+        await RefundsForUpdate(idempotencyKey)
             .SingleOrDefaultAsync(cancellationToken);
 
     private async Task<Order?> LoadOrderForPaymentAsync(int orderId, CancellationToken cancellationToken) =>
         await OrdersForUpdate(orderId)
             .Include(x => x.Payments)
+            .Include(x => x.Refunds)
             .Include(x => x.OrderTables)
             .Include(x => x.StatusChanges)
             .Include(x => x.User)
@@ -228,6 +402,11 @@ public sealed class PaymentsService(
             ? db.Payments.FromSqlInterpolated($"SELECT * FROM [Payments] WITH (UPDLOCK, HOLDLOCK) WHERE [IdempotencyKey] = {idempotencyKey}")
             : db.Payments.Where(x => x.IdempotencyKey == idempotencyKey);
 
+    private IQueryable<PaymentRefund> RefundsForUpdate(Guid idempotencyKey) =>
+        IsSqlServer()
+            ? db.PaymentRefunds.FromSqlInterpolated($"SELECT * FROM [PaymentRefunds] WITH (UPDLOCK, HOLDLOCK) WHERE [IdempotencyKey] = {idempotencyKey}")
+            : db.PaymentRefunds.Where(x => x.IdempotencyKey == idempotencyKey);
+
     private IQueryable<Order> OrdersForUpdate(int orderId) =>
         IsSqlServer()
             ? db.Orders.FromSqlInterpolated($"SELECT * FROM [Orders] WITH (UPDLOCK, HOLDLOCK) WHERE [Id] = {orderId}")
@@ -235,6 +414,10 @@ public sealed class PaymentsService(
 
     private async Task<Payment?> LoadExistingPaymentAsync(Guid idempotencyKey, CancellationToken cancellationToken) =>
         await db.Payments.AsNoTracking()
+            .SingleOrDefaultAsync(x => x.IdempotencyKey == idempotencyKey, cancellationToken);
+
+    private async Task<PaymentRefund?> LoadExistingRefundAsync(Guid idempotencyKey, CancellationToken cancellationToken) =>
+        await db.PaymentRefunds.AsNoTracking()
             .SingleOrDefaultAsync(x => x.IdempotencyKey == idempotencyKey, cancellationToken);
 
     private async Task<CreatePaymentResponseDto> BuildPaymentResultAsync(Payment payment, CancellationToken cancellationToken)
@@ -255,9 +438,48 @@ public sealed class PaymentsService(
             RemainingAmount(totalAmount, paidAmount));
     }
 
+    private async Task<CreatePaymentRefundResponseDto> BuildRefundResultAsync(PaymentRefund refund, CancellationToken cancellationToken)
+    {
+        var order = await db.Orders.AsNoTracking()
+            .SingleAsync(x => x.Id == refund.OrderId, cancellationToken);
+        var netPaid = await SumPaymentsAsync(refund.OrderId, cancellationToken);
+        var refundedAmount = await SumRefundsAsync(refund.OrderId, cancellationToken);
+        var totalAmount = NormalizeMoney(order.TotalAmount);
+
+        return new CreatePaymentRefundResponseDto(
+            refund.ToPaymentRefundResponse(),
+            order.Id,
+            order.Status,
+            order.KitchenStatus,
+            order.PaymentStatus,
+            totalAmount,
+            netPaid,
+            refundedAmount,
+            RemainingAmount(totalAmount, netPaid));
+    }
+
     private async Task<decimal> SumPaymentsAsync(int orderId, CancellationToken cancellationToken)
     {
         var query = db.Payments.AsNoTracking()
+            .Where(x => x.OrderId == orderId);
+        var refundsQuery = db.PaymentRefunds.AsNoTracking()
+            .Where(x => x.OrderId == orderId);
+
+        if (IsSqlite())
+        {
+            var amounts = await query.Select(x => x.Amount).ToArrayAsync(cancellationToken);
+            var refunds = await refundsQuery.Select(x => x.Amount).ToArrayAsync(cancellationToken);
+            return NormalizeMoney(amounts.Sum() - refunds.Sum());
+        }
+
+        var paid = await query.SumAsync(x => x.Amount, cancellationToken);
+        var refunded = await refundsQuery.SumAsync(x => x.Amount, cancellationToken);
+        return NormalizeMoney(paid - refunded);
+    }
+
+    private async Task<decimal> SumRefundsAsync(int orderId, CancellationToken cancellationToken)
+    {
+        var query = db.PaymentRefunds.AsNoTracking()
             .Where(x => x.OrderId == orderId);
 
         if (IsSqlite())
@@ -289,7 +511,8 @@ public sealed class PaymentsService(
     {
         if (existingPayment.OrderId == dto.OrderId &&
             NormalizeMoney(existingPayment.Amount) == NormalizeMoney(dto.Amount) &&
-            existingPayment.Method == dto.Method)
+            existingPayment.Method == dto.Method &&
+            string.Equals(existingPayment.Note?.Trim() ?? string.Empty, dto.Note?.Trim() ?? string.Empty, StringComparison.Ordinal))
         {
             return;
         }
@@ -299,6 +522,24 @@ public sealed class PaymentsService(
             createdByUserId,
             "IdempotencyKeyPayloadMismatch",
             "Payment idempotency key was already used for a different payment request.",
+            StatusCodes.Status409Conflict);
+    }
+
+    private void EnsureRefundReplayMatches(PaymentRefund existingRefund, CreatePaymentRefundDto dto, int performedByUserId)
+    {
+        if (existingRefund.OrderId == dto.OrderId &&
+            NormalizeMoney(existingRefund.Amount) == NormalizeMoney(dto.Amount) &&
+            existingRefund.Method == dto.Method &&
+            string.Equals(existingRefund.Reason.Trim(), dto.Reason.Trim(), StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        throw RejectRefund(
+            dto,
+            performedByUserId,
+            "IdempotencyKeyPayloadMismatch",
+            "Refund idempotency key was already used for a different refund request.",
             StatusCodes.Status409Conflict);
     }
 
@@ -340,6 +581,19 @@ public sealed class PaymentsService(
             "Payment rejected for order {OrderId} by user {UserId}. Reason {Reason}, amount {Amount}, method {Method}",
             dto.OrderId,
             createdByUserId,
+            reason,
+            dto.Amount,
+            dto.Method);
+
+        return new ApiException(message, statusCode);
+    }
+
+    private ApiException RejectRefund(CreatePaymentRefundDto dto, int performedByUserId, string reason, string message, int statusCode)
+    {
+        logger.LogWarning(
+            "Refund rejected for order {OrderId} by user {UserId}. Reason {Reason}, amount {Amount}, method {Method}",
+            dto.OrderId,
+            performedByUserId,
             reason,
             dto.Amount,
             dto.Method);
@@ -391,6 +645,7 @@ public sealed class PaymentsService(
                     payment.OrderId,
                     payment.Amount,
                     Method = payment.Method.ToString(),
+                    payment.Note,
                     payment.CreatedAt,
                     result.PaymentStatus,
                     result.RemainingAmount
@@ -465,6 +720,17 @@ public sealed class PaymentsService(
 
     private static decimal RemainingAmount(decimal totalAmount, decimal paidAmount) =>
         Math.Max(NormalizeMoney(totalAmount) - NormalizeMoney(paidAmount), 0);
+
+    private static PaymentStatus PaymentStatusAfterRefund(decimal totalAmount, decimal netPaidAmount, decimal totalRefundedAmount)
+    {
+        var paid = NormalizeMoney(netPaidAmount);
+        if (paid <= 0)
+        {
+            return PaymentStatus.Unpaid;
+        }
+
+        return paid >= NormalizeMoney(totalAmount) ? PaymentStatus.Paid : PaymentStatus.PartiallyPaid;
+    }
 
     private static bool IsUniqueConstraintViolation(DbUpdateException exception) =>
         exception.InnerException is SqlException sqlException &&

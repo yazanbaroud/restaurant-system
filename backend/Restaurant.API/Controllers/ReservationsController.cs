@@ -29,6 +29,19 @@ public sealed class ReservationsController(IReservationsService reservationsServ
         CancellationToken cancellationToken) =>
         Ok(await reservationsService.GetAllAsync(date, from, to, status, phoneNumber, cancellationToken));
 
+    [HttpGet("paged")]
+    [Authorize(Roles = AppRoles.AdminOrWaiter)]
+    public async Task<ActionResult<PagedResponseDto<ReservationResponseDto>>> GetPaged(
+        [FromQuery] DateOnly? date,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        [FromQuery] ReservationStatus? status,
+        [FromQuery] string? phoneNumber,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default) =>
+        Ok(await reservationsService.GetPagedAsync(date, from, to, status, phoneNumber, page, pageSize, cancellationToken));
+
     [HttpGet("{id:int}")]
     [Authorize(Roles = AppRoles.AdminOrWaiter)]
     public async Task<ActionResult<ReservationResponseDto>> GetById(int id, CancellationToken cancellationToken) =>
@@ -43,6 +56,16 @@ public sealed class ReservationsController(IReservationsService reservationsServ
     [Authorize(Roles = AppRoles.Admin)]
     public async Task<ActionResult<ReservationResponseDto>> UpdateStatus(int id, UpdateReservationStatusDto dto, CancellationToken cancellationToken) =>
         Ok(await reservationsService.UpdateStatusAsync(id, dto, cancellationToken));
+
+    [HttpPut("{id:int}/approve")]
+    [Authorize(Roles = AppRoles.AdminOrManager)]
+    public async Task<ActionResult<ReservationResponseDto>> Approve(int id, ReservationDecisionDto dto, CancellationToken cancellationToken) =>
+        Ok(await reservationsService.ApproveAsync(id, dto.RestaurantNotes, cancellationToken));
+
+    [HttpPut("{id:int}/reject")]
+    [Authorize(Roles = AppRoles.AdminOrManager)]
+    public async Task<ActionResult<ReservationResponseDto>> Reject(int id, ReservationDecisionDto dto, CancellationToken cancellationToken) =>
+        Ok(await reservationsService.RejectAsync(id, dto.RestaurantNotes, cancellationToken));
 
     [HttpDelete("{id:int}")]
     [Authorize(Roles = AppRoles.Admin)]

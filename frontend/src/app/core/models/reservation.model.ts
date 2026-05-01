@@ -7,6 +7,7 @@ export interface Reservation {
   phoneNumber: string;
   reservationDate: string;
   reservationTime: string;
+  durationMinutes?: number;
   guestCount: number;
   notes: string;
   tableId?: number | null;
@@ -22,6 +23,7 @@ export interface CreateReservationInput {
   phoneNumber: string;
   reservationDate: string;
   reservationTime: string;
+  durationMinutes?: number;
   guestCount: number;
   notes: string;
   tableId?: number | null;

@@ -5,6 +5,7 @@ namespace Restaurant.API.Interfaces;
 public interface IReportsService
 {
     Task<DailyReportDto> GetDailyAsync(DateOnly? date, CancellationToken cancellationToken);
+    Task<DailySummaryReportDto> GetDailySummaryAsync(DateOnly? date, CancellationToken cancellationToken);
     Task<WeeklyReportDto> GetWeeklyAsync(DateOnly? weekStart, CancellationToken cancellationToken);
     Task<MonthlyReportDto> GetMonthlyAsync(int? year, int? month, CancellationToken cancellationToken);
     Task<YearlyReportDto> GetYearlyAsync(int? year, CancellationToken cancellationToken);

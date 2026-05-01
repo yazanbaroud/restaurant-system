@@ -13,22 +13,24 @@ public sealed class PaymentMethodJsonConverter : JsonConverter<PaymentMethod>
             return numericValue switch
             {
                 (int)PaymentMethod.Cash => PaymentMethod.Cash,
-                (int)PaymentMethod.Card => PaymentMethod.Card,
-                _ => throw new JsonException("Payment method must be Cash or Card.")
+                (int)PaymentMethod.CreditManual => PaymentMethod.CreditManual,
+                (int)PaymentMethod.Other => PaymentMethod.Other,
+                _ => throw new JsonException("Payment method must be Cash, CreditManual, or Other.")
             };
         }
 
         if (reader.TokenType != JsonTokenType.String)
         {
-            throw new JsonException("Payment method must be Cash or Card.");
+            throw new JsonException("Payment method must be Cash, CreditManual, or Other.");
         }
 
         var value = reader.GetString()?.Trim();
         return value?.ToLowerInvariant().Replace("_", string.Empty).Replace("-", string.Empty) switch
         {
             "cash" => PaymentMethod.Cash,
-            "card" or "creditcard" => PaymentMethod.Card,
-            _ => throw new JsonException("Payment method must be Cash or Card.")
+            "card" or "creditcard" or "creditmanual" or "manualcredit" => PaymentMethod.CreditManual,
+            "other" => PaymentMethod.Other,
+            _ => throw new JsonException("Payment method must be Cash, CreditManual, or Other.")
         };
     }
 

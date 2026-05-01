@@ -6,4 +6,16 @@ export interface Payment {
   amount: number;
   method: PaymentMethod;
   paidAt: string;
+  recordedByUserId?: number;
+  note?: string;
+}
+
+export interface PaymentRefund {
+  id: number;
+  orderId: number;
+  amount: number;
+  method: PaymentMethod;
+  reason: string;
+  refundedAt: string;
+  performedByUserId: number;
 }

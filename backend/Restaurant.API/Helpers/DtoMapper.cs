@@ -56,6 +56,7 @@ public static class DtoMapper
                 x.Quantity,
                 x.UnitPrice,
                 x.UnitPrice * x.Quantity,
+                x.Status,
                 x.Notes)).ToArray(),
             order.OrderTables.Select(x => new OrderTableResponseDto(x.Id, x.TableId, x.Table.Name)).ToArray(),
             order.StatusChanges
@@ -70,7 +71,28 @@ public static class DtoMapper
                 .ToArray());
 
     public static PaymentResponseDto ToPaymentResponse(this Payment payment) =>
-        new(payment.Id, payment.OrderId, payment.IdempotencyKey, payment.Amount, payment.Method, AsUtc(payment.CreatedAt), payment.CreatedByUserId);
+        new(
+            payment.Id,
+            payment.OrderId,
+            payment.IdempotencyKey,
+            payment.Amount,
+            payment.Method,
+            AsUtc(payment.CreatedAt),
+            payment.CreatedByUserId,
+            payment.Note,
+            AsUtc(payment.CreatedAt),
+            payment.CreatedByUserId);
+
+    public static PaymentRefundResponseDto ToPaymentRefundResponse(this PaymentRefund refund) =>
+        new(
+            refund.Id,
+            refund.OrderId,
+            refund.IdempotencyKey,
+            refund.Amount,
+            refund.Method,
+            refund.Reason,
+            AsUtc(refund.RefundedAt),
+            refund.PerformedByUserId);
 
     public static ReservationResponseDto ToReservationResponse(this Reservation reservation) =>
         new(
@@ -80,7 +102,10 @@ public static class DtoMapper
             reservation.PhoneNumber,
             reservation.ReservationDate,
             reservation.ReservationTime,
+            reservation.DurationMinutes,
             reservation.GuestsCount,
+            reservation.TableId,
+            reservation.Table?.Name,
             reservation.CustomerNotes,
             reservation.RestaurantNotes,
             reservation.Status,

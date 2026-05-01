@@ -12,4 +12,5 @@ public sealed class Table
     public string? Notes { get; set; }
     public byte[] RowVersion { get; set; } = [];
     public ICollection<OrderTable> OrderTables { get; set; } = new List<OrderTable>();
+    public ICollection<Reservation> Reservations { get; set; } = new List<Reservation>();
 }

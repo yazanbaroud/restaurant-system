@@ -14,10 +14,10 @@ public sealed class OrderStateService(IOptions<OrderLifecycleOptions> options) :
     public void Initialize(Order order, int changedByUserId, DateTime utcNow)
     {
         order.Status = OrderStatus.Open;
-        order.KitchenStatus = KitchenStatus.New;
+        order.KitchenStatus = KitchenStatus.InSalads;
         order.PaymentStatus = PaymentStatus.Unpaid;
         SetOrderStatusAudit(order, null, OrderStatus.Open, changedByUserId, utcNow);
-        SetKitchenStatusAudit(order, null, KitchenStatus.New, changedByUserId, utcNow);
+        SetKitchenStatusAudit(order, null, KitchenStatus.InSalads, changedByUserId, utcNow);
         SetPaymentStatusAudit(order, null, PaymentStatus.Unpaid, changedByUserId, utcNow);
     }
 
@@ -25,16 +25,55 @@ public sealed class OrderStateService(IOptions<OrderLifecycleOptions> options) :
     {
         EnsureOpen(order);
 
+        if (order.KitchenStatus == KitchenStatus.InKitchen &&
+            (order.Items.Count == 0 || order.Items.Any(x => x.Status != OrderItemStatus.Ready)))
+        {
+            throw new ApiException("Order can be marked ready only after all items are ready.", StatusCodes.Status409Conflict);
+        }
+
         var nextStatus = order.KitchenStatus switch
         {
-            KitchenStatus.New => KitchenStatus.Preparing,
-            KitchenStatus.Preparing => KitchenStatus.Ready,
+            KitchenStatus.InSalads => KitchenStatus.InKitchen,
+            KitchenStatus.InKitchen => KitchenStatus.Ready,
             KitchenStatus.Ready => KitchenStatus.Served,
             KitchenStatus.Served => throw new ApiException("Order has already been served.", StatusCodes.Status409Conflict),
             _ => throw new ApiException("Unknown kitchen status.", StatusCodes.Status409Conflict)
         };
 
         SetKitchenStatus(order, nextStatus, changedByUserId, utcNow);
+        return TryComplete(order, changedByUserId, utcNow);
+    }
+
+    public bool ApplyOrderItemStatus(Order order, OrderItem item, OrderItemStatus status, int changedByUserId, DateTime utcNow)
+    {
+        EnsureOpen(order);
+
+        if (order.KitchenStatus == KitchenStatus.InSalads)
+        {
+            throw new ApiException("Order must move from salads to the kitchen before item preparation can be updated.", StatusCodes.Status409Conflict);
+        }
+
+        if (order.KitchenStatus == KitchenStatus.Served)
+        {
+            throw new ApiException("Served orders cannot receive item status changes.", StatusCodes.Status409Conflict);
+        }
+
+        if ((int)status < (int)item.Status)
+        {
+            throw new ApiException("Order item status cannot move backward.", StatusCodes.Status409Conflict);
+        }
+
+        item.Status = status;
+
+        if (order.Items.Count > 0 && order.Items.All(x => x.Status == OrderItemStatus.Ready))
+        {
+            SetKitchenStatus(order, KitchenStatus.Ready, changedByUserId, utcNow);
+        }
+        else if (order.KitchenStatus == KitchenStatus.Ready)
+        {
+            SetKitchenStatus(order, KitchenStatus.InKitchen, changedByUserId, utcNow);
+        }
+
         return TryComplete(order, changedByUserId, utcNow);
     }
 
@@ -79,7 +118,7 @@ public sealed class OrderStateService(IOptions<OrderLifecycleOptions> options) :
             throw new ApiException("Served orders cannot be cancelled. Use a refund or comp workflow.", StatusCodes.Status409Conflict);
         }
 
-        if (order.PaymentStatus is PaymentStatus.Partial or PaymentStatus.Paid || HasStoredPayments(order))
+        if (order.PaymentStatus is PaymentStatus.PartiallyPaid or PaymentStatus.Paid || HasStoredPayments(order))
         {
             throw new ApiException("Orders with payments must be refunded before cancellation.", StatusCodes.Status409Conflict);
         }
@@ -96,9 +135,9 @@ public sealed class OrderStateService(IOptions<OrderLifecycleOptions> options) :
             throw new ApiException("Cannot change items after payment has started.", StatusCodes.Status409Conflict);
         }
 
-        if (!lifecycleOptions.AllowItemsAfterServed && order.KitchenStatus == KitchenStatus.Served)
+        if (order.KitchenStatus is KitchenStatus.Ready or KitchenStatus.Served)
         {
-            throw new ApiException("Cannot change items after the order has been served.", StatusCodes.Status409Conflict);
+            throw new ApiException("Cannot change items after the kitchen has marked the order ready.", StatusCodes.Status409Conflict);
         }
     }
 
@@ -233,7 +272,7 @@ public sealed class OrderStateService(IOptions<OrderLifecycleOptions> options) :
             return PaymentStatus.Unpaid;
         }
 
-        return paid >= NormalizeMoney(totalAmount) ? PaymentStatus.Paid : PaymentStatus.Partial;
+        return paid >= NormalizeMoney(totalAmount) ? PaymentStatus.Paid : PaymentStatus.PartiallyPaid;
     }
 
     private static decimal NormalizeMoney(decimal value) =>

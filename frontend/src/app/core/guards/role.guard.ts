@@ -58,5 +58,13 @@ function defaultRouteForRole(role: UserRole): string {
     return '/waiter';
   }
 
+  if (role === UserRole.Kitchen) {
+    return '/waiter/kitchen';
+  }
+
+  if (role === UserRole.Salad) {
+    return '/waiter/salads';
+  }
+
   return '/';
 }

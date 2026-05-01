@@ -26,6 +26,43 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
             await orders.CountAsync(x => x.Status == OrderStatus.Cancelled, cancellationToken));
     }
 
+    public async Task<DailySummaryReportDto> GetDailySummaryAsync(DateOnly? date, CancellationToken cancellationToken)
+    {
+        var day = date ?? CurrentBusinessDay();
+        var (start, end) = BusinessRange(day, day.AddDays(1));
+        var orders = QueryOrdersCreatedDuring(day, day);
+        var payments = db.Payments.AsNoTracking()
+            .Where(x => x.CreatedAt >= start && x.CreatedAt < end);
+        var refunds = db.PaymentRefunds.AsNoTracking()
+            .Where(x => x.RefundedAt >= start && x.RefundedAt < end);
+
+        var paymentRows = await payments
+            .GroupBy(x => x.Method)
+            .Select(x => new MethodAmountRow(x.Key, x.Sum(p => p.Amount)))
+            .ToArrayAsync(cancellationToken);
+        var refundRows = await refunds
+            .GroupBy(x => x.Method)
+            .Select(x => new MethodAmountRow(x.Key, x.Sum(p => p.Amount)))
+            .ToArrayAsync(cancellationToken);
+
+        var cashRevenue = RevenueFor(PaymentMethod.Cash, paymentRows, refundRows);
+        var creditManualRevenue = RevenueFor(PaymentMethod.CreditManual, paymentRows, refundRows);
+        var otherRevenue = RevenueFor(PaymentMethod.Other, paymentRows, refundRows);
+
+        return new DailySummaryReportDto(
+            day,
+            await orders.CountAsync(cancellationToken),
+            NormalizeMoney(cashRevenue + creditManualRevenue + otherRevenue),
+            cashRevenue,
+            creditManualRevenue,
+            otherRevenue,
+            await orders.CountAsync(x =>
+                x.Status == OrderStatus.Open &&
+                (x.PaymentStatus == PaymentStatus.Unpaid || x.PaymentStatus == PaymentStatus.PartiallyPaid),
+                cancellationToken),
+            await orders.CountAsync(x => x.Status == OrderStatus.Cancelled, cancellationToken));
+    }
+
     public async Task<WeeklyReportDto> GetWeeklyAsync(DateOnly? weekStart, CancellationToken cancellationToken)
     {
         var currentBusinessDay = CurrentBusinessDay();
@@ -383,6 +420,16 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
     private static decimal SignedAmount(decimal amount, PaymentStatus paymentStatus) =>
         paymentStatus == PaymentStatus.Refunded ? -amount : amount;
 
+    private static decimal RevenueFor(
+        PaymentMethod method,
+        IEnumerable<MethodAmountRow> paymentRows,
+        IEnumerable<MethodAmountRow> refundRows)
+    {
+        var payments = paymentRows.Where(x => x.Method == method).Sum(x => x.Amount);
+        var refunds = refundRows.Where(x => x.Method == method).Sum(x => x.Amount);
+        return NormalizeMoney(payments - refunds);
+    }
+
     private static decimal PaidRatio(decimal netPaidAmount, decimal orderLineTotal)
     {
         if (orderLineTotal <= 0)
@@ -457,6 +504,8 @@ public sealed class ReportsService(AppDbContext db) : IReportsService
         int OrderId,
         decimal Amount,
         PaymentStatus PaymentStatus);
+
+    private sealed record MethodAmountRow(PaymentMethod Method, decimal Amount);
 
     private sealed record OrderItemAggregationRow(
         int OrderId,

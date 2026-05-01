@@ -29,14 +29,15 @@ export const routes: Routes = [
     path: 'waiter',
     component: WaiterShellComponent,
     canActivate: [roleGuard],
-    data: { roles: [UserRole.Waiter] },
+    data: { roles: [UserRole.Admin, UserRole.Waiter, UserRole.Kitchen, UserRole.Salad] },
     children: [
-      { path: '', loadComponent: () => import('./features/waiter/tables-page.component').then((m) => m.TablesPageComponent) },
-      { path: 'kitchen', loadComponent: () => import('./features/waiter/kitchen-page.component').then((m) => m.KitchenPageComponent) },
-      { path: 'create-order', loadComponent: () => import('./features/waiter/create-order-page.component').then((m) => m.CreateOrderPageComponent) },
-      { path: 'orders/:id', loadComponent: () => import('./features/waiter/order-details-page.component').then((m) => m.OrderDetailsPageComponent) },
-      { path: 'orders/:id/payment', loadComponent: () => import('./features/waiter/add-payment-page.component').then((m) => m.AddPaymentPageComponent) },
-      { path: 'reservations', loadComponent: () => import('./features/waiter/waiter-reservations-page.component').then((m) => m.WaiterReservationsPageComponent) }
+      { path: '', loadComponent: () => import('./features/waiter/tables-page.component').then((m) => m.TablesPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Admin, UserRole.Waiter] } },
+      { path: 'salads', loadComponent: () => import('./features/waiter/salad-screen-page.component').then((m) => m.SaladScreenPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Admin, UserRole.Salad] } },
+      { path: 'kitchen', loadComponent: () => import('./features/waiter/kitchen-page.component').then((m) => m.KitchenPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Admin, UserRole.Kitchen] } },
+      { path: 'create-order', loadComponent: () => import('./features/waiter/create-order-page.component').then((m) => m.CreateOrderPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Admin, UserRole.Waiter] } },
+      { path: 'orders/:id', loadComponent: () => import('./features/waiter/order-details-page.component').then((m) => m.OrderDetailsPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Admin, UserRole.Waiter] } },
+      { path: 'orders/:id/payment', loadComponent: () => import('./features/waiter/add-payment-page.component').then((m) => m.AddPaymentPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Admin, UserRole.Waiter] } },
+      { path: 'reservations', loadComponent: () => import('./features/waiter/waiter-reservations-page.component').then((m) => m.WaiterReservationsPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Admin, UserRole.Waiter] } }
     ]
   },
   {

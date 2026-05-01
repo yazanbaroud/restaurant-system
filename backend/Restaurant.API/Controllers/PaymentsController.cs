@@ -15,6 +15,10 @@ public sealed class PaymentsController(IPaymentsService paymentsService) : Contr
     public async Task<ActionResult<CreatePaymentResponseDto>> Create(CreatePaymentDto dto, CancellationToken cancellationToken) =>
         Created(string.Empty, await paymentsService.CreateAsync(User.GetUserId(), dto, cancellationToken));
 
+    [HttpPost("refunds")]
+    public async Task<ActionResult<CreatePaymentRefundResponseDto>> Refund(CreatePaymentRefundDto dto, CancellationToken cancellationToken) =>
+        Created(string.Empty, await paymentsService.RefundAsync(User.GetUserId(), dto, cancellationToken));
+
     [HttpGet]
     [Authorize(Roles = AppRoles.Admin)]
     public async Task<ActionResult<IReadOnlyCollection<PaymentResponseDto>>> GetAll(
@@ -27,4 +31,8 @@ public sealed class PaymentsController(IPaymentsService paymentsService) : Contr
     [HttpGet("order/{orderId:int}")]
     public async Task<ActionResult<IReadOnlyCollection<PaymentResponseDto>>> GetByOrder(int orderId, CancellationToken cancellationToken) =>
         Ok(await paymentsService.GetByOrderAsync(orderId, cancellationToken));
+
+    [HttpGet("order/{orderId:int}/refunds")]
+    public async Task<ActionResult<IReadOnlyCollection<PaymentRefundResponseDto>>> GetRefundsByOrder(int orderId, CancellationToken cancellationToken) =>
+        Ok(await paymentsService.GetRefundsByOrderAsync(orderId, cancellationToken));
 }

@@ -5,6 +5,7 @@ namespace Restaurant.API.Interfaces;
 public interface IUsersService
 {
     Task<IReadOnlyCollection<UserResponseDto>> GetAllAsync(CancellationToken cancellationToken);
+    Task<PagedResponseDto<UserResponseDto>> GetPagedAsync(int page, int pageSize, CancellationToken cancellationToken);
     Task<UserResponseDto> GetByIdAsync(int id, CancellationToken cancellationToken);
     Task<UserResponseDto> CreateAsync(CreateUserDto dto, CancellationToken cancellationToken);
     Task<UserResponseDto> UpdateAsync(int id, UpdateUserDto dto, CancellationToken cancellationToken);

@@ -127,6 +127,14 @@ export class LoginPageComponent {
       return '/waiter';
     }
 
+    if (role === UserRole.Kitchen) {
+      return '/waiter/kitchen';
+    }
+
+    if (role === UserRole.Salad) {
+      return '/waiter/salads';
+    }
+
     return '/';
   }
 
@@ -144,7 +152,7 @@ export class LoginPageComponent {
       return this.isRouteSection(path, '/admin') ? returnUrl : null;
     }
 
-    if (user.role === UserRole.Waiter) {
+    if (user.role === UserRole.Waiter || user.role === UserRole.Kitchen || user.role === UserRole.Salad) {
       return this.isRouteSection(path, '/waiter') ? returnUrl : null;
     }
 

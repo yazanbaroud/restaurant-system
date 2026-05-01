@@ -35,6 +35,7 @@ import {
   PaymentBreakdown,
   PaymentMethod,
   PaymentStatus,
+  OrderItemStatus,
   PeakHourReport,
   PeriodReportSummary,
   Reservation,
@@ -405,6 +406,14 @@ export class RestaurantDataService {
     return this.fetchOrdersFromApi(fromDate, toDate).pipe(switchMap(() => this.orders$));
   }
 
+  getSaladOrders(): Observable<Order[]> {
+    return this.fetchOrdersFromApi(undefined, undefined, '/api/Orders/salads').pipe(switchMap(() => this.orders$));
+  }
+
+  getKitchenOrders(): Observable<Order[]> {
+    return this.fetchOrdersFromApi(undefined, undefined, '/api/Orders/kitchen').pipe(switchMap(() => this.orders$));
+  }
+
   getOrder(id: number): Observable<Order | undefined> {
     return this.fetchOrderFromApi(id).pipe(
       switchMap(() => this.orderFromState(id)),
@@ -437,6 +446,7 @@ export class RestaurantDataService {
           quantity: orderItem.quantity,
           unitPrice: menuItem.price,
           lineTotal: menuItem.price * orderItem.quantity,
+          status: OrderItemStatus.Pending,
           notes: orderItem.notes
         };
       })
@@ -470,6 +480,10 @@ export class RestaurantDataService {
     return this.applyOrderCommand(id, `${this.apiBaseUrl}/api/Orders/${id}/advance-kitchen-status`);
   }
 
+  advanceSaladStatus(id: number): Observable<Order> {
+    return this.applyOrderCommand(id, `${this.apiBaseUrl}/api/Orders/${id}/advance-salad-status`);
+  }
+
   cancelOrder(id: number): Observable<Order> {
     return this.applyOrderCommand(id, `${this.apiBaseUrl}/api/Orders/${id}/cancel`);
   }
@@ -493,6 +507,13 @@ export class RestaurantDataService {
 
   deleteOrderItem(orderId: number, itemId: number): Observable<Order> {
     return this.http.delete<unknown>(`${this.apiBaseUrl}/api/Orders/${orderId}/items/${itemId}`).pipe(
+      map((response) => this.normalizeOrder(response)),
+      tap((order) => this.upsertOrder(order))
+    );
+  }
+
+  updateOrderItemStatus(orderId: number, itemId: number, status: OrderItemStatus): Observable<Order> {
+    return this.http.put<unknown>(`${this.apiBaseUrl}/api/Orders/${orderId}/items/${itemId}/status`, { status }).pipe(
       map((response) => this.normalizeOrder(response)),
       tap((order) => this.upsertOrder(order))
     );
@@ -646,6 +667,7 @@ export class RestaurantDataService {
   private createMockReservation(input: CreateReservationInput): Reservation {
     return {
       ...input,
+      durationMinutes: input.durationMinutes ?? 120,
       id: this.nextId(this.reservationsSubject.value),
       restaurantNotes: '',
       status: ReservationStatus.Pending,
@@ -663,6 +685,7 @@ export class RestaurantDataService {
         phoneNumber: '',
         reservationDate: '',
         reservationTime: '',
+        durationMinutes: 120,
         guestCount: 1,
         notes: '',
         restaurantNotes,
@@ -1515,7 +1538,7 @@ export class RestaurantDataService {
     );
   }
 
-  private fetchOrdersFromApi(fromDate?: string, toDate?: string): Observable<Order[]> {
+  private fetchOrdersFromApi(fromDate?: string, toDate?: string, endpoint = '/api/Orders'): Observable<Order[]> {
     let params = new HttpParams();
     const from = fromDate?.trim();
     const to = toDate?.trim();
@@ -1528,7 +1551,7 @@ export class RestaurantDataService {
       params = params.set('to', to);
     }
 
-    return this.http.get<unknown>(`${this.apiBaseUrl}/api/Orders`, { params }).pipe(
+    return this.http.get<unknown>(`${this.apiBaseUrl}${endpoint}`, { params }).pipe(
       map((response) => this.normalizeOrders(response)),
       tap((orders) => this.ordersSubject.next(orders)),
       catchError((error) => this.readFallback(error, () => this.filterOrdersByDateRange(this.ordersSubject.value, from, to)))
@@ -1660,7 +1683,9 @@ export class RestaurantDataService {
       orderId: this.numberValue(record['orderId'], fallback.orderId ?? 0),
       amount: this.numberValue(record['amount'], fallback.amount ?? 0),
       method: this.normalizePaymentMethod(record['method'] ?? record['paymentMethod'] ?? fallback.method),
-      paidAt: this.stringValue(record['paidAt'] ?? record['createdAt']) || new Date().toISOString()
+      paidAt: this.stringValue(record['paidAt'] ?? record['createdAt']) || new Date().toISOString(),
+      recordedByUserId: this.numberValue(record['recordedByUserId'] ?? record['createdByUserId']),
+      note: this.stringValue(record['note'])
     };
   }
 
@@ -1693,11 +1718,17 @@ export class RestaurantDataService {
     amount: number;
     method: string;
   } {
+    const methodName = method === PaymentMethod.Cash
+      ? 'Cash'
+      : method === PaymentMethod.Other
+        ? 'Other'
+        : 'CreditManual';
+
     return {
       orderId,
       idempotencyKey: this.createIdempotencyKey(),
       amount,
-      method: method === PaymentMethod.Cash ? 'Cash' : 'Card'
+      method: methodName
     };
   }
 
@@ -1757,6 +1788,7 @@ export class RestaurantDataService {
         this.stringValue(record['reservationTime'] ?? record['time']) ||
         fallback.reservationTime ||
         '',
+      durationMinutes: this.numberValue(record['durationMinutes'], fallback.durationMinutes ?? 120),
       guestCount: this.numberValue(
         record['guestCount'] ?? record['guestsCount'],
         fallback.guestCount ?? this.numberValue(fallbackRecord['guestsCount'], 1)
@@ -1789,6 +1821,7 @@ export class RestaurantDataService {
       phoneNumber: input.phoneNumber,
       reservationDate: input.reservationDate,
       reservationTime: this.formatReservationTime(input.reservationTime),
+      durationMinutes: input.durationMinutes ?? 120,
       guestsCount: input.guestCount,
       customerNotes: input.notes
     };
@@ -1915,6 +1948,7 @@ export class RestaurantDataService {
       quantity,
       unitPrice,
       lineTotal,
+      status: this.normalizeOrderItemStatus(record['status']),
       notes: this.stringValue(record['notes'])
     };
   }
@@ -1930,6 +1964,7 @@ export class RestaurantDataService {
       quantity: item.quantity,
       unitPrice,
       lineTotal: unitPrice * item.quantity,
+      status: OrderItemStatus.Pending,
       notes: item.notes
     };
   }
@@ -2392,6 +2427,14 @@ export class RestaurantDataService {
       if (roleName === 'customer' || roleName === 'client') {
         return UserRole.Customer;
       }
+
+      if (roleName === 'kitchen' || roleName === 'cook') {
+        return UserRole.Kitchen;
+      }
+
+      if (roleName === 'salad' || roleName === 'salads' || roleName === 'saladstaff') {
+        return UserRole.Salad;
+      }
     }
 
     return UserRole.Customer;
@@ -2444,10 +2487,18 @@ export class RestaurantDataService {
     }
 
     if (typeof value === 'string') {
-      const statusName = value.toLowerCase();
+      const statusName = value.toLowerCase().replace(/[\s_-]/g, '');
+      if (statusName === 'insalads' || statusName === 'new') {
+        return KitchenStatus.InSalads;
+      }
+
+      if (statusName === 'inkitchen' || statusName === 'preparing') {
+        return KitchenStatus.InKitchen;
+      }
+
       const status = Object.values(KitchenStatus)
         .filter((candidate): candidate is KitchenStatus => typeof candidate === 'number')
-        .find((candidate) => KitchenStatus[candidate].toLowerCase() === statusName);
+        .find((candidate) => KitchenStatus[candidate].toLowerCase().replace(/[\s_-]/g, '') === statusName);
 
       if (status) {
         return status;
@@ -2455,6 +2506,26 @@ export class RestaurantDataService {
     }
 
     return KitchenStatus.New;
+  }
+
+  private normalizeOrderItemStatus(value: unknown): OrderItemStatus {
+    const numericValue = this.numberValue(value);
+    if (Object.values(OrderItemStatus).includes(numericValue)) {
+      return numericValue as OrderItemStatus;
+    }
+
+    if (typeof value === 'string') {
+      const statusName = value.toLowerCase().replace(/[\s_-]/g, '');
+      if (statusName === 'preparing') {
+        return OrderItemStatus.Preparing;
+      }
+
+      if (statusName === 'ready') {
+        return OrderItemStatus.Ready;
+      }
+    }
+
+    return OrderItemStatus.Pending;
   }
 
   private normalizeOrderType(value: unknown): OrderType {
@@ -2484,10 +2555,14 @@ export class RestaurantDataService {
     }
 
     if (typeof value === 'string') {
-      const statusName = value.toLowerCase();
+      const statusName = value.toLowerCase().replace(/[\s_-]/g, '');
+      if (statusName === 'partial' || statusName === 'partiallypaid') {
+        return PaymentStatus.PartiallyPaid;
+      }
+
       const status = Object.values(PaymentStatus)
         .filter((candidate): candidate is PaymentStatus => typeof candidate === 'number')
-        .find((candidate) => PaymentStatus[candidate].toLowerCase() === statusName);
+        .find((candidate) => PaymentStatus[candidate].toLowerCase().replace(/[\s_-]/g, '') === statusName);
 
       if (status) {
         return status;
@@ -2525,6 +2600,18 @@ export class RestaurantDataService {
 
     if (typeof value === 'string') {
       const methodName = value.toLowerCase().replace(/[\s_-]/g, '');
+      if (methodName === 'card' || methodName === 'creditcard' || methodName === 'creditmanual' || methodName === 'manualcredit') {
+        return PaymentMethod.CreditManual;
+      }
+
+      if (methodName === 'cash') {
+        return PaymentMethod.Cash;
+      }
+
+      if (methodName === 'other') {
+        return PaymentMethod.Other;
+      }
+
       const method = Object.values(PaymentMethod)
         .filter((candidate): candidate is PaymentMethod => typeof candidate === 'number')
         .find((candidate) => PaymentMethod[candidate].toLowerCase() === methodName);
@@ -2534,7 +2621,7 @@ export class RestaurantDataService {
       }
     }
 
-    return PaymentMethod.CreditCard;
+    return PaymentMethod.CreditManual;
   }
 
   private normalizeTableStatus(value: unknown, fallback = TableStatus.Occupied): TableStatus {

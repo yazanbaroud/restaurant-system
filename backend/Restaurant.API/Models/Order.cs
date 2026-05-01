@@ -27,6 +27,7 @@ public sealed class Order
     public byte[] RowVersion { get; set; } = [];
     public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
     public ICollection<Payment> Payments { get; set; } = new List<Payment>();
+    public ICollection<PaymentRefund> Refunds { get; set; } = new List<PaymentRefund>();
     public ICollection<OrderTable> OrderTables { get; set; } = new List<OrderTable>();
     public ICollection<OrderStatusChange> StatusChanges { get; set; } = new List<OrderStatusChange>();
 }

@@ -3,5 +3,7 @@ namespace Restaurant.API.Enums;
 public enum PaymentMethod
 {
     Cash = 1,
-    Card = 2
+    CreditManual = 2,
+    Card = CreditManual,
+    Other = 3
 }

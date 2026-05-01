@@ -120,6 +120,52 @@ public sealed class OrdersService(
         return orders.Select(x => x.ToOrderResponse()).ToArray();
     }
 
+    public async Task<PagedResponseDto<OrderResponseDto>> GetPagedAsync(
+        OrderStatus? status,
+        KitchenStatus? kitchenStatus,
+        DateOnly? date,
+        DateOnly? from,
+        DateOnly? to,
+        PaymentStatus? paymentStatus,
+        OrderType? orderType,
+        bool activeOnly,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken)
+    {
+        var query = FilterOrders(IncludeOrderGraph(db.Orders.AsNoTracking()), status, kitchenStatus, date, from, to, paymentStatus, orderType, activeOnly);
+        var safePage = Math.Max(page, 1);
+        var safePageSize = Math.Clamp(pageSize, 1, 100);
+        var totalCount = await query.CountAsync(cancellationToken);
+        var orders = await query
+            .OrderByDescending(x => x.CreatedAt)
+            .Skip((safePage - 1) * safePageSize)
+            .Take(safePageSize)
+            .ToArrayAsync(cancellationToken);
+
+        return new PagedResponseDto<OrderResponseDto>(safePage, safePageSize, totalCount, orders.Select(x => x.ToOrderResponse()).ToArray());
+    }
+
+    public async Task<IReadOnlyCollection<OrderResponseDto>> GetSaladsAsync(CancellationToken cancellationToken)
+    {
+        var orders = await IncludeOrderGraph(db.Orders.AsNoTracking())
+            .Where(x => x.Status == OrderStatus.Open && x.KitchenStatus == KitchenStatus.InSalads)
+            .OrderBy(x => x.CreatedAt)
+            .ToArrayAsync(cancellationToken);
+
+        return orders.Select(x => x.ToOrderResponse()).ToArray();
+    }
+
+    public async Task<IReadOnlyCollection<OrderResponseDto>> GetKitchenAsync(CancellationToken cancellationToken)
+    {
+        var orders = await IncludeOrderGraph(db.Orders.AsNoTracking())
+            .Where(x => x.Status == OrderStatus.Open && (x.KitchenStatus == KitchenStatus.InKitchen || x.KitchenStatus == KitchenStatus.Ready))
+            .OrderBy(x => x.CreatedAt)
+            .ToArrayAsync(cancellationToken);
+
+        return orders.Select(x => x.ToOrderResponse()).ToArray();
+    }
+
     public async Task<OrderResponseDto> GetByIdAsync(int id, bool activeOnly, CancellationToken cancellationToken)
     {
         var query = IncludeOrderGraph(db.Orders.AsNoTracking());
@@ -178,7 +224,37 @@ public sealed class OrdersService(
         }
     }
 
-    public async Task<OrderResponseDto> AdvanceKitchenStatusAsync(int id, int changedByUserId, CancellationToken cancellationToken)
+    public Task<OrderResponseDto> AdvanceSaladStatusAsync(int id, int changedByUserId, CancellationToken cancellationToken) =>
+        AdvanceKitchenStatusCoreAsync(
+            id,
+            changedByUserId,
+            order =>
+            {
+                if (order.KitchenStatus != KitchenStatus.InSalads)
+                {
+                    throw new ApiException("Only orders in salads can be advanced from the salad screen.", StatusCodes.Status409Conflict);
+                }
+            },
+            cancellationToken);
+
+    public Task<OrderResponseDto> AdvanceKitchenStatusAsync(int id, int changedByUserId, CancellationToken cancellationToken) =>
+        AdvanceKitchenStatusCoreAsync(
+            id,
+            changedByUserId,
+            order =>
+            {
+                if (order.KitchenStatus is not (KitchenStatus.InKitchen or KitchenStatus.Ready))
+                {
+                    throw new ApiException("Only orders in the kitchen or ready state can be advanced by kitchen staff.", StatusCodes.Status409Conflict);
+                }
+            },
+            cancellationToken);
+
+    private async Task<OrderResponseDto> AdvanceKitchenStatusCoreAsync(
+        int id,
+        int changedByUserId,
+        Action<Order> validateCurrentState,
+        CancellationToken cancellationToken)
     {
         EnsureAuthenticatedUser(changedByUserId);
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
@@ -186,6 +262,7 @@ public sealed class OrdersService(
         try
         {
             var order = await LoadTrackedOrderForUpdateAsync(id, cancellationToken);
+            validateCurrentState(order);
             var oldStatusValues = OrderStatusSnapshot(order);
             var oldTableIds = TableIds(order);
             var completed = orderState.AdvanceKitchenStatus(order, changedByUserId, DateTime.UtcNow);
@@ -341,6 +418,7 @@ public sealed class OrdersService(
                     ?? throw new ApiException("Order item not found.", StatusCodes.Status404NotFound);
                 item.Quantity = dto.Quantity;
                 item.Notes = dto.Notes?.Trim();
+                item.Status = OrderItemStatus.Pending;
                 return Task.CompletedTask;
             },
             "item update",
@@ -363,6 +441,20 @@ public sealed class OrdersService(
                 return Task.CompletedTask;
             },
             "item delete",
+            cancellationToken);
+
+    public Task<OrderResponseDto> UpdateItemStatusAsync(int id, int itemId, int changedByUserId, UpdateOrderItemStatusDto dto, CancellationToken cancellationToken) =>
+        MutateOrderItemsAsync(
+            id,
+            (order, _) =>
+            {
+                var item = order.Items.SingleOrDefault(x => x.Id == itemId)
+                    ?? throw new ApiException("Order item not found.", StatusCodes.Status404NotFound);
+
+                orderState.ApplyOrderItemStatus(order, item, dto.Status, changedByUserId, DateTime.UtcNow);
+                return Task.CompletedTask;
+            },
+            "item status update",
             cancellationToken);
 
     public async Task<OrderResponseDto> UpdateTablesAsync(int id, UpdateOrderTablesDto dto, CancellationToken cancellationToken)
@@ -405,6 +497,49 @@ public sealed class OrdersService(
             .Include(x => x.OrderTables).ThenInclude(x => x.Table)
             .Include(x => x.StatusChanges)
             .Include(x => x.User);
+
+    private static IQueryable<Order> FilterOrders(
+        IQueryable<Order> query,
+        OrderStatus? status,
+        KitchenStatus? kitchenStatus,
+        DateOnly? date,
+        DateOnly? from,
+        DateOnly? to,
+        PaymentStatus? paymentStatus,
+        OrderType? orderType,
+        bool activeOnly)
+    {
+        if (activeOnly) query = query.Where(x => x.Status == OrderStatus.Open);
+        if (status.HasValue) query = query.Where(x => x.Status == status.Value);
+        if (kitchenStatus.HasValue) query = query.Where(x => x.KitchenStatus == kitchenStatus.Value);
+        if (paymentStatus.HasValue) query = query.Where(x => x.PaymentStatus == paymentStatus.Value);
+        if (orderType.HasValue) query = query.Where(x => x.OrderType == orderType.Value);
+        if (date.HasValue)
+        {
+            var start = date.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            var end = start.AddDays(1);
+            query = query.Where(x => x.CreatedAt >= start && x.CreatedAt < end);
+        }
+
+        if (from.HasValue && to.HasValue && from.Value > to.Value)
+        {
+            throw new ApiException("Start date must be before or equal to end date.");
+        }
+
+        if (from.HasValue)
+        {
+            var start = from.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            query = query.Where(x => x.CreatedAt >= start);
+        }
+
+        if (to.HasValue)
+        {
+            var end = to.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc).AddDays(1);
+            query = query.Where(x => x.CreatedAt < end);
+        }
+
+        return query;
+    }
 
     private async Task<Order> LoadTrackedOrderAsync(int id, CancellationToken cancellationToken) =>
         await IncludeOrderGraph(db.Orders).Include(x => x.Payments).SingleOrDefaultAsync(x => x.Id == id, cancellationToken)

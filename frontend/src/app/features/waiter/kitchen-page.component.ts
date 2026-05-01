@@ -2,7 +2,7 @@ import { AsyncPipe, DatePipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { catchError, combineLatest, finalize, map, of, startWith } from 'rxjs';
 
-import { KitchenStatus, Order, OrderStatus } from '../../core/models';
+import { KitchenStatus, Order, OrderItem, OrderItemStatus, OrderStatus } from '../../core/models';
 import { FeedbackService } from '../../core/services/feedback.service';
 import { RealtimeService } from '../../core/services/realtime.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
@@ -75,6 +75,11 @@ interface KitchenViewModel {
                             @if (item.notes) {
                               <em>{{ item.notes }}</em>
                             }
+                            <div class="item-actions">
+                              <small>{{ itemStatusLabel(item.status) }}</small>
+                              <button type="button" [disabled]="isUpdating(order.id)" (click)="setItemStatus(order, item, OrderItemStatus.Preparing)">בהכנה</button>
+                              <button type="button" [disabled]="isUpdating(order.id)" (click)="setItemStatus(order, item, OrderItemStatus.Ready)">מוכן</button>
+                            </div>
                           </li>
                         }
                       </ul>
@@ -251,8 +256,9 @@ export class KitchenPageComponent {
   private readonly realtime = inject(RealtimeService);
   private readonly feedback = inject(FeedbackService);
 
-  readonly statuses = [KitchenStatus.New, KitchenStatus.Preparing, KitchenStatus.Ready];
-  readonly vm$ = combineLatest([this.data.getOrders(), this.realtime.connectionState$]).pipe(
+  readonly OrderItemStatus = OrderItemStatus;
+  readonly statuses = [KitchenStatus.InKitchen, KitchenStatus.Ready];
+  readonly vm$ = combineLatest([this.data.getKitchenOrders(), this.realtime.connectionState$]).pipe(
     map(([orders, connectionState]) => ({
       columns: this.createColumns(orders),
       connectionState,
@@ -274,15 +280,23 @@ export class KitchenPageComponent {
   }
 
   nextActionLabel(order: Order): string {
-    if (order.kitchenStatus === KitchenStatus.New) {
-      return 'התחלת הכנה';
-    }
-
-    if (order.kitchenStatus === KitchenStatus.Preparing) {
+    if (order.kitchenStatus === KitchenStatus.InKitchen) {
       return 'סימון מוכן';
     }
 
     return 'סימון הוגש';
+  }
+
+  itemStatusLabel(status?: OrderItemStatus): string {
+    if (status === OrderItemStatus.Ready) {
+      return 'מוכן';
+    }
+
+    if (status === OrderItemStatus.Preparing) {
+      return 'בהכנה';
+    }
+
+    return 'ממתין';
   }
 
   connectionLabel(state: string): string {
@@ -316,6 +330,26 @@ export class KitchenPageComponent {
       next: () => this.feedback.success(),
       error: (error: unknown) => {
         this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לקדם את ההזמנה.');
+        this.feedback.error(error, this.errorMessage);
+      }
+    });
+  }
+
+  setItemStatus(order: Order, item: OrderItem, status: OrderItemStatus): void {
+    if (this.updatingOrderId || item.status === status) {
+      return;
+    }
+
+    this.updatingOrderId = order.id;
+    this.errorMessage = '';
+    this.data.updateOrderItemStatus(order.id, item.id, status).pipe(
+      finalize(() => {
+        this.updatingOrderId = null;
+      })
+    ).subscribe({
+      next: () => this.feedback.success(),
+      error: (error: unknown) => {
+        this.errorMessage = apiErrorMessage(error, 'לא הצלחנו לעדכן את סטטוס הפריט.');
         this.feedback.error(error, this.errorMessage);
       }
     });

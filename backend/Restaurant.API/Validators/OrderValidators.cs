@@ -62,3 +62,11 @@ public sealed class UpdateOrderItemDtoValidator : AbstractValidator<UpdateOrderI
         RuleFor(x => x.Notes).MaximumLength(500);
     }
 }
+
+public sealed class UpdateOrderItemStatusDtoValidator : AbstractValidator<UpdateOrderItemStatusDto>
+{
+    public UpdateOrderItemStatusDtoValidator()
+    {
+        RuleFor(x => x.Status).IsInEnum();
+    }
+}

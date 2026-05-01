@@ -43,6 +43,8 @@ import { roleLabels } from '../../shared/ui-labels';
             <option value="all">הכל</option>
             <option [value]="roleOptionValue(UserRole.Admin)">מנהל</option>
             <option [value]="roleOptionValue(UserRole.Waiter)">מלצר</option>
+            <option [value]="roleOptionValue(UserRole.Kitchen)">מטבח</option>
+            <option [value]="roleOptionValue(UserRole.Salad)">סלטיה</option>
             <option [value]="roleOptionValue(UserRole.Customer)">לקוח</option>
           </select>
         </label>

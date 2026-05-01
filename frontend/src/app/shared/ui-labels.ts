@@ -15,7 +15,9 @@ export type BadgeTone = 'gold' | 'olive' | 'burgundy' | 'charcoal' | 'beige' | '
 export const roleLabels: Record<UserRole, string> = {
   [UserRole.Admin]: 'מנהל',
   [UserRole.Waiter]: 'מלצר',
-  [UserRole.Customer]: 'לקוח'
+  [UserRole.Customer]: 'לקוח',
+  [UserRole.Kitchen]: 'מטבח',
+  [UserRole.Salad]: 'סלטיה'
 };
 
 export const categoryLabels: Record<MenuCategory, string> = {
@@ -52,15 +54,15 @@ export const orderStatusTones: Record<OrderStatus, BadgeTone> = {
 };
 
 export const kitchenStatusLabels: Record<KitchenStatus, string> = {
-  [KitchenStatus.New]: 'חדשה',
-  [KitchenStatus.Preparing]: 'בהכנה',
+  [KitchenStatus.InSalads]: 'בסלטיה',
+  [KitchenStatus.InKitchen]: 'מטבח פנימי',
   [KitchenStatus.Ready]: 'מוכנה',
   [KitchenStatus.Served]: 'הוגשה'
 };
 
 export const kitchenStatusTones: Record<KitchenStatus, BadgeTone> = {
-  [KitchenStatus.New]: 'gold',
-  [KitchenStatus.Preparing]: 'olive',
+  [KitchenStatus.InSalads]: 'gold',
+  [KitchenStatus.InKitchen]: 'olive',
   [KitchenStatus.Ready]: 'beige',
   [KitchenStatus.Served]: 'charcoal'
 };
@@ -73,20 +75,21 @@ export const orderTypeLabels: Record<OrderType, string> = {
 export const paymentStatusLabels: Record<PaymentStatus, string> = {
   [PaymentStatus.Unpaid]: 'לא שולם',
   [PaymentStatus.Paid]: 'שולם',
-  [PaymentStatus.Partial]: 'שולם חלקית',
+  [PaymentStatus.PartiallyPaid]: 'שולם חלקית',
   [PaymentStatus.Refunded]: 'הוחזר'
 };
 
 export const paymentStatusTones: Record<PaymentStatus, BadgeTone> = {
   [PaymentStatus.Unpaid]: 'burgundy',
   [PaymentStatus.Paid]: 'olive',
-  [PaymentStatus.Partial]: 'gold',
+  [PaymentStatus.PartiallyPaid]: 'gold',
   [PaymentStatus.Refunded]: 'charcoal'
 };
 
 export const paymentMethodLabels: Record<PaymentMethod, string> = {
   [PaymentMethod.Cash]: 'מזומן',
-  [PaymentMethod.CreditCard]: 'אשראי'
+  [PaymentMethod.CreditManual]: 'אשראי ידני',
+  [PaymentMethod.Other]: 'אחר'
 };
 
 export const reservationStatusLabels: Record<ReservationStatus, string> = {

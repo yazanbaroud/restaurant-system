@@ -1,7 +1,9 @@
 export enum UserRole {
   Admin = 1,
   Waiter = 2,
-  Customer = 3
+  Customer = 3,
+  Kitchen = 4,
+  Salad = 5
 }
 
 export enum TableStatus {
@@ -26,10 +28,18 @@ export enum OrderStatus {
 }
 
 export enum KitchenStatus {
-  New = 1,
-  Preparing = 2,
+  InSalads = 1,
+  New = InSalads,
+  InKitchen = 2,
+  Preparing = InKitchen,
   Ready = 3,
   Served = 4
+}
+
+export enum OrderItemStatus {
+  Pending = 1,
+  Preparing = 2,
+  Ready = 3
 }
 
 export enum OrderType {
@@ -40,13 +50,16 @@ export enum OrderType {
 export enum PaymentStatus {
   Unpaid = 1,
   Paid = 2,
-  Partial = 3,
+  PartiallyPaid = 3,
+  Partial = PartiallyPaid,
   Refunded = 4
 }
 
 export enum PaymentMethod {
   Cash = 1,
-  CreditCard = 2
+  CreditManual = 2,
+  CreditCard = CreditManual,
+  Other = 3
 }
 
 export enum ReservationStatus {

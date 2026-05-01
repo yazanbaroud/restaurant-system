@@ -69,6 +69,15 @@ export const DEFAULT_SUCCESS_MESSAGE = 'הפעולה בוצעה בהצלחה';
 
 export function apiErrorMessage(error: unknown, fallback = DEFAULT_API_ERROR_MESSAGE): string {
   const record = asRecord(error);
+  const status = typeof record?.['status'] === 'number' ? record['status'] : null;
+  if (status === 409) {
+    return 'Order was updated by another staff member';
+  }
+
+  if (status === 0) {
+    return 'No connection';
+  }
+
   const nestedMessage = record ? payloadMessage(record['error']) : '';
 
   return nestedMessage || payloadMessage(error) || fallback;

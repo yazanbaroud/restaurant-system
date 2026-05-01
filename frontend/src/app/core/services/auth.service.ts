@@ -277,7 +277,7 @@ export class AuthService {
         return numericRole;
       }
 
-      const roleName = value.toLowerCase();
+      const roleName = value.toLowerCase().replace(/[\s_-]/g, '');
       if (roleName === 'admin') {
         return UserRole.Admin;
       }
@@ -285,13 +285,25 @@ export class AuthService {
       if (roleName === 'waiter') {
         return UserRole.Waiter;
       }
+
+      if (roleName === 'kitchen') {
+        return UserRole.Kitchen;
+      }
+
+      if (roleName === 'salad' || roleName === 'salads') {
+        return UserRole.Salad;
+      }
     }
 
     return UserRole.Customer;
   }
 
   private isKnownRole(value: number): value is UserRole {
-    return value === UserRole.Admin || value === UserRole.Waiter || value === UserRole.Customer;
+    return value === UserRole.Admin ||
+      value === UserRole.Waiter ||
+      value === UserRole.Customer ||
+      value === UserRole.Kitchen ||
+      value === UserRole.Salad;
   }
 
   private numberValue(value: unknown): number {

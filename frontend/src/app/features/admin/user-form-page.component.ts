@@ -210,7 +210,7 @@ export class UserFormPageComponent implements OnInit {
 
   readonly roleLabels = roleLabels;
   readonly UserRole = UserRole;
-  readonly formRoles = [UserRole.Customer, UserRole.Waiter, UserRole.Admin];
+  readonly formRoles = [UserRole.Customer, UserRole.Waiter, UserRole.Kitchen, UserRole.Salad, UserRole.Admin];
   readonly form = this.fb.nonNullable.group({
     firstName: ['', Validators.required],
     lastName: ['', Validators.required],
@@ -382,7 +382,20 @@ export class UserFormPageComponent implements OnInit {
       return 'עריכת משתמש';
     }
 
-    return this.form.controls.role.value === UserRole.Waiter ? 'יצירת מלצר חדש' : 'יצירת משתמש חדש';
+    const role = this.form.controls.role.value;
+    if (role === UserRole.Waiter) {
+      return 'יצירת מלצר חדש';
+    }
+
+    if (role === UserRole.Kitchen) {
+      return 'יצירת איש מטבח חדש';
+    }
+
+    if (role === UserRole.Salad) {
+      return 'יצירת עובד סלטיה חדש';
+    }
+
+    return 'יצירת משתמש חדש';
   }
 
   canSubmit(): boolean {
@@ -459,6 +472,18 @@ export class UserFormPageComponent implements OnInit {
 
   private createRoleFromQuery(): UserRole {
     const requestedRole = this.route.snapshot.queryParamMap.get('role')?.toLowerCase();
-    return requestedRole === 'waiter' ? UserRole.Waiter : UserRole.Customer;
+    if (requestedRole === 'waiter') {
+      return UserRole.Waiter;
+    }
+
+    if (requestedRole === 'kitchen') {
+      return UserRole.Kitchen;
+    }
+
+    if (requestedRole === 'salad') {
+      return UserRole.Salad;
+    }
+
+    return UserRole.Customer;
   }
 }

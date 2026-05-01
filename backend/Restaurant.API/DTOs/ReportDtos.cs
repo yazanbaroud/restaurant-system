@@ -1,6 +1,15 @@
 namespace Restaurant.API.DTOs;
 
 public sealed record DailyReportDto(DateOnly Date, decimal Revenue, int OrdersCount, int CompletedOrders, int CancelledOrders);
+public sealed record DailySummaryReportDto(
+    DateOnly Date,
+    int TotalOrders,
+    decimal TotalRevenue,
+    decimal CashRevenue,
+    decimal CreditManualRevenue,
+    decimal OtherRevenue,
+    int UnpaidOrders,
+    int CancelledOrders);
 public sealed record WeeklyReportDto(DateOnly WeekStartDate, DateOnly WeekEndDate, decimal Revenue, int OrdersCount);
 public sealed record MonthlyReportDto(int Year, int Month, decimal Revenue, int OrdersCount);
 public sealed record YearlyReportDto(int Year, decimal Revenue, int OrdersCount);

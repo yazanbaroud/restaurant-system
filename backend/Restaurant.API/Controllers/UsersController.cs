@@ -15,6 +15,13 @@ public sealed class UsersController(IUsersService usersService) : ControllerBase
     public async Task<ActionResult<IReadOnlyCollection<UserResponseDto>>> GetAll(CancellationToken cancellationToken) =>
         Ok(await usersService.GetAllAsync(cancellationToken));
 
+    [HttpGet("paged")]
+    public async Task<ActionResult<PagedResponseDto<UserResponseDto>>> GetPaged(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 50,
+        CancellationToken cancellationToken = default) =>
+        Ok(await usersService.GetPagedAsync(page, pageSize, cancellationToken));
+
     [HttpGet("{id:int}")]
     public async Task<ActionResult<UserResponseDto>> GetById(int id, CancellationToken cancellationToken) =>
         Ok(await usersService.GetByIdAsync(id, cancellationToken));

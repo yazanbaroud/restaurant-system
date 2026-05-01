@@ -15,6 +15,10 @@ public sealed class ReportsController(IReportsService reportsService) : Controll
     public async Task<ActionResult<DailyReportDto>> Daily([FromQuery] DateOnly? date, CancellationToken cancellationToken) =>
         Ok(await reportsService.GetDailyAsync(date, cancellationToken));
 
+    [HttpGet("daily-summary")]
+    public async Task<ActionResult<DailySummaryReportDto>> DailySummary([FromQuery] DateOnly? date, CancellationToken cancellationToken) =>
+        Ok(await reportsService.GetDailySummaryAsync(date, cancellationToken));
+
     [HttpGet("weekly")]
     public async Task<ActionResult<WeeklyReportDto>> Weekly([FromQuery] DateOnly? weekStart, CancellationToken cancellationToken) =>
         Ok(await reportsService.GetWeeklyAsync(weekStart, cancellationToken));

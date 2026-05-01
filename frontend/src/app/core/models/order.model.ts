@@ -1,4 +1,4 @@
-import { KitchenStatus, OrderStatus, OrderType, PaymentStatus } from './enums';
+import { KitchenStatus, OrderItemStatus, OrderStatus, OrderType, PaymentStatus } from './enums';
 import { Table } from './table.model';
 
 export interface OrderItem {
@@ -8,6 +8,7 @@ export interface OrderItem {
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  status?: OrderItemStatus;
   notes?: string;
 }
 

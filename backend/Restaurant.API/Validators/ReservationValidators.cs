@@ -15,6 +15,9 @@ public sealed class CreateReservationDtoValidator : AbstractValidator<CreateRese
             .MaximumLength(40)
             .Matches(ValidationPatterns.IsraeliPhone).WithMessage("מספר הטלפון אינו תקין");
         RuleFor(x => x.GuestsCount).GreaterThan(0);
+        RuleFor(x => x.DurationMinutes)
+            .InclusiveBetween(30, 240)
+            .When(x => x.DurationMinutes.HasValue);
         RuleFor(x => x.CustomerNotes).MaximumLength(1000);
         RuleFor(x => x.ReservationDate).Must(x => x >= DateOnly.FromDateTime(DateTime.Today)).WithMessage("לא ניתן לבחור תאריך שכבר עבר.");
     }
@@ -31,6 +34,9 @@ public sealed class UpdateReservationDtoValidator : AbstractValidator<UpdateRese
             .MaximumLength(40)
             .Matches(ValidationPatterns.IsraeliPhone).WithMessage("מספר הטלפון אינו תקין");
         RuleFor(x => x.GuestsCount).GreaterThan(0);
+        RuleFor(x => x.DurationMinutes)
+            .InclusiveBetween(30, 240)
+            .When(x => x.DurationMinutes.HasValue);
         RuleFor(x => x.CustomerNotes).MaximumLength(1000);
         RuleFor(x => x.RestaurantNotes).MaximumLength(1000);
         RuleFor(x => x.ReservationDate).Must(x => x >= DateOnly.FromDateTime(DateTime.Today)).WithMessage("לא ניתן לבחור תאריך שכבר עבר.");
@@ -42,6 +48,14 @@ public sealed class UpdateReservationStatusDtoValidator : AbstractValidator<Upda
     public UpdateReservationStatusDtoValidator()
     {
         RuleFor(x => x.Status).IsInEnum();
+        RuleFor(x => x.RestaurantNotes).MaximumLength(1000);
+    }
+}
+
+public sealed class ReservationDecisionDtoValidator : AbstractValidator<ReservationDecisionDto>
+{
+    public ReservationDecisionDtoValidator()
+    {
         RuleFor(x => x.RestaurantNotes).MaximumLength(1000);
     }
 }

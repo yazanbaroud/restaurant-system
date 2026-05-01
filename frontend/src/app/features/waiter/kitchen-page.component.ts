@@ -2,7 +2,8 @@ import { AsyncPipe, DatePipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { catchError, combineLatest, finalize, map, of, startWith } from 'rxjs';
 
-import { KitchenStatus, Order, OrderItem, OrderItemStatus, OrderStatus } from '../../core/models';
+import { KitchenStatus, Order, OrderItem, OrderItemStatus, OrderStatus, UserRole } from '../../core/models';
+import { AuthService } from '../../core/services/auth.service';
 import { FeedbackService } from '../../core/services/feedback.service';
 import { RealtimeService } from '../../core/services/realtime.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
@@ -75,23 +76,29 @@ interface KitchenViewModel {
                             @if (item.notes) {
                               <em>{{ item.notes }}</em>
                             }
-                            <div class="item-actions">
+                            @if (canManageKitchenActions()) {
+                              <div class="item-actions">
                               <small>{{ itemStatusLabel(item.status) }}</small>
                               <button type="button" [disabled]="isUpdating(order.id)" (click)="setItemStatus(order, item, OrderItemStatus.Preparing)">בהכנה</button>
                               <button type="button" [disabled]="isUpdating(order.id)" (click)="setItemStatus(order, item, OrderItemStatus.Ready)">מוכן</button>
-                            </div>
+                              </div>
+                            } @else {
+                              <small class="item-status-readonly">{{ itemStatusLabel(item.status) }}</small>
+                            }
                           </li>
                         }
                       </ul>
 
-                      <button
+                      @if (canManageKitchenActions()) {
+                        <button
                         type="button"
                         class="btn btn-dark full"
                         [disabled]="isUpdating(order.id)"
                         (click)="advance(order)"
                       >
                         {{ isUpdating(order.id) ? 'מעדכן...' : nextActionLabel(order) }}
-                      </button>
+                        </button>
+                      }
                     </article>
                   } @empty {
                     <div class="kitchen-empty">
@@ -252,6 +259,7 @@ interface KitchenViewModel {
   `]
 })
 export class KitchenPageComponent {
+  private readonly auth = inject(AuthService);
   private readonly data = inject(RestaurantDataService);
   private readonly realtime = inject(RealtimeService);
   private readonly feedback = inject(FeedbackService);
@@ -313,6 +321,11 @@ export class KitchenPageComponent {
 
   isUpdating(orderId: number): boolean {
     return this.updatingOrderId === orderId;
+  }
+
+  canManageKitchenActions(): boolean {
+    const role = this.auth.currentUser?.role;
+    return role === UserRole.Admin || role === UserRole.Kitchen;
   }
 
   advance(order: Order): void {

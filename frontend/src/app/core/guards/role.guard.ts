@@ -4,6 +4,7 @@ import { catchError, map, of } from 'rxjs';
 
 import { User, UserRole } from '../models';
 import { AuthService } from '../services/auth.service';
+import { defaultRouteForRole } from './role-navigation';
 
 export const roleGuard: CanActivateFn = (route, state) => {
   const auth = inject(AuthService);
@@ -47,24 +48,4 @@ function loginRedirect(router: Router, returnUrl: string, roles: UserRole[] | un
       role: roles?.[0] ?? null
     }
   });
-}
-
-function defaultRouteForRole(role: UserRole): string {
-  if (role === UserRole.Admin) {
-    return '/admin';
-  }
-
-  if (role === UserRole.Waiter) {
-    return '/waiter';
-  }
-
-  if (role === UserRole.Kitchen) {
-    return '/waiter/kitchen';
-  }
-
-  if (role === UserRole.Salad) {
-    return '/waiter/salads';
-  }
-
-  return '/';
 }

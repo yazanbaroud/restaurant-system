@@ -2,7 +2,8 @@ import { AsyncPipe, DatePipe } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { catchError, finalize, map, of, startWith } from 'rxjs';
 
-import { KitchenStatus, Order, OrderStatus } from '../../core/models';
+import { KitchenStatus, Order, OrderStatus, UserRole } from '../../core/models';
+import { AuthService } from '../../core/services/auth.service';
 import { FeedbackService } from '../../core/services/feedback.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
@@ -44,14 +45,16 @@ import { PageHeaderComponent } from '../../shared/components/page-header.compone
                   </li>
                 }
               </ul>
-              <button
+              @if (canManageSaladActions()) {
+                <button
                 type="button"
                 class="btn btn-dark full"
                 [disabled]="updatingOrderId === order.id"
                 (click)="moveToKitchen(order)"
               >
                 {{ updatingOrderId === order.id ? 'מעביר...' : 'העבר למטבח הפנימי' }}
-              </button>
+                </button>
+              }
             </article>
           } @empty {
             <div class="empty-state">
@@ -114,6 +117,7 @@ import { PageHeaderComponent } from '../../shared/components/page-header.compone
   `]
 })
 export class SaladScreenPageComponent {
+  private readonly auth = inject(AuthService);
   private readonly data = inject(RestaurantDataService);
   private readonly feedback = inject(FeedbackService);
 
@@ -135,6 +139,11 @@ export class SaladScreenPageComponent {
 
   customerName(order: Order): string {
     return `${order.customerFirstName ?? ''} ${order.customerLastName ?? ''}`.trim() || 'לקוח ללא שם';
+  }
+
+  canManageSaladActions(): boolean {
+    const role = this.auth.currentUser?.role;
+    return role === UserRole.Admin || role === UserRole.Salad;
   }
 
   moveToKitchen(order: Order): void {

@@ -4,6 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 
 import { User, UserRole } from '../../core/models';
+import { canUseReturnUrlForRole, defaultRouteForRole } from '../../core/guards/role-navigation';
 import { AuthService } from '../../core/services/auth.service';
 import { FeedbackService } from '../../core/services/feedback.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
@@ -115,58 +116,11 @@ export class LoginPageComponent {
     const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
     const authorizedReturnUrl = this.getAuthorizedReturnUrl(user, returnUrl);
 
-    void this.router.navigateByUrl(authorizedReturnUrl ?? this.getDefaultRouteForRole(user.role));
-  }
-
-  private getDefaultRouteForRole(role: UserRole): string {
-    if (role === UserRole.Admin) {
-      return '/admin';
-    }
-
-    if (role === UserRole.Waiter) {
-      return '/waiter';
-    }
-
-    if (role === UserRole.Kitchen) {
-      return '/waiter/kitchen';
-    }
-
-    if (role === UserRole.Salad) {
-      return '/waiter/salads';
-    }
-
-    return '/';
+    void this.router.navigateByUrl(authorizedReturnUrl ?? defaultRouteForRole(user.role));
   }
 
   private getAuthorizedReturnUrl(user: User, returnUrl: string | null): string | null {
-    if (!returnUrl || !returnUrl.startsWith('/') || returnUrl.startsWith('//')) {
-      return null;
-    }
-
-    const path = returnUrl.split(/[?#]/)[0];
-    if (this.isRouteSection(path, '/account')) {
-      return returnUrl;
-    }
-
-    if (user.role === UserRole.Admin) {
-      return this.isRouteSection(path, '/admin') ? returnUrl : null;
-    }
-
-    if (user.role === UserRole.Waiter || user.role === UserRole.Kitchen || user.role === UserRole.Salad) {
-      return this.isRouteSection(path, '/waiter') ? returnUrl : null;
-    }
-
-    return path === '/' ||
-      this.isRouteSection(path, '/menu') ||
-      this.isRouteSection(path, '/reservation') ||
-      this.isRouteSection(path, '/cart') ||
-      this.isRouteSection(path, '/orders')
-      ? returnUrl
-      : null;
-  }
-
-  private isRouteSection(path: string, section: string): boolean {
-    return path === section || path.startsWith(`${section}/`);
+    return canUseReturnUrlForRole(user.role, returnUrl) ? returnUrl : null;
   }
 
   fieldError(controlName: keyof typeof this.form.controls): string {

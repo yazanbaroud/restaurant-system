@@ -167,18 +167,10 @@ interface OrderViewModel {
                     {{ isMutating ? 'מוסיף...' : 'הוספת פריטים' }}
                   </button>
                 }
-                @if (canSendToKitchen(order)) {
-                  <button type="button" class="btn btn-dark full" [disabled]="isMutating || pendingLines.length > 0" (click)="sendToKitchen(order)">
-                    שליחה למטבח
-                  </button>
-                }
                 @if (canAddPayment(order)) {
                   <a class="btn btn-ghost full" [routerLink]="[orderDetailsBaseLink, order.id, 'payment']">מעבר לתשלום</a>
                 }
               </div>
-              @if (pendingLines.length && canSendToKitchen(order)) {
-                <p class="muted">הוסיפו את הפריטים לפני שליחה למטבח.</p>
-              }
             </aside>
           </div>
         </section>
@@ -494,10 +486,6 @@ export class OrderDetailsPageComponent {
       order.kitchenStatus !== KitchenStatus.Served;
   }
 
-  canSendToKitchen(order: Order): boolean {
-    return order.status === OrderStatus.Open && order.kitchenStatus === KitchenStatus.New;
-  }
-
   canAddPayment(order: Order): boolean {
     return order.status === OrderStatus.Open &&
       order.paymentStatus !== PaymentStatus.Paid &&
@@ -589,15 +577,6 @@ export class OrderDetailsPageComponent {
     this.runMutation(request$, () => {
       this.pendingLines = [];
     });
-  }
-
-  sendToKitchen(order: Order): void {
-    if (this.pendingLines.length) {
-      this.errorMessage = 'הוסיפו את הפריטים לפני שליחה למטבח.';
-      return;
-    }
-
-    this.runMutation(this.data.advanceKitchenStatus(order.id));
   }
 
   private updateExistingItem(order: Order, item: OrderItem, quantity: number, notes: string): void {

@@ -3,6 +3,7 @@ import { Component, DestroyRef, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
+import { User, UserRole } from '../models';
 import { AuthService } from '../services/auth.service';
 import { RealtimeEventName, RealtimeService } from '../services/realtime.service';
 
@@ -17,21 +18,32 @@ import { RealtimeEventName, RealtimeService } from '../services/realtime.service
           <span class="brand__mark">הכבש</span>
           <span>
             <strong>מסעדת הכבש</strong>
-            <small>תפעול מלצרים</small>
+            <small>תפעול צוות</small>
           </span>
         </a>
-        <nav class="sidebar__nav" aria-label="מלצר">
-          <a routerLink="/waiter" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">שולחנות</a>
-          <a routerLink="/waiter/kitchen" routerLinkActive="active">מטבח</a>
-          <a routerLink="/waiter/create-order" routerLinkActive="active">הזמנה חדשה</a>
-          <a routerLink="/waiter/reservations" routerLinkActive="active">הזמנות מקום</a>
-        </nav>
+        @if (auth.currentUser$ | async; as user) {
+          <nav class="sidebar__nav" aria-label="צוות">
+            @if (canUseWaiterScreens(user)) {
+              @if (canUseTablesScreen(user)) {
+                <a routerLink="/waiter" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">שולחנות</a>
+              }
+              <a routerLink="/waiter/create-order" routerLinkActive="active">הזמנה חדשה</a>
+              <a routerLink="/waiter/reservations" routerLinkActive="active">הזמנות מקום</a>
+            }
+            @if (canUseKitchenScreen(user)) {
+              <a routerLink="/waiter/kitchen" routerLinkActive="active">מטבח</a>
+            }
+            @if (canUseSaladScreen(user)) {
+              <a routerLink="/waiter/salads" routerLinkActive="active">סלטיה</a>
+            }
+          </nav>
+        }
       </aside>
       <section class="staff-main">
         <header class="staff-topline">
           <div>
             <p class="eyebrow">מהיר, ברור, מותאם למשמרת</p>
-            <strong>ממשק מלצר</strong>
+            <strong>ממשק צוות</strong>
           </div>
           @if (auth.currentUser$ | async; as user) {
             <div class="actions-inline">
@@ -78,6 +90,22 @@ export class WaiterShellComponent {
   logout(): void {
     this.auth.logout();
     void this.router.navigateByUrl('/login');
+  }
+
+  canUseWaiterScreens(user: User): boolean {
+    return user.role === UserRole.Admin || user.role === UserRole.Waiter;
+  }
+
+  canUseTablesScreen(user: User): boolean {
+    return user.role === UserRole.Admin;
+  }
+
+  canUseKitchenScreen(user: User): boolean {
+    return user.role === UserRole.Admin || user.role === UserRole.Waiter || user.role === UserRole.Kitchen;
+  }
+
+  canUseSaladScreen(user: User): boolean {
+    return user.role === UserRole.Admin || user.role === UserRole.Waiter || user.role === UserRole.Salad;
   }
 
   private showRealtimeNotice(eventName: RealtimeEventName): void {

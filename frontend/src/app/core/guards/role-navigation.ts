@@ -10,11 +10,11 @@ export function defaultRouteForRole(role: UserRole): string {
   }
 
   if (role === UserRole.Kitchen) {
-    return '/waiter/kitchen';
+    return '/kitchen';
   }
 
   if (role === UserRole.Salad) {
-    return '/waiter/salads';
+    return '/salad';
   }
 
   return '/';
@@ -31,24 +31,24 @@ export function canUseReturnUrlForRole(role: UserRole, returnUrl: string | null)
   }
 
   if (role === UserRole.Admin) {
-    return isRouteSection(path, '/admin') || isRouteSection(path, '/waiter');
+    return isRouteSection(path, '/admin') ||
+      isRouteSection(path, '/waiter') ||
+      isRouteSection(path, '/salad') ||
+      isRouteSection(path, '/kitchen');
   }
 
   if (role === UserRole.Waiter) {
     return path === '/waiter' ||
       isRouteSection(path, '/waiter/create-order') ||
-      isRouteSection(path, '/waiter/kitchen') ||
-      isRouteSection(path, '/waiter/orders') ||
-      isRouteSection(path, '/waiter/salads') ||
-      isRouteSection(path, '/waiter/reservations');
+      isRouteSection(path, '/waiter/orders');
   }
 
   if (role === UserRole.Kitchen) {
-    return isRouteSection(path, '/waiter/kitchen');
+    return isRouteSection(path, '/kitchen');
   }
 
   if (role === UserRole.Salad) {
-    return isRouteSection(path, '/waiter/salads');
+    return isRouteSection(path, '/salad');
   }
 
   return path === '/' ||

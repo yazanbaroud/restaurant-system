@@ -50,10 +50,10 @@ import { AuthService } from '../services/auth.service';
                 <a class="btn btn-small btn-dark" routerLink="/waiter">חזרה לממשק מלצר</a>
               }
               @if (user.role === UserRole.Kitchen) {
-                <a class="btn btn-small btn-dark" routerLink="/waiter/kitchen">חזרה למטבח</a>
+                <a class="btn btn-small btn-dark" routerLink="/kitchen">חזרה למטבח</a>
               }
               @if (user.role === UserRole.Salad) {
-                <a class="btn btn-small btn-dark" routerLink="/waiter/salads">חזרה לסלטיה</a>
+                <a class="btn btn-small btn-dark" routerLink="/salad">חזרה לסלטיה</a>
               }
               <a class="btn btn-small btn-ghost" routerLink="/account">אזור אישי</a>
               <button type="button" class="btn btn-small btn-ghost" (click)="logout()">התנתקות</button>

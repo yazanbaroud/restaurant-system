@@ -45,7 +45,7 @@ function loginRedirect(router: Router, returnUrl: string, roles: UserRole[] | un
   return router.createUrlTree(['/login'], {
     queryParams: {
       returnUrl,
-      role: roles?.[0] ?? null
+      role: roles?.find((role) => role !== UserRole.Admin) ?? roles?.[0] ?? null
     }
   });
 }

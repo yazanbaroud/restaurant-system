@@ -189,7 +189,7 @@ interface CreateOrderViewModel {
                 <p class="validation-note">יש לבחור שולחן.</p>
               }
               <button class="btn btn-gold full" type="submit" [disabled]="isSubmitting">
-                {{ isSubmitting ? 'שולחים...' : 'שליחה למטבח' }}
+                {{ isSubmitting ? 'שולחים...' : 'שליחה לסלטיה' }}
               </button>
             </aside>
           </form>

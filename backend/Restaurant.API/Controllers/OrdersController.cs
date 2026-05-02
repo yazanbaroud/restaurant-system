@@ -46,12 +46,12 @@ public sealed class OrdersController(IOrdersService ordersService) : ControllerB
         Ok(await ordersService.GetPagedAsync(status, kitchenStatus, date, from, to, paymentStatus, orderType, IsWaiterOnly(), page, pageSize, cancellationToken));
 
     [HttpGet("salads")]
-    [Authorize(Roles = AppRoles.AdminOrWaiterOrSalad)]
+    [Authorize(Roles = AppRoles.AdminOrSalad)]
     public async Task<ActionResult<IReadOnlyCollection<OrderResponseDto>>> GetSalads(CancellationToken cancellationToken) =>
         Ok(await ordersService.GetSaladsAsync(cancellationToken));
 
     [HttpGet("kitchen")]
-    [Authorize(Roles = AppRoles.AdminOrWaiterOrKitchen)]
+    [Authorize(Roles = AppRoles.AdminOrKitchen)]
     public async Task<ActionResult<IReadOnlyCollection<OrderResponseDto>>> GetKitchen(CancellationToken cancellationToken) =>
         Ok(await ordersService.GetKitchenAsync(cancellationToken));
 

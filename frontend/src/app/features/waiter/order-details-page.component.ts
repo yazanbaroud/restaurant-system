@@ -40,7 +40,7 @@ interface OrderViewModel {
             [title]="'#' + order.orderNumber"
             [subtitle]="customerName(order)"
           >
-            <a class="btn btn-ghost" [routerLink]="ordersHomeLink">שולחנות</a>
+            <a class="btn btn-ghost" [routerLink]="ordersHomeLink">הזמנות</a>
           </app-page-header>
 
           @if (errorMessage) {
@@ -104,7 +104,9 @@ interface OrderViewModel {
 
               <div class="status-row">
                 <span>{{ kitchenStatusLabels[order.kitchenStatus] }}</span>
-                <span>{{ paymentStatusLabels[order.paymentStatus] }}</span>
+                @if (isAdminRoute) {
+                  <span>{{ paymentStatusLabels[order.paymentStatus] }}</span>
+                }
                 @for (table of order.tables; track table.id) {
                   <span>{{ table.name }}</span>
                 }
@@ -167,7 +169,7 @@ interface OrderViewModel {
                     {{ isMutating ? 'מוסיף...' : 'הוספת פריטים' }}
                   </button>
                 }
-                @if (canAddPayment(order)) {
+                @if (isAdminRoute && canAddPayment(order)) {
                   <a class="btn btn-ghost full" [routerLink]="[orderDetailsBaseLink, order.id, 'payment']">מעבר לתשלום</a>
                 }
               </div>
@@ -432,7 +434,7 @@ export class OrderDetailsPageComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly id = Number(this.route.snapshot.paramMap.get('id'));
-  private readonly isAdminRoute = this.route.snapshot.pathFromRoot.some((route) => route.routeConfig?.path === 'admin') ||
+  readonly isAdminRoute = this.route.snapshot.pathFromRoot.some((route) => route.routeConfig?.path === 'admin') ||
     this.router.url.startsWith('/admin');
 
   readonly orderDetailsBaseLink = this.isAdminRoute ? '/admin/orders' : '/waiter/orders';

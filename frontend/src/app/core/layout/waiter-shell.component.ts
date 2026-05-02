@@ -3,9 +3,10 @@ import { Component, DestroyRef, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
-import { User, UserRole } from '../models';
 import { AuthService } from '../services/auth.service';
 import { RealtimeEventName, RealtimeService } from '../services/realtime.service';
+
+type StaffWorkspace = 'waiter' | 'salad' | 'kitchen';
 
 @Component({
   selector: 'app-waiter-shell',
@@ -21,29 +22,24 @@ import { RealtimeEventName, RealtimeService } from '../services/realtime.service
             <small>תפעול צוות</small>
           </span>
         </a>
-        @if (auth.currentUser$ | async; as user) {
-          <nav class="sidebar__nav" aria-label="צוות">
-            @if (canUseWaiterScreens(user)) {
-              @if (canUseTablesScreen(user)) {
-                <a routerLink="/waiter" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">שולחנות</a>
-              }
-              <a routerLink="/waiter/create-order" routerLinkActive="active">הזמנה חדשה</a>
-              <a routerLink="/waiter/reservations" routerLinkActive="active">הזמנות מקום</a>
-            }
-            @if (canUseKitchenScreen(user)) {
-              <a routerLink="/waiter/kitchen" routerLinkActive="active">מטבח</a>
-            }
-            @if (canUseSaladScreen(user)) {
-              <a routerLink="/waiter/salads" routerLinkActive="active">סלטיה</a>
-            }
-          </nav>
-        }
+        <nav class="sidebar__nav" aria-label="צוות">
+          @if (workspace === 'waiter') {
+            <a routerLink="/waiter" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">הזמנות</a>
+            <a routerLink="/waiter/create-order" routerLinkActive="active">הזמנה חדשה</a>
+          }
+          @if (workspace === 'salad') {
+            <a routerLink="/salad" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">מסך סלטיה</a>
+          }
+          @if (workspace === 'kitchen') {
+            <a routerLink="/kitchen" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">מסך מטבח</a>
+          }
+        </nav>
       </aside>
       <section class="staff-main">
         <header class="staff-topline">
           <div>
-            <p class="eyebrow">מהיר, ברור, מותאם למשמרת</p>
-            <strong>ממשק צוות</strong>
+            <p class="eyebrow">{{ workspaceEyebrow }}</p>
+            <strong>{{ workspaceTitle }}</strong>
           </div>
           @if (auth.currentUser$ | async; as user) {
             <div class="actions-inline">
@@ -92,20 +88,41 @@ export class WaiterShellComponent {
     void this.router.navigateByUrl('/login');
   }
 
-  canUseWaiterScreens(user: User): boolean {
-    return user.role === UserRole.Admin || user.role === UserRole.Waiter;
+  get workspace(): StaffWorkspace {
+    const path = this.router.url.split(/[?#]/)[0];
+    if (path === '/salad' || path.startsWith('/salad/')) {
+      return 'salad';
+    }
+
+    if (path === '/kitchen' || path.startsWith('/kitchen/')) {
+      return 'kitchen';
+    }
+
+    return 'waiter';
   }
 
-  canUseTablesScreen(user: User): boolean {
-    return user.role === UserRole.Admin;
+  get workspaceEyebrow(): string {
+    if (this.workspace === 'salad') {
+      return 'תחנת סלטיה';
+    }
+
+    if (this.workspace === 'kitchen') {
+      return 'תחנת מטבח';
+    }
+
+    return 'מהיר, ברור, מותאם למשמרת';
   }
 
-  canUseKitchenScreen(user: User): boolean {
-    return user.role === UserRole.Admin || user.role === UserRole.Waiter || user.role === UserRole.Kitchen;
-  }
+  get workspaceTitle(): string {
+    if (this.workspace === 'salad') {
+      return 'ממשק סלטיה';
+    }
 
-  canUseSaladScreen(user: User): boolean {
-    return user.role === UserRole.Admin || user.role === UserRole.Waiter || user.role === UserRole.Salad;
+    if (this.workspace === 'kitchen') {
+      return 'ממשק מטבח';
+    }
+
+    return 'ממשק מלצרים';
   }
 
   private showRealtimeNotice(eventName: RealtimeEventName): void {
@@ -128,7 +145,7 @@ export class WaiterShellComponent {
       orderCreated: 'התקבלה הזמנה חדשה.',
       orderUpdated: 'הזמנה עודכנה.',
       orderStatusUpdated: 'סטטוס הזמנה עודכן.',
-      paymentAdded: 'תשלום חדש התקבל.',
+      paymentAdded: '',
       reservationCreated: 'התקבלה הזמנת מקום חדשה.',
       reservationStatusUpdated: 'סטטוס הזמנת מקום עודכן.'
     };

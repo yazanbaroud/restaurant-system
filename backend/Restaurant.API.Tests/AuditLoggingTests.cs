@@ -51,6 +51,7 @@ public sealed class AuditLoggingTests
     {
         using var factory = new TestWebApplicationFactory();
         var seed = await factory.ResetDatabaseAsync();
+        using var admin = factory.CreateAuthenticatedClient(seed.AdminId);
         using var waiter = factory.CreateAuthenticatedClient(seed.WaiterId);
 
         var orderResponse = await waiter.PostAsJsonAsync("/api/Orders", CreateOrderRequest(seed));
@@ -59,7 +60,7 @@ public sealed class AuditLoggingTests
         Assert.Equal(HttpStatusCode.Created, orderResponse.StatusCode);
         Assert.NotNull(order);
 
-        var paymentResponse = await waiter.PostAsJsonAsync("/api/Payments", PaymentRequest(order.Id, 40m, Guid.NewGuid()));
+        var paymentResponse = await admin.PostAsJsonAsync("/api/Payments", PaymentRequest(order.Id, 40m, Guid.NewGuid()));
         Assert.Equal(HttpStatusCode.Created, paymentResponse.StatusCode);
 
         using var scope = factory.Services.CreateScope();
@@ -74,7 +75,7 @@ public sealed class AuditLoggingTests
         Assert.Contains(auditLogs, x =>
             x.EntityType == AuditEntityTypes.Payment &&
             x.Action == AuditActions.PaymentCreated &&
-            x.PerformedByUserId == seed.WaiterId);
+            x.PerformedByUserId == seed.AdminId);
     }
 
     [Fact]
@@ -112,7 +113,7 @@ public sealed class AuditLoggingTests
         Assert.NotNull(order);
 
         var idempotencyKey = Guid.NewGuid();
-        var paymentResponse = await waiter.PostAsJsonAsync("/api/Payments", PaymentRequest(order.Id, 25m, idempotencyKey));
+        var paymentResponse = await admin.PostAsJsonAsync("/api/Payments", PaymentRequest(order.Id, 25m, idempotencyKey));
         Assert.Equal(HttpStatusCode.Created, paymentResponse.StatusCode);
 
         using var scope = factory.Services.CreateScope();

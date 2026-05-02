@@ -18,7 +18,7 @@ public sealed class RestaurantReliabilityTests
         using var factory = new TestWebApplicationFactory();
         var seed = await factory.ResetDatabaseAsync();
         var orderId = await factory.CreateOrderAsync(seed);
-        var client = factory.CreateAuthenticatedClient(seed.WaiterId);
+        var client = factory.CreateAuthenticatedClient(seed.AdminId);
 
         var response = await client.PostAsJsonAsync("/api/Payments", PaymentRequest(orderId, 101m, Guid.NewGuid()));
 
@@ -27,12 +27,38 @@ public sealed class RestaurantReliabilityTests
     }
 
     [Fact]
+    public async Task Payment_WaiterCannotAccessPaymentApis()
+    {
+        using var factory = new TestWebApplicationFactory();
+        var seed = await factory.ResetDatabaseAsync();
+        var orderId = await factory.CreateOrderAsync(seed);
+        var waiter = factory.CreateAuthenticatedClient(seed.WaiterId);
+
+        var create = await waiter.PostAsJsonAsync("/api/Payments", PaymentRequest(orderId, 10m, Guid.NewGuid()));
+        var refund = await waiter.PostAsJsonAsync("/api/Payments/refunds", new
+        {
+            orderId,
+            idempotencyKey = Guid.NewGuid(),
+            amount = 1m,
+            reason = "not allowed",
+            method = "Cash"
+        });
+        var byOrder = await waiter.GetAsync($"/api/Payments/order/{orderId}");
+        var refundsByOrder = await waiter.GetAsync($"/api/Payments/order/{orderId}/refunds");
+
+        Assert.Equal(HttpStatusCode.Forbidden, create.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, refund.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, byOrder.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, refundsByOrder.StatusCode);
+    }
+
+    [Fact]
     public async Task Payment_IdempotencyReplayReturnsExistingPayment()
     {
         using var factory = new TestWebApplicationFactory();
         var seed = await factory.ResetDatabaseAsync();
         var orderId = await factory.CreateOrderAsync(seed);
-        var client = factory.CreateAuthenticatedClient(seed.WaiterId);
+        var client = factory.CreateAuthenticatedClient(seed.AdminId);
         var key = Guid.NewGuid();
 
         var first = await PostPaymentAsync(client, orderId, 40m, key);
@@ -53,7 +79,7 @@ public sealed class RestaurantReliabilityTests
         using var factory = new TestWebApplicationFactory();
         var seed = await factory.ResetDatabaseAsync();
         var orderId = await factory.CreateOrderAsync(seed);
-        var client = factory.CreateAuthenticatedClient(seed.WaiterId);
+        var client = factory.CreateAuthenticatedClient(seed.AdminId);
         var key = Guid.NewGuid();
 
         var first = await PostPaymentAsync(client, orderId, 40m, key);
@@ -70,7 +96,7 @@ public sealed class RestaurantReliabilityTests
         using var factory = new TestWebApplicationFactory();
         var seed = await factory.ResetDatabaseAsync();
         var orderId = await factory.CreateOrderAsync(seed);
-        var client = factory.CreateAuthenticatedClient(seed.WaiterId);
+        var client = factory.CreateAuthenticatedClient(seed.AdminId);
 
         var first = await PostPaymentAsync(client, orderId, 100m, Guid.NewGuid());
         var second = await client.PostAsJsonAsync("/api/Payments", PaymentRequest(orderId, 1m, Guid.NewGuid()));
@@ -86,7 +112,7 @@ public sealed class RestaurantReliabilityTests
         using var factory = new TestWebApplicationFactory();
         var seed = await factory.ResetDatabaseAsync();
         var orderId = await factory.CreateOrderAsync(seed, kitchenStatus: KitchenStatus.New);
-        var client = factory.CreateAuthenticatedClient(seed.WaiterId);
+        var client = factory.CreateAuthenticatedClient(seed.AdminId);
 
         var payment = await PostPaymentAsync(client, orderId, 100m, Guid.NewGuid());
 
@@ -103,7 +129,7 @@ public sealed class RestaurantReliabilityTests
         using var factory = new TestWebApplicationFactory();
         var seed = await factory.ResetDatabaseAsync();
         var orderId = await factory.CreateOrderAsync(seed, kitchenStatus: KitchenStatus.Served, assignTable: true);
-        var client = factory.CreateAuthenticatedClient(seed.WaiterId);
+        var client = factory.CreateAuthenticatedClient(seed.AdminId);
 
         var payment = await PostPaymentAsync(client, orderId, 100m, Guid.NewGuid());
 
@@ -233,7 +259,7 @@ public sealed class RestaurantReliabilityTests
         using var factory = new TestWebApplicationFactory();
         var seed = await factory.ResetDatabaseAsync();
         var orderId = await factory.CreateOrderAsync(seed);
-        var client = factory.CreateAuthenticatedClient(seed.WaiterId);
+        var client = factory.CreateAuthenticatedClient(seed.AdminId);
         var gate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         var first = PostAfterGateAsync(client, gate.Task, "/api/Payments", PaymentRequest(orderId, 70m, Guid.NewGuid()));

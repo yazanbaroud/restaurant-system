@@ -8,7 +8,7 @@ namespace Restaurant.API.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize(Roles = AppRoles.AdminOrWaiter)]
+[Authorize(Roles = AppRoles.Admin)]
 public sealed class PaymentsController(IPaymentsService paymentsService) : ControllerBase
 {
     [HttpPost]

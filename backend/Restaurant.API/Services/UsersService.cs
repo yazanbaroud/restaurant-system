@@ -48,6 +48,7 @@ public sealed class UsersService(
 
     public async Task<UserResponseDto> CreateAsync(CreateUserDto dto, CancellationToken cancellationToken)
     {
+        EnsureStaffRole(dto.Role);
         await EnsureEmailAvailableAsync(dto.Email, null, cancellationToken);
 
         var user = new User
@@ -91,6 +92,7 @@ public sealed class UsersService(
 
     public async Task<UserResponseDto> UpdateRoleAsync(int currentUserId, int id, UpdateUserRoleDto dto, CancellationToken cancellationToken)
     {
+        EnsureStaffRole(dto.Role);
         var user = await db.Users.SingleOrDefaultAsync(x => x.Id == id, cancellationToken)
             ?? throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
 
@@ -187,6 +189,14 @@ public sealed class UsersService(
         foreach (var token in activeTokens)
         {
             token.RevokedAtUtc = now;
+        }
+    }
+
+    private static void EnsureStaffRole(UserRole role)
+    {
+        if (role is not (UserRole.Admin or UserRole.Waiter or UserRole.Kitchen or UserRole.Salad))
+        {
+            throw new ApiException("ניתן ליצור ולעדכן רק משתמשי צוות.", StatusCodes.Status400BadRequest);
         }
     }
 

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Restaurant.API.Data;
 using Restaurant.API.DTOs;
+using Restaurant.API.Enums;
 using Restaurant.API.Helpers;
 using Restaurant.API.Tests.Infrastructure;
 
@@ -20,7 +21,7 @@ public sealed class AuthSecurityTests
         using var factory = new TestWebApplicationFactory();
         await factory.ResetDatabaseAsync();
         using var client = factory.CreateClient();
-        var auth = await RegisterCustomerAsync(client, "disabled-login@test.local");
+        var auth = await CreateStaffAuthAsync(factory, client, "disabled-login@test.local");
 
         await DisableUserAsync(factory, auth.User.Id);
 
@@ -39,7 +40,7 @@ public sealed class AuthSecurityTests
         using var factory = new TestWebApplicationFactory();
         await factory.ResetDatabaseAsync();
         using var client = factory.CreateClient();
-        var auth = await RegisterCustomerAsync(client, "disabled-token@test.local");
+        var auth = await CreateStaffAuthAsync(factory, client, "disabled-token@test.local");
 
         await DisableUserAsync(factory, auth.User.Id);
 
@@ -56,7 +57,7 @@ public sealed class AuthSecurityTests
         using var factory = new TestWebApplicationFactory();
         await factory.ResetDatabaseAsync();
         using var client = factory.CreateClient();
-        var auth = await RegisterCustomerAsync(client, "password-change@test.local");
+        var auth = await CreateStaffAuthAsync(factory, client, "password-change@test.local");
 
         using var authorized = factory.CreateClient();
         authorized.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
@@ -81,7 +82,7 @@ public sealed class AuthSecurityTests
         using var factory = new TestWebApplicationFactory();
         await factory.ResetDatabaseAsync();
         using var client = factory.CreateClient();
-        var auth = await RegisterCustomerAsync(client, "refresh-rotate@test.local");
+        var auth = await CreateStaffAuthAsync(factory, client, "refresh-rotate@test.local");
 
         var refresh = await client.PostAsJsonAsync("/api/Auth/refresh", new { refreshToken = auth.RefreshToken });
         var rotated = await refresh.Content.ReadFromJsonAsync<AuthResponseDto>();
@@ -111,7 +112,7 @@ public sealed class AuthSecurityTests
         using var factory = new TestWebApplicationFactory();
         await factory.ResetDatabaseAsync();
         using var client = factory.CreateClient();
-        var auth = await RegisterCustomerAsync(client, "logout@test.local");
+        var auth = await CreateStaffAuthAsync(factory, client, "logout@test.local");
 
         using var authorized = factory.CreateClient();
         authorized.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.Token);
@@ -129,27 +130,47 @@ public sealed class AuthSecurityTests
     }
 
     [Fact]
-    public async Task Customer_CannotAccessAdminOrWaiterEndpoints()
+    public async Task Kitchen_CannotAccessAdminOrWaiterEndpoints()
     {
         using var factory = new TestWebApplicationFactory();
         var seed = await factory.ResetDatabaseAsync();
-        using var customer = factory.CreateAuthenticatedClient(seed.CustomerId);
+        using var kitchen = factory.CreateAuthenticatedClient(seed.KitchenId);
 
-        var adminEndpoint = await customer.GetAsync("/api/Users");
-        var waiterEndpoint = await customer.GetAsync("/api/Orders");
+        var adminEndpoint = await kitchen.GetAsync("/api/Users");
+        var waiterEndpoint = await kitchen.GetAsync("/api/Orders");
 
         Assert.Equal(HttpStatusCode.Forbidden, adminEndpoint.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, waiterEndpoint.StatusCode);
     }
 
-    private static async Task<AuthResponseDto> RegisterCustomerAsync(HttpClient client, string email)
+    [Fact]
+    public async Task RegisterEndpoint_IsRemoved()
     {
+        using var factory = new TestWebApplicationFactory();
+        await factory.ResetDatabaseAsync();
+        using var client = factory.CreateClient();
+
         var response = await client.PostAsJsonAsync("/api/Auth/register", new
         {
             firstName = "Security",
-            lastName = "Customer",
-            email,
+            lastName = "Staff",
+            email = "removed-register@test.local",
             phoneNumber = "0501234567",
+            password = Password
+        });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    private static async Task<AuthResponseDto> CreateStaffAuthAsync(
+        TestWebApplicationFactory factory,
+        HttpClient client,
+        string email)
+    {
+        await factory.CreateStaffUserAsync(email, UserRole.Waiter, Password);
+        var response = await client.PostAsJsonAsync("/api/Auth/login", new
+        {
+            email,
             password = Password
         });
 

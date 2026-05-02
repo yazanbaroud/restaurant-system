@@ -2,7 +2,6 @@ using Restaurant.API.Enums;
 
 namespace Restaurant.API.DTOs;
 
-public sealed record RegisterDto(string FirstName, string LastName, string Email, string PhoneNumber, string Password);
 public sealed record LoginDto(string Email, string Password);
 public sealed record RefreshTokenDto(string RefreshToken);
 public sealed record LogoutDto(string RefreshToken);

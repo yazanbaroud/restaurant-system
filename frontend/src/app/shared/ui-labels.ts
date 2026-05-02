@@ -15,7 +15,6 @@ export type BadgeTone = 'gold' | 'olive' | 'burgundy' | 'charcoal' | 'beige' | '
 export const roleLabels: Record<UserRole, string> = {
   [UserRole.Admin]: 'מנהל',
   [UserRole.Waiter]: 'מלצר',
-  [UserRole.Customer]: 'לקוח',
   [UserRole.Kitchen]: 'מטבח',
   [UserRole.Salad]: 'סלטיה'
 };

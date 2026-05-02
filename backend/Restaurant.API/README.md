@@ -1,6 +1,6 @@
 # Restaurant.API
 
-ASP.NET Core backend for the Restaurant Management System. The backend provides REST APIs for authentication, users, menu management, tables, orders, customer orders, payments, reservations, reports, dashboard metrics, and SignalR operational events.
+ASP.NET Core backend for the Restaurant Management System. The backend provides REST APIs for staff authentication, users, menu management, tables, staff-created orders, payments, public/staff reservations, reports, dashboard metrics, and SignalR operational events.
 
 ## Tech Stack
 
@@ -192,11 +192,11 @@ Roles:
 
 - `Admin`
 - `Waiter`
-- `Customer`
+- `Kitchen`
+- `Salad`
 
 Public endpoints:
 
-- `POST /api/Auth/register`
 - `POST /api/Auth/login`
 - public menu reads
 - `POST /api/Reservations`
@@ -207,17 +207,17 @@ Authenticated user endpoints:
 - `PUT /api/Auth/me`
 - `PUT /api/Auth/me/password`
 
-Customer-only endpoints:
-
-- `/api/customer/orders`
-- `/api/customer/tables/available`
-
 Admin/waiter endpoints:
 
 - operational orders
 - payments create and order-payment reads
 - table reads and table status updates
 - reservation reads
+
+Kitchen/salad endpoints:
+
+- production queue reads
+- production status updates for the matching station
 
 Admin-only endpoints:
 
@@ -234,7 +234,6 @@ Admin-only endpoints:
 
 Authentication:
 
-- `POST /api/Auth/register`
 - `POST /api/Auth/login`
 - `GET /api/Auth/me`
 - `PUT /api/Auth/me`
@@ -261,14 +260,6 @@ Orders:
 - table assignment updates
 - optional date/status/payment/order-type query filters
 
-Customer orders:
-
-- customer-only order list and details
-- customer-only create/update
-- customer-only item add/update/delete
-- customer-only available table options
-- totals and identity are calculated/derived server-side
-
 Payments:
 
 - admin/waiter create payments
@@ -278,8 +269,6 @@ Payments:
 Reservations:
 
 - public reservation creation
-- authenticated customer public reservation creation links ownership to the customer account
-- customer-only own reservation list, details, and cancel endpoints
 - admin/waiter reads with date/status/phone filters
 - admin update/status/delete
 - delete marks reservations cancelled
@@ -308,20 +297,18 @@ SignalR:
 - emitted events include `orderCreated`, `orderUpdated`, `orderStatusUpdated`, `paymentAdded`, `reservationCreated`, and `reservationStatusUpdated`
 - JWT can be supplied with the `access_token` query parameter for hub clients
 - the hub requires authentication
-- operational events are sent to Admin/Waiter groups
-- customer order events are also sent to the owning `user:{id}` group
+- operational order/payment/reservation events are sent to staff role groups
 
 ## Important Business Rules
 
-- Public registration creates customers only.
-- Admin and waiter accounts are created by admins.
+- Self-registration is disabled; all active accounts are staff accounts created by admins.
+- Active staff roles are Admin, Waiter, Kitchen, and Salad.
 - Password hashes are never returned by API responses.
-- Customers can only access their own customer orders.
-- Customer identity is derived from JWT claims, not request body data.
 - Order prices and totals are calculated server-side.
-- Dine-in customer orders require a valid available table.
-- Takeaway customer orders do not require a table.
-- Customer orders cannot be modified after payment or cancellation.
+- Orders can be created by Admin/Waiter only.
+- Dine-in staff orders require valid available tables.
+- Takeaway staff orders do not require a table.
+- Orders cannot be modified after payment or cancellation.
 - Menu item ordering requires the item and its category to be available/active.
 - Payments reject overpayment and paid-order duplicate payment attempts.
 - User deletion blocks deleting the active admin account and blocks deleting the last admin.
@@ -381,6 +368,5 @@ Swagger 401/403:
 
 ## Needs Verification
 
-- Automated backend test project is not present in this repository snapshot.
 - Fresh database creation from migrations should be verified against a temporary database before production deployment.
 - End-to-end SignalR behavior should be verified with at least two browser sessions before production deployment.

@@ -1,6 +1,6 @@
 # Restaurant Management System
 
-Full-stack restaurant management system for a Hebrew/RTL restaurant product. The repository contains an ASP.NET Core backend and an Angular frontend that together support public browsing, reservations, authenticated customer ordering, waiter operations, and admin management.
+Full-stack restaurant management system for a Hebrew/RTL restaurant product. The repository contains an ASP.NET Core backend and an Angular frontend that together support public browsing, public reservation requests, waiter operations, kitchen/salad queues, and admin management.
 
 ## Monorepo Structure
 
@@ -142,11 +142,12 @@ Swagger is only enabled when the backend runs in `Development`.
 
 ## Roles
 
-The system has three roles:
+The active system has four staff roles:
 
 - `Admin` - full management access.
 - `Waiter` - operational order, payment, table, and reservation visibility.
-- `Customer` - authenticated customer cart and own order history.
+- `Kitchen` - kitchen production queue access.
+- `Salad` - salad production queue access.
 
 Seed admin configuration exists under `SeedAdmin` in backend configuration. Treat checked-in values as local development placeholders and override them outside source control for shared environments.
 
@@ -154,7 +155,8 @@ Seed admin configuration exists under `SeedAdmin` in backend configuration. Trea
 
 - Admin workspace: `/admin`
 - Waiter workspace: `/waiter`
-- Customer cart/orders: `/cart`, `/orders`
+- Kitchen queue: `/waiter/kitchen`
+- Salad queue: `/waiter/salads`
 - Public guest flow: `/`, `/menu`, `/reservation`
 
 Credentials are intentionally not documented here. Use local seed configuration or project-specific test accounts for development.
@@ -166,18 +168,7 @@ Guest/public:
 - View home page and public menu.
 - View dish details.
 - Create reservation requests.
-- See order/cart calls to action, then redirect to login when action requires a customer account.
-
-Customer:
-
-- Register and log in.
-- View and update personal account details.
-- Change own password.
-- Add menu items to a client-side cart.
-- Submit customer orders as dine-in or takeaway.
-- Select an available table for dine-in orders.
-- View own orders and order details.
-- See order status and payment status as read-only.
+- Public menu browsing is browse-only; guests do not create orders or accounts.
 
 Waiter:
 
@@ -187,6 +178,16 @@ Waiter:
 - Advance/cancel/complete orders.
 - Add payments through waiter routes.
 - View reservations for operational awareness.
+
+Kitchen:
+
+- View kitchen queue.
+- Update kitchen item/order production status.
+
+Salad:
+
+- View salad queue.
+- Update salad item/order production status.
 
 Admin:
 
@@ -202,14 +203,13 @@ Admin:
 
 The backend exposes REST APIs and a SignalR hub. Controllers enforce authorization, services implement business logic, DTOs define public contracts, validators enforce request rules, and EF Core models persist restaurant data.
 
-The frontend is organized by role and feature area. Public, customer, waiter, and admin pages use shared services for authentication, restaurant data, customer cart state, and customer order API calls. Protected routes use `roleGuard`; API requests attach JWTs through an HTTP interceptor.
+The frontend is organized by role and feature area. Public, waiter, kitchen/salad, and admin pages use shared services for authentication and restaurant data. Protected routes use `roleGuard`; API requests attach JWTs through an HTTP interceptor.
 
 ## Known Limitations / Next Steps
 
-- Customer payment flow is not implemented; payment is currently handled by admin/waiter pages.
 - Some list endpoints and pages still rely on full-list loading rather than pagination.
-- Refresh tokens and token revocation are not implemented.
-- Automated test coverage is not present; use the backend manual QA checklist until tests are added.
+- Customer account, cart, online ordering, and customer-owned reservation history were removed; public reservation requests remain.
+- Browser end-to-end QA should still be run for Admin, Waiter, Kitchen, Salad, and public reservation flows before production.
 
 ## Documentation
 

@@ -81,18 +81,10 @@ public static class ServiceCollectionExtensions
                 RateLimitPartition.GetFixedWindowLimiter(
                     RateLimitPartitionKey(context, AppRateLimitPolicies.Login),
                     _ => FixedWindow(permitLimit: 5, TimeSpan.FromMinutes(1))));
-            options.AddPolicy(AppRateLimitPolicies.Register, context =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    RateLimitPartitionKey(context, AppRateLimitPolicies.Register),
-                    _ => FixedWindow(permitLimit: 3, TimeSpan.FromMinutes(5))));
             options.AddPolicy(AppRateLimitPolicies.PublicReservation, context =>
                 RateLimitPartition.GetFixedWindowLimiter(
                     RateLimitPartitionKey(context, AppRateLimitPolicies.PublicReservation),
                     _ => FixedWindow(permitLimit: 10, TimeSpan.FromMinutes(5))));
-            options.AddPolicy(AppRateLimitPolicies.CustomerOrderCreation, context =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    RateLimitPartitionKey(context, AppRateLimitPolicies.CustomerOrderCreation),
-                    _ => FixedWindow(permitLimit: 10, TimeSpan.FromMinutes(1))));
         });
 
         services.AddScoped<IPasswordHasher, PasswordHasher>();
@@ -106,7 +98,6 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IOrderTableAssignmentService, OrderTableAssignmentService>();
         services.AddScoped<IOrderStateService, OrderStateService>();
         services.AddScoped<IOrdersService, OrdersService>();
-        services.AddScoped<ICustomerOrdersService, CustomerOrdersService>();
         services.AddScoped<IPaymentsService, PaymentsService>();
         services.AddScoped<IReservationsService, ReservationsService>();
         services.AddScoped<IBusinessHoursService, BusinessHoursService>();
@@ -116,7 +107,7 @@ public static class ServiceCollectionExtensions
 
         services.AddControllers();
         services.AddFluentValidationAutoValidation();
-        services.AddValidatorsFromAssemblyContaining<RegisterDtoValidator>();
+        services.AddValidatorsFromAssemblyContaining<LoginDtoValidator>();
         services.AddSignalR();
         services.AddEndpointsApiExplorer();
         services.AddSwaggerGen(options =>

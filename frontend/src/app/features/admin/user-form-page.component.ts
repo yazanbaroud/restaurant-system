@@ -210,14 +210,14 @@ export class UserFormPageComponent implements OnInit {
 
   readonly roleLabels = roleLabels;
   readonly UserRole = UserRole;
-  readonly formRoles = [UserRole.Customer, UserRole.Waiter, UserRole.Kitchen, UserRole.Salad, UserRole.Admin];
+  readonly formRoles = [UserRole.Waiter, UserRole.Kitchen, UserRole.Salad, UserRole.Admin];
   readonly form = this.fb.nonNullable.group({
     firstName: ['', Validators.required],
     lastName: ['', Validators.required],
     email: ['', [Validators.required, Validators.email]],
     phoneNumber: ['', [Validators.required, israeliPhoneValidator()]],
     password: ['', strongPasswordValidator()],
-    role: [UserRole.Customer, Validators.required]
+    role: [UserRole.Waiter, Validators.required]
   });
   readonly passwordResetForm = this.fb.nonNullable.group({
     newPassword: ['', [Validators.required, strongPasswordValidator()]],
@@ -484,6 +484,6 @@ export class UserFormPageComponent implements OnInit {
       return UserRole.Salad;
     }
 
-    return UserRole.Customer;
+    return UserRole.Waiter;
   }
 }

@@ -69,11 +69,11 @@ function shouldRefresh(request: HttpRequest<unknown>, error: unknown, auth: Auth
 }
 
 function shouldAttachAccessToken(request: HttpRequest<unknown>): boolean {
-  return !isAuthEndpoint(request, ['login', 'register', 'refresh', 'logout']);
+  return !isAuthEndpoint(request, ['login', 'refresh', 'logout']);
 }
 
 function isAuthLifecycleRequest(request: HttpRequest<unknown>): boolean {
-  return isAuthEndpoint(request, ['login', 'register', 'refresh', 'logout']);
+  return isAuthEndpoint(request, ['login', 'refresh', 'logout']);
 }
 
 function isAuthEndpoint(request: HttpRequest<unknown>, actions: string[]): boolean {

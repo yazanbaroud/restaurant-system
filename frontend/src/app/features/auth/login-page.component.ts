@@ -1,6 +1,6 @@
 import { Component, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { finalize } from 'rxjs';
 
 import { User, UserRole } from '../../core/models';
@@ -14,14 +14,14 @@ import { roleLabels } from '../../shared/ui-labels';
 @Component({
   selector: 'app-login-page',
   standalone: true,
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule],
   template: `
     <section class="auth-page" dir="rtl">
       <div class="auth-card">
         <p class="eyebrow">כניסה למערכת</p>
         <h1>ברוכים הבאים למסעדת הכבש</h1>
         <p class="muted">
-          התחברו כדי להמשיך להזמנות, לאזור האישי או לממשק הצוות המתאים לכם.
+          התחברו כדי להמשיך לאזור האישי או לממשק הצוות המתאים לכם.
         </p>
 
         @if (requestedRoleLabel) {
@@ -53,8 +53,6 @@ import { roleLabels } from '../../shared/ui-labels';
             {{ isSubmitting ? 'מתחברים...' : 'כניסה' }}
           </button>
         </form>
-
-        <a class="text-link" routerLink="/register">פתיחת חשבון לקוח</a>
       </div>
     </section>
   `

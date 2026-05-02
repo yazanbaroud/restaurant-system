@@ -22,16 +22,16 @@ public sealed class RestaurantHub : Hub
                 await Groups.AddToGroupAsync(Context.ConnectionId, RestaurantRealtimeGroups.Waiter);
             }
 
-            if (user.IsInRole(AppRoles.Customer))
+            if (user.IsInRole(AppRoles.Kitchen))
             {
-                await Groups.AddToGroupAsync(Context.ConnectionId, RestaurantRealtimeGroups.Customer);
+                await Groups.AddToGroupAsync(Context.ConnectionId, RestaurantRealtimeGroups.Kitchen);
             }
 
-            var userId = user.GetUserId();
-            if (userId > 0)
+            if (user.IsInRole(AppRoles.Salad))
             {
-                await Groups.AddToGroupAsync(Context.ConnectionId, RestaurantRealtimeGroups.User(userId));
+                await Groups.AddToGroupAsync(Context.ConnectionId, RestaurantRealtimeGroups.Salad);
             }
+
         }
 
         await base.OnConnectedAsync();

@@ -21,47 +21,13 @@ public sealed class AuthService(
 {
     private readonly JwtSettings jwtSettings = jwtOptions.Value;
 
-    public async Task<AuthResponseDto> RegisterCustomerAsync(RegisterDto dto, CancellationToken cancellationToken)
-    {
-        var normalizedEmail = dto.Email.Trim().ToLowerInvariant();
-        if (await db.Users.AnyAsync(x => x.Email == normalizedEmail, cancellationToken))
-        {
-            throw new ApiException("An account with this email already exists.", StatusCodes.Status409Conflict);
-        }
-
-        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
-
-        var user = new User
-        {
-            FirstName = dto.FirstName.Trim(),
-            LastName = dto.LastName.Trim(),
-            Email = normalizedEmail,
-            PhoneNumber = dto.PhoneNumber.Trim(),
-            PasswordHash = passwordHasher.HashPassword(dto.Password),
-            Role = UserRole.Customer,
-            IsActive = true
-        };
-
-        db.Users.Add(user);
-        await db.SaveChangesAsync(cancellationToken);
-
-        var response = await IssueTokenPairAsync(user, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        await audit.TryLogAsync(
-            new AuditLogEntry(AuditEntityTypes.User, user.Id, AuditActions.Create, user.Id, NewValues: UserAuditSnapshot(user)),
-            cancellationToken);
-        logger.LogInformation("Customer registered with user id {UserId}", user.Id);
-        return response;
-    }
-
     public async Task<AuthResponseDto> LoginAsync(LoginDto dto, CancellationToken cancellationToken)
     {
         var email = dto.Email.Trim().ToLowerInvariant();
         var user = await db.Users.SingleOrDefaultAsync(x => x.Email == email, cancellationToken);
         logger.LogInformation("Login attempt for {Email}", email);
 
-        if (user is null || !user.IsActive || !passwordHasher.VerifyPassword(dto.Password, user.PasswordHash))
+        if (user is null || !user.IsActive || !IsStaffRole(user.Role) || !passwordHasher.VerifyPassword(dto.Password, user.PasswordHash))
         {
             throw new ApiException("Invalid email or password.", StatusCodes.Status401Unauthorized);
         }
@@ -82,7 +48,7 @@ public sealed class AuthService(
             throw new ApiException("Refresh token is invalid or expired.", StatusCodes.Status401Unauthorized);
         }
 
-        if (!refreshToken.User.IsActive)
+        if (!refreshToken.User.IsActive || !IsStaffRole(refreshToken.User.Role))
         {
             logger.LogWarning("Rejected refresh token rotation for disabled user {UserId}", refreshToken.UserId);
             throw new ApiException("User account is disabled.", StatusCodes.Status401Unauthorized);
@@ -228,7 +194,7 @@ public sealed class AuthService(
 
     private static void EnsureActive(User user)
     {
-        if (!user.IsActive)
+        if (!user.IsActive || !IsStaffRole(user.Role))
         {
             throw new ApiException("User account is disabled.", StatusCodes.Status401Unauthorized);
         }
@@ -239,6 +205,9 @@ public sealed class AuthService(
 
     private bool IsSqlServer() =>
         string.Equals(db.Database.ProviderName, "Microsoft.EntityFrameworkCore.SqlServer", StringComparison.Ordinal);
+
+    private static bool IsStaffRole(UserRole role) =>
+        role is UserRole.Admin or UserRole.Waiter or UserRole.Kitchen or UserRole.Salad;
 
     private static UserAuditValues UserAuditSnapshot(User user) =>
         new(user.Role.ToString(), user.IsActive, user.TokenVersion);

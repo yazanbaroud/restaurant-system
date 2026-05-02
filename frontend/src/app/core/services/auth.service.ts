@@ -25,15 +25,6 @@ export interface LoginRequest {
   password: string;
 }
 
-export interface RegisterRequest {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phoneNumber: string;
-  password: string;
-  role?: UserRole;
-}
-
 export interface UpdateProfileRequest {
   firstName: string;
   lastName: string;
@@ -96,12 +87,6 @@ export class AuthService {
 
   login(credentials: LoginRequest): Observable<User> {
     return this.http.post<unknown>(`${this.apiBaseUrl}/api/Auth/login`, credentials).pipe(
-      switchMap((response) => this.applyAuthResponse(response))
-    );
-  }
-
-  register(input: RegisterRequest): Observable<User> {
-    return this.http.post<unknown>(`${this.apiBaseUrl}/api/Auth/register`, input).pipe(
       switchMap((response) => this.applyAuthResponse(response))
     );
   }
@@ -295,13 +280,12 @@ export class AuthService {
       }
     }
 
-    return UserRole.Customer;
+    return UserRole.Waiter;
   }
 
   private isKnownRole(value: number): value is UserRole {
     return value === UserRole.Admin ||
       value === UserRole.Waiter ||
-      value === UserRole.Customer ||
       value === UserRole.Kitchen ||
       value === UserRole.Salad;
   }

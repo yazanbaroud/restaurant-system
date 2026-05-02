@@ -16,13 +16,7 @@ export const routes: Routes = [
       { path: 'menu/:id', loadComponent: () => import('./features/public/dish-details-page.component').then((m) => m.DishDetailsPageComponent) },
       { path: 'reservation', loadComponent: () => import('./features/public/reservation-page.component').then((m) => m.ReservationPageComponent) },
       { path: 'account', loadComponent: () => import('./features/account/account-page.component').then((m) => m.AccountPageComponent), canActivate: [roleGuard] },
-      { path: 'cart', loadComponent: () => import('./features/customer/cart-page.component').then((m) => m.CartPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
-      { path: 'orders', loadComponent: () => import('./features/customer/customer-orders-page.component').then((m) => m.CustomerOrdersPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
-      { path: 'orders/:id', loadComponent: () => import('./features/customer/customer-order-details-page.component').then((m) => m.CustomerOrderDetailsPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
-      { path: 'reservations', loadComponent: () => import('./features/customer/customer-reservations-page.component').then((m) => m.CustomerReservationsPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
-      { path: 'reservations/:id', loadComponent: () => import('./features/customer/customer-reservation-details-page.component').then((m) => m.CustomerReservationDetailsPageComponent), canActivate: [roleGuard], data: { roles: [UserRole.Customer] } },
-      { path: 'login', loadComponent: () => import('./features/auth/login-page.component').then((m) => m.LoginPageComponent) },
-      { path: 'register', loadComponent: () => import('./features/auth/register-page.component').then((m) => m.RegisterPageComponent) }
+      { path: 'login', loadComponent: () => import('./features/auth/login-page.component').then((m) => m.LoginPageComponent) }
     ]
   },
   {

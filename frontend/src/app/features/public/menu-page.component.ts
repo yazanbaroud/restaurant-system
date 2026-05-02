@@ -1,15 +1,11 @@
 import { AsyncPipe } from '@angular/common';
-import { Component, OnDestroy, inject } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { catchError, combineLatest, debounceTime, distinctUntilChanged, map, of, shareReplay, startWith } from 'rxjs';
 
-import { MenuCategory, MenuCategoryRecord, MenuItem, UserRole } from '../../core/models';
-import { AuthService } from '../../core/services/auth.service';
-import { CustomerCartLine, CustomerCartService } from '../../core/services/customer-cart.service';
-import { FeedbackService } from '../../core/services/feedback.service';
+import { MenuCategory, MenuCategoryRecord, MenuItem } from '../../core/models';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
-import { FloatingCartComponent } from '../../shared/components/floating-cart.component';
 import { MenuItemCardComponent } from '../../shared/components/menu-item-card.component';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
 import { categoryLabels } from '../../shared/ui-labels';
@@ -30,24 +26,14 @@ interface MenuViewModel {
 @Component({
   selector: 'app-menu-page',
   standalone: true,
-  imports: [AsyncPipe, FloatingCartComponent, MenuItemCardComponent, PageHeaderComponent, ReactiveFormsModule, RouterLink],
+  imports: [AsyncPipe, MenuItemCardComponent, PageHeaderComponent, ReactiveFormsModule, RouterLink],
   template: `
     <section class="container page-surface customer-menu-page">
       <app-page-header
         eyebrow="תפריט"
         title="תפריט מסעדת הכבש"
-        subtitle="מנות זמינות להזמנה, מסודרות לפי קטגוריות כדי שתוכלו לבנות ארוחה מהר ובקלות."
+        subtitle="מנות זמינות במסעדה, מסודרות לפי קטגוריות כדי שתוכלו לבחור ארוחה במקום."
       >
-        @if (shouldShowCartAction()) {
-          <button type="button" class="btn btn-dark" (click)="openCart()">
-            העגלה שלי
-            @if (cart.itemCount$ | async; as count) {
-              @if (count > 0) {
-                <span class="menu-cart-count">{{ count }}</span>
-              }
-            }
-          </button>
-        }
         <a class="btn btn-gold" routerLink="/reservation">הזמנת מקום</a>
       </app-page-header>
 
@@ -90,10 +76,6 @@ interface MenuViewModel {
           }
         </div>
 
-        @if (cartMessage) {
-          <p class="success-note menu-feedback" role="status">{{ cartMessage }}</p>
-        }
-
         @if (vm.hasError) {
           <div class="empty-state">
             <h2>לא הצלחנו לטעון את התפריט</h2>
@@ -112,23 +94,11 @@ interface MenuViewModel {
             <button type="button" class="btn btn-ghost" (click)="clearSearch()">ניקוי חיפוש</button>
           </div>
         } @else {
-          @if (cart.lines$ | async; as cartLines) {
-            <div class="menu-grid customer-menu-grid">
-              @for (item of vm.items; track item.id) {
-                <app-menu-item-card
-                  [item]="item"
-                  [showAdd]="shouldShowCartAction()"
-                  [showQuantityControls]="canManageCart()"
-                  [quantityInCart]="quantityInCart(item.id, cartLines)"
-                  [isRecentlyAdded]="lastChangedItemId === item.id"
-                  [compact]="true"
-                  (add)="addToCart($event)"
-                  (increment)="addToCart($event)"
-                  (decrement)="decrementItem($event)"
-                />
-              }
-            </div>
-          }
+          <div class="menu-grid customer-menu-grid">
+            @for (item of vm.items; track item.id) {
+              <app-menu-item-card [item]="item" [compact]="true" />
+            }
+          </div>
         }
       } @else {
         <div class="menu-skeleton-grid" aria-label="טוען תפריט">
@@ -138,24 +108,10 @@ interface MenuViewModel {
         </div>
       }
     </section>
-    <app-floating-cart />
   `,
   styles: [`
     .customer-menu-page {
       overflow: visible;
-    }
-
-    .menu-cart-count {
-      display: inline-grid;
-      place-items: center;
-      min-width: 24px;
-      min-height: 24px;
-      padding-inline: 7px;
-      border-radius: 999px;
-      background: var(--gold);
-      color: var(--brown-950);
-      font-size: 0.78rem;
-      font-weight: 950;
     }
 
     .menu-toolbar {
@@ -249,14 +205,6 @@ interface MenuViewModel {
       font: inherit;
     }
 
-    .menu-feedback {
-      margin-bottom: 10px;
-      padding: 8px 10px;
-      border: 1px solid rgba(102, 112, 68, 0.22);
-      border-radius: var(--radius);
-      background: rgba(102, 112, 68, 0.1);
-    }
-
     .customer-menu-grid {
       gap: 14px;
     }
@@ -299,13 +247,8 @@ interface MenuViewModel {
     }
   `]
 })
-export class MenuPageComponent implements OnDestroy {
+export class MenuPageComponent {
   private readonly data = inject(RestaurantDataService);
-  private readonly auth = inject(AuthService);
-  readonly cart = inject(CustomerCartService);
-  private readonly feedback = inject(FeedbackService);
-  private readonly router = inject(Router);
-  private feedbackTimeout: ReturnType<typeof setTimeout> | null = null;
 
   readonly searchControl = new FormControl('', { nonNullable: true });
   readonly categoryControl = new FormControl<CategoryFilter>('all', { nonNullable: true });
@@ -331,15 +274,6 @@ export class MenuPageComponent implements OnDestroy {
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
-  cartMessage = '';
-  lastChangedItemId: number | null = null;
-
-  ngOnDestroy(): void {
-    if (this.feedbackTimeout) {
-      clearTimeout(this.feedbackTimeout);
-    }
-  }
-
   selectCategory(category: CategoryFilter): void {
     this.categoryControl.setValue(category);
   }
@@ -348,64 +282,10 @@ export class MenuPageComponent implements OnDestroy {
     this.searchControl.setValue('');
   }
 
-  openCart(): void {
-    if (!this.canManageCart()) {
-      this.redirectToLogin('/cart');
-      return;
-    }
-
-    void this.router.navigate(['/cart']);
-  }
-
   reloadPage(): void {
     if (typeof window !== 'undefined') {
       window.location.reload();
     }
-  }
-
-  shouldShowCartAction(): boolean {
-    const role = this.auth.currentUser?.role;
-    return !role || role === UserRole.Customer;
-  }
-
-  canManageCart(): boolean {
-    return this.auth.currentUser?.role === UserRole.Customer;
-  }
-
-  addToCart(item: MenuItem): void {
-    if (!this.canManageCart()) {
-      this.redirectToLogin();
-      return;
-    }
-
-    const currentQuantity = this.cart.quantityFor(item.id);
-    this.cart.addItem(item);
-    this.showCartFeedback(
-      item.id,
-      currentQuantity
-        ? `הכמות של ${item.name} עודכנה ל-${currentQuantity + 1}`
-        : `${item.name} נוספה לעגלה`
-    );
-  }
-
-  decrementItem(item: MenuItem): void {
-    if (!this.canManageCart()) {
-      this.redirectToLogin();
-      return;
-    }
-
-    const currentQuantity = this.cart.quantityFor(item.id);
-    this.cart.updateQuantity(item.id, currentQuantity - 1);
-    this.showCartFeedback(
-      item.id,
-      currentQuantity > 1
-        ? `הכמות של ${item.name} עודכנה ל-${currentQuantity - 1}`
-        : `${item.name} הוסרה מהעגלה`
-    );
-  }
-
-  quantityInCart(menuItemId: number, lines: CustomerCartLine[]): number {
-    return lines.find((line) => line.item.id === menuItemId)?.quantity ?? 0;
   }
 
   private buildViewModel(
@@ -503,31 +383,5 @@ export class MenuPageComponent implements OnDestroy {
     }
 
     return categories.find((category) => category.id === selectedCategory)?.name ?? 'קטגוריה נבחרת';
-  }
-
-  private showCartFeedback(itemId: number, message: string): void {
-    this.cartMessage = message;
-    this.lastChangedItemId = itemId;
-    this.feedback.success();
-
-    if (this.feedbackTimeout) {
-      clearTimeout(this.feedbackTimeout);
-    }
-
-    this.feedbackTimeout = setTimeout(() => {
-      this.cartMessage = '';
-      this.lastChangedItemId = null;
-    }, 2400);
-  }
-
-  private redirectToLogin(returnUrl = this.router.url): void {
-    this.cartMessage = 'כדי להוסיף מנות לעגלה צריך להתחבר כלקוח.';
-    this.feedback.info(this.cartMessage);
-    void this.router.navigate(['/login'], {
-      queryParams: {
-        returnUrl,
-        role: UserRole.Customer
-      }
-    });
   }
 }

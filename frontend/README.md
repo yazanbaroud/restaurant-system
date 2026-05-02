@@ -1,6 +1,6 @@
 # Hakeves Restaurant Frontend
 
-Angular frontend for the Restaurant Management System. The app is a Hebrew/RTL restaurant experience with public pages, authenticated customer ordering, waiter operations, and admin management screens.
+Angular frontend for the Restaurant Management System. The app is a Hebrew/RTL restaurant experience with public pages, public reservation booking, waiter operations, kitchen/salad queues, and admin management screens.
 
 ## Tech Stack
 
@@ -17,19 +17,9 @@ Angular frontend for the Restaurant Management System. The app is a Hebrew/RTL r
 Public:
 
 - Home page with hero content and a small featured menu teaser.
-- Public menu with search, category filtering, sorting, dish details, and add-to-cart prompts.
+- Public menu with search, category filtering, sorting, and dish details.
 - Public reservation request form.
-- Login and customer registration.
-
-Customer:
-
-- Client-side cart stored per customer in `localStorage`.
-- Add/update/remove cart items from menu and dish detail pages.
-- Submit dine-in or takeaway orders through customer-only API endpoints.
-- Select an available table for dine-in orders.
-- View own order history and order details.
-- View order status and payment status as read-only.
-- Account/profile page and own password change.
+- Staff login.
 
 Waiter:
 
@@ -37,6 +27,11 @@ Waiter:
 - Create order flow.
 - Shared order details and payment pages under waiter routes.
 - Reservation list with filtering.
+
+Kitchen/Salad:
+
+- Queue screens for kitchen and salad production work.
+- Status updates from staff-only routes.
 
 Admin:
 
@@ -71,7 +66,6 @@ frontend/
 |       |   |-- account/
 |       |   |-- admin/
 |       |   |-- auth/
-|       |   |-- customer/
 |       |   |-- public/
 |       |   `-- waiter/
 |       `-- shared/
@@ -168,7 +162,7 @@ dist/hakeves-restaurant-frontend
 {
   "ng": "ng",
   "start": "ng serve --host 0.0.0.0 --port 4200",
-  "build": "ng build",
+  "build": "node scripts/write-app-config.mjs && ng build",
   "watch": "ng build --watch --configuration development"
 }
 ```
@@ -182,21 +176,17 @@ Guest/public routes:
 - `/menu/:id`
 - `/reservation`
 - `/login`
-- `/register`
 
-Authenticated customer routes:
+Authenticated staff route:
 
 - `/account`
-- `/cart`
-- `/orders`
-- `/orders/:id`
-- `/reservations`
-- `/reservations/:id`
 
 Waiter routes:
 
 - `/waiter`
 - `/waiter/create-order`
+- `/waiter/kitchen`
+- `/waiter/salads`
 - `/waiter/orders/:id`
 - `/waiter/orders/:id/payment`
 - `/waiter/reservations`
@@ -224,15 +214,11 @@ Admin routes:
 
 Route access is enforced by `roleGuard` in `src/app/core/guards/role.guard.ts`. JWTs are attached by `authInterceptor` from `src/app/core/interceptors/auth.interceptor.ts`.
 
-## Customer Cart and Order Flow
+## Public Menu Flow
 
-- Cart state is client-side only and is stored in `localStorage` under a key scoped to the customer ID.
-- Guests can see cart/order calls to action, but attempting cart actions redirects to login.
-- Only users with the `Customer` role can access `/cart`, `/orders`, and `/orders/:id`.
-- Cart submission calls `POST /api/customer/orders`.
-- Dine-in customer orders require an available table.
-- Takeaway orders do not require a table.
-- Customer payment is not implemented in the frontend. Customers only see `paymentStatus` as read-only.
+- Public users can browse menu items and dish details.
+- Public users cannot add items to a cart or create orders.
+- Staff order creation remains under Admin/Waiter routes.
 
 ## Reservation Flow
 
@@ -241,7 +227,6 @@ Route access is enforced by `roleGuard` in `src/app/core/guards/role.guard.ts`. 
 - The UI presents the request as pending final confirmation. It does not promise automatic approval.
 - The page reads public business hours from `GET /api/business-hours` and blocks closed days or out-of-hours times in the UI.
 - Backend reservation validation remains the source of truth for business hours.
-- Logged-in customers can view and cancel their own reservations from `/reservations`.
 - Admins manage reservation status and restaurant notes from admin pages.
 - Waiters can view reservations for operational awareness.
 

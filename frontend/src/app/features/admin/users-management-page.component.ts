@@ -45,13 +45,12 @@ import { roleLabels } from '../../shared/ui-labels';
             <option [value]="roleOptionValue(UserRole.Waiter)">מלצר</option>
             <option [value]="roleOptionValue(UserRole.Kitchen)">מטבח</option>
             <option [value]="roleOptionValue(UserRole.Salad)">סלטיה</option>
-            <option [value]="roleOptionValue(UserRole.Customer)">לקוח</option>
           </select>
         </label>
 
         <div class="actions-inline toolbar-actions">
-          <a class="btn btn-gold" [routerLink]="['/admin/users/new']" [queryParams]="{ role: 'customer' }">משתמש חדש</a>
-          <a class="btn btn-dark" [routerLink]="['/admin/users/new']" [queryParams]="{ role: 'waiter' }">מלצר חדש</a>
+          <a class="btn btn-gold" [routerLink]="['/admin/users/new']" [queryParams]="{ role: 'waiter' }">משתמש חדש</a>
+          <a class="btn btn-dark" [routerLink]="['/admin/users/new']" [queryParams]="{ role: 'kitchen' }">מטבח חדש</a>
         </div>
       </div>
 

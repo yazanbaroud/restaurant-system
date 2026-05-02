@@ -53,10 +53,7 @@ export function canUseReturnUrlForRole(role: UserRole, returnUrl: string | null)
 
   return path === '/' ||
     isRouteSection(path, '/menu') ||
-    isRouteSection(path, '/reservation') ||
-    isRouteSection(path, '/cart') ||
-    isRouteSection(path, '/orders') ||
-    isRouteSection(path, '/reservations');
+    isRouteSection(path, '/reservation');
 }
 
 function pathFromReturnUrl(returnUrl: string | null): string | null {

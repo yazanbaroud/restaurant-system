@@ -98,23 +98,23 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
             PasswordHash = "not-used",
             Role = UserRole.Waiter
         };
-        var customer = new User
+        var kitchen = new User
         {
-            FirstName = "Chris",
-            LastName = "Customer",
-            Email = "customer@test.local",
+            FirstName = "Kira",
+            LastName = "Kitchen",
+            Email = "kitchen@test.local",
             PhoneNumber = "0500000003",
             PasswordHash = "not-used",
-            Role = UserRole.Customer
+            Role = UserRole.Kitchen
         };
-        var otherCustomer = new User
+        var salad = new User
         {
-            FirstName = "Olive",
-            LastName = "Other",
-            Email = "other@test.local",
+            FirstName = "Sami",
+            LastName = "Salad",
+            Email = "salad@test.local",
             PhoneNumber = "0500000004",
             PasswordHash = "not-used",
-            Role = UserRole.Customer
+            Role = UserRole.Salad
         };
 
         var category = new MenuCategoryRecord
@@ -157,7 +157,7 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
             Status = TableStatus.Available
         };
 
-        db.Users.AddRange(admin, waiter, customer, otherCustomer);
+        db.Users.AddRange(admin, waiter, kitchen, salad);
         db.MenuCategories.Add(category);
         db.MenuItems.AddRange(mainItem, sideItem);
         db.Tables.AddRange(tableOne, tableTwo);
@@ -166,12 +166,37 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
         return new TestSeed(
             admin.Id,
             waiter.Id,
-            customer.Id,
-            otherCustomer.Id,
+            kitchen.Id,
+            salad.Id,
             mainItem.Id,
             sideItem.Id,
             tableOne.Id,
             tableTwo.Id);
+    }
+
+    public async Task<int> CreateStaffUserAsync(
+        string email,
+        UserRole role = UserRole.Waiter,
+        string password = "Secure123!",
+        bool isActive = true)
+    {
+        using var scope = Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+        var user = new User
+        {
+            FirstName = "Test",
+            LastName = "Staff",
+            Email = email,
+            PhoneNumber = $"050{Random.Shared.Next(1000000, 9999999)}",
+            PasswordHash = passwordHasher.HashPassword(password),
+            Role = role,
+            IsActive = isActive
+        };
+
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+        return user.Id;
     }
 
     public HttpClient CreateAuthenticatedClient(int userId)
@@ -263,8 +288,8 @@ public sealed class TestWebApplicationFactory : WebApplicationFactory<Program>
 public sealed record TestSeed(
     int AdminId,
     int WaiterId,
-    int CustomerId,
-    int OtherCustomerId,
+    int KitchenId,
+    int SaladId,
     int MainItemId,
     int SideItemId,
     int TableOneId,

@@ -129,7 +129,7 @@ public sealed class PaymentsService(
             await LogPaymentCreatedAsync(payment, createdByUserId, result, cancellationToken);
             await LogOrderStatusChangeAsync(order, createdByUserId, oldOrderStatusValues, cancellationToken);
             await LogTableAssignmentChangeAsync(order, createdByUserId, oldTableIds, TableIds(order), cancellationToken);
-            await NotifyPaymentAddedAsync(result, CustomerUserId(order), cancellationToken);
+            await NotifyPaymentAddedAsync(result, cancellationToken);
 
             return result;
         }
@@ -613,11 +613,11 @@ public sealed class PaymentsService(
         }
     }
 
-    private async Task NotifyPaymentAddedAsync(CreatePaymentResponseDto result, int? customerUserId, CancellationToken cancellationToken)
+    private async Task NotifyPaymentAddedAsync(CreatePaymentResponseDto result, CancellationToken cancellationToken)
     {
         try
         {
-            await realtimeNotifier.PaymentAddedAsync(result, customerUserId, cancellationToken);
+            await realtimeNotifier.PaymentAddedAsync(result, cancellationToken);
         }
         catch (Exception exception)
         {
@@ -711,9 +711,6 @@ public sealed class PaymentsService(
 
     private static bool SameTableIds(IReadOnlyCollection<int> left, IReadOnlyCollection<int> right) =>
         left.Count == right.Count && left.OrderBy(x => x).SequenceEqual(right.OrderBy(x => x));
-
-    private static int? CustomerUserId(Order order) =>
-        order.User?.Role == UserRole.Customer ? order.UserId : null;
 
     private static decimal NormalizeMoney(decimal value) =>
         decimal.Round(value, 2, MidpointRounding.AwayFromZero);

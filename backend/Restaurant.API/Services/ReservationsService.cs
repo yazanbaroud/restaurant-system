@@ -24,14 +24,9 @@ public sealed class ReservationsService(
         ReservationStatus.Arrived
     ];
 
-    public async Task<ReservationResponseDto> CreateAsync(CreateReservationDto dto, int? userId, CancellationToken cancellationToken)
+    public async Task<ReservationResponseDto> CreateAsync(CreateReservationDto dto, CancellationToken cancellationToken)
     {
         await businessHoursService.EnsureReservationTimeAllowedAsync(dto.ReservationDate, dto.ReservationTime, cancellationToken);
-
-        if (userId.HasValue)
-        {
-            await EnsureCustomerExistsAsync(userId.Value, cancellationToken);
-        }
 
         await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
         var durationMinutes = NormalizeDuration(dto.DurationMinutes);
@@ -40,7 +35,6 @@ public sealed class ReservationsService(
 
         var reservation = new Reservation
         {
-            UserId = userId,
             FirstName = dto.FirstName.Trim(),
             LastName = dto.LastName.Trim(),
             PhoneNumber = dto.PhoneNumber.Trim(),
@@ -59,7 +53,7 @@ public sealed class ReservationsService(
         await transaction.CommitAsync(cancellationToken);
         reservation.Table = table;
         await audit.TryLogAsync(
-            new AuditLogEntry(AuditEntityTypes.Reservation, reservation.Id, AuditActions.Create, userId, NewValues: ReservationAuditSnapshot(reservation)),
+            new AuditLogEntry(AuditEntityTypes.Reservation, reservation.Id, AuditActions.Create, NewValues: ReservationAuditSnapshot(reservation)),
             cancellationToken);
         logger.LogInformation("Reservation {ReservationId} created for {ReservationDate} at {ReservationTime}", reservation.Id, reservation.ReservationDate, reservation.ReservationTime);
         var response = reservation.ToReservationResponse();
@@ -220,67 +214,6 @@ public sealed class ReservationsService(
             cancellationToken);
         logger.LogInformation("Reservation {ReservationId} cancelled", reservation.Id);
         await realtimeNotifier.ReservationStatusUpdatedAsync(reservation.ToReservationResponse(), cancellationToken);
-    }
-
-    public async Task<IReadOnlyCollection<ReservationResponseDto>> GetForCustomerAsync(int userId, CancellationToken cancellationToken)
-    {
-        var reservations = await db.Reservations.AsNoTracking()
-            .Include(x => x.Table)
-            .Where(x => x.UserId == userId)
-            .OrderByDescending(x => x.ReservationDate)
-            .ThenByDescending(x => x.ReservationTime)
-            .Select(x => x.ToReservationResponse())
-            .ToArrayAsync(cancellationToken);
-
-        return reservations;
-    }
-
-    public async Task<ReservationResponseDto> GetForCustomerByIdAsync(int userId, int id, CancellationToken cancellationToken)
-    {
-        var reservation = await db.Reservations.AsNoTracking()
-            .Include(x => x.Table)
-            .SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, cancellationToken)
-            ?? throw new ApiException("הזמנת המקום לא נמצאה.", StatusCodes.Status404NotFound);
-
-        return reservation.ToReservationResponse();
-    }
-
-    public async Task<ReservationResponseDto> CancelForCustomerAsync(int userId, int id, CancellationToken cancellationToken)
-    {
-        var reservation = await db.Reservations.Include(x => x.Table)
-            .SingleOrDefaultAsync(x => x.Id == id && x.UserId == userId, cancellationToken)
-            ?? throw new ApiException("הזמנת המקום לא נמצאה.", StatusCodes.Status404NotFound);
-
-        if (reservation.Status is not (ReservationStatus.Pending or ReservationStatus.Approved))
-        {
-            throw new ApiException("לא ניתן לבטל את הזמנת המקום במצב הנוכחי.", StatusCodes.Status409Conflict);
-        }
-
-        var oldValues = ReservationAuditSnapshot(reservation);
-        reservation.Status = ReservationStatus.Cancelled;
-        reservation.RestaurantNotes = string.IsNullOrWhiteSpace(reservation.RestaurantNotes)
-            ? "בוטל על ידי הלקוח."
-            : reservation.RestaurantNotes;
-        await db.SaveChangesAsync(cancellationToken);
-        await audit.TryLogAsync(
-            new AuditLogEntry(AuditEntityTypes.Reservation, reservation.Id, AuditActions.Cancelled, userId, oldValues, ReservationAuditSnapshot(reservation)),
-            cancellationToken);
-
-        var response = reservation.ToReservationResponse();
-        logger.LogInformation("Customer {UserId} cancelled reservation {ReservationId}", userId, reservation.Id);
-        await realtimeNotifier.ReservationStatusUpdatedAsync(response, cancellationToken);
-        return response;
-    }
-
-    private async Task EnsureCustomerExistsAsync(int userId, CancellationToken cancellationToken)
-    {
-        var exists = await db.Users.AsNoTracking()
-            .AnyAsync(x => x.Id == userId && x.Role == UserRole.Customer, cancellationToken);
-
-        if (!exists)
-        {
-            throw new ApiException("המשתמש לא נמצא.", StatusCodes.Status404NotFound);
-        }
     }
 
     private async Task<Table?> FindAvailableTableForReservationAsync(

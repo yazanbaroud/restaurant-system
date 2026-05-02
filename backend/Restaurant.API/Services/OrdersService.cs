@@ -53,7 +53,7 @@ public sealed class OrdersService(
             await LogTableAssignmentChangeAsync(order, createdByUserId, [], TableIds(order), cancellationToken);
             logger.LogInformation("Order created with id {OrderId} and number {OrderNumber} by user {UserId}", order.Id, order.OrderNumber, createdByUserId);
             var response = order.ToOrderResponse();
-            await realtimeNotifier.OrderCreatedAsync(response, CustomerUserId(order), cancellationToken);
+            await realtimeNotifier.OrderCreatedAsync(response, cancellationToken);
             return response;
         }
         catch (DbUpdateConcurrencyException exception)
@@ -203,7 +203,9 @@ public sealed class OrdersService(
                 new AuditLogEntry(AuditEntityTypes.Order, order.Id, AuditActions.Update, OldValues: oldValues, NewValues: OrderAuditSnapshot(order)),
                 cancellationToken);
             await LogTableAssignmentChangeAsync(order, null, oldTableIds, TableIds(order), cancellationToken);
-            return order.ToOrderResponse();
+            var response = order.ToOrderResponse();
+            await realtimeNotifier.OrderUpdatedAsync(response, cancellationToken);
+            return response;
         }
         catch (DbUpdateConcurrencyException exception)
         {
@@ -279,7 +281,7 @@ public sealed class OrdersService(
             await LogTableAssignmentChangeAsync(order, changedByUserId, oldTableIds, TableIds(order), cancellationToken);
             logger.LogInformation("Order {OrderId} kitchen status advanced to {KitchenStatus}", order.Id, order.KitchenStatus);
             var response = order.ToOrderResponse();
-            await realtimeNotifier.OrderStatusUpdatedAsync(response, CustomerUserId(order), cancellationToken);
+            await realtimeNotifier.OrderStatusUpdatedAsync(response, cancellationToken);
             return response;
         }
         catch (DbUpdateConcurrencyException exception)
@@ -325,7 +327,7 @@ public sealed class OrdersService(
             await LogOrderStatusChangeAsync(order, changedByUserId, oldStatusValues, cancellationToken);
             await LogTableAssignmentChangeAsync(order, changedByUserId, oldTableIds, TableIds(order), cancellationToken);
             var response = order.ToOrderResponse();
-            await realtimeNotifier.OrderStatusUpdatedAsync(response, CustomerUserId(order), cancellationToken);
+            await realtimeNotifier.OrderStatusUpdatedAsync(response, cancellationToken);
             return response;
         }
         catch (DbUpdateConcurrencyException exception)
@@ -370,7 +372,7 @@ public sealed class OrdersService(
             await LogTableAssignmentChangeAsync(order, changedByUserId, oldTableIds, TableIds(order), cancellationToken);
             logger.LogInformation("Order {OrderId} cancelled by user {UserId}", order.Id, changedByUserId);
             var response = order.ToOrderResponse();
-            await realtimeNotifier.OrderStatusUpdatedAsync(response, CustomerUserId(order), cancellationToken);
+            await realtimeNotifier.OrderStatusUpdatedAsync(response, cancellationToken);
             return response;
         }
         catch (DbUpdateConcurrencyException exception)
@@ -471,7 +473,9 @@ public sealed class OrdersService(
             await transaction.CommitAsync(cancellationToken);
             await ReloadOrderAsync(order, cancellationToken);
             await LogTableAssignmentChangeAsync(order, null, oldTableIds, TableIds(order), cancellationToken);
-            return order.ToOrderResponse();
+            var response = order.ToOrderResponse();
+            await realtimeNotifier.OrderUpdatedAsync(response, cancellationToken);
+            return response;
         }
         catch (DbUpdateConcurrencyException exception)
         {
@@ -573,7 +577,9 @@ public sealed class OrdersService(
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             await ReloadOrderAsync(order, cancellationToken);
-            return order.ToOrderResponse();
+            var response = order.ToOrderResponse();
+            await realtimeNotifier.OrderUpdatedAsync(response, cancellationToken);
+            return response;
         }
         catch (DbUpdateConcurrencyException exception)
         {
@@ -715,9 +721,6 @@ public sealed class OrdersService(
             });
         }
     }
-
-    private static int? CustomerUserId(Order order) =>
-        order.User?.Role == UserRole.Customer ? order.UserId : null;
 
     private static void EnsureAuthenticatedUser(int userId)
     {

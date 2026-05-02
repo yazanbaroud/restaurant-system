@@ -4,7 +4,6 @@ namespace Restaurant.API.Interfaces;
 
 public interface IAuthService
 {
-    Task<AuthResponseDto> RegisterCustomerAsync(RegisterDto dto, CancellationToken cancellationToken);
     Task<AuthResponseDto> LoginAsync(LoginDto dto, CancellationToken cancellationToken);
     Task<AuthResponseDto> RefreshAsync(RefreshTokenDto dto, CancellationToken cancellationToken);
     Task LogoutAsync(int? userId, LogoutDto dto, CancellationToken cancellationToken);

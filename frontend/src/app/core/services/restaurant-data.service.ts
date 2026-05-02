@@ -801,7 +801,7 @@ export class RestaurantDataService {
       lastName: input.lastName ?? user?.lastName ?? '',
       email: input.email ?? user?.email ?? '',
       phoneNumber: input.phoneNumber ?? user?.phoneNumber ?? '',
-      role: user?.role ?? UserRole.Customer,
+      role: user?.role ?? UserRole.Waiter,
       isActive: user?.isActive ?? true
     };
   }
@@ -2424,10 +2424,6 @@ export class RestaurantDataService {
         return UserRole.Waiter;
       }
 
-      if (roleName === 'customer' || roleName === 'client') {
-        return UserRole.Customer;
-      }
-
       if (roleName === 'kitchen' || roleName === 'cook') {
         return UserRole.Kitchen;
       }
@@ -2437,7 +2433,7 @@ export class RestaurantDataService {
       }
     }
 
-    return UserRole.Customer;
+    return UserRole.Waiter;
   }
 
   private normalizeMenuCategory(value: unknown): number {

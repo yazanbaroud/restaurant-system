@@ -211,7 +211,7 @@ public sealed class RestaurantReliabilityTests
 
         var response = await client.PostAsJsonAsync("/api/Orders", new
         {
-            userId = seed.OtherCustomerId,
+            userId = seed.SaladId,
             customerFirstName = "JWT",
             customerLastName = "Owner",
             notes = "",
@@ -224,7 +224,7 @@ public sealed class RestaurantReliabilityTests
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.NotNull(order);
         Assert.Equal(seed.WaiterId, order.UserId);
-        Assert.NotEqual(seed.OtherCustomerId, order.UserId);
+        Assert.NotEqual(seed.SaladId, order.UserId);
     }
 
     [Fact]

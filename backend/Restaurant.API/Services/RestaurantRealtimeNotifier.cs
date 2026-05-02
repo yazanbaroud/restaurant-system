@@ -7,17 +7,17 @@ namespace Restaurant.API.Services;
 
 public sealed class RestaurantRealtimeNotifier(IHubContext<RestaurantHub> hub) : IRestaurantRealtimeNotifier
 {
-    public Task OrderCreatedAsync(OrderResponseDto order, int? customerUserId, CancellationToken cancellationToken) =>
-        SendOperationalAndCustomerAsync(RestaurantRealtimeEvents.OrderCreated, order, customerUserId, cancellationToken);
+    public Task OrderCreatedAsync(OrderResponseDto order, CancellationToken cancellationToken) =>
+        SendOrderAsync(RestaurantRealtimeEvents.OrderCreated, order, cancellationToken);
 
-    public Task OrderUpdatedAsync(OrderResponseDto order, int? customerUserId, CancellationToken cancellationToken) =>
-        SendOperationalAndCustomerAsync(RestaurantRealtimeEvents.OrderUpdated, order, customerUserId, cancellationToken);
+    public Task OrderUpdatedAsync(OrderResponseDto order, CancellationToken cancellationToken) =>
+        SendOrderAsync(RestaurantRealtimeEvents.OrderUpdated, order, cancellationToken);
 
-    public Task OrderStatusUpdatedAsync(OrderResponseDto order, int? customerUserId, CancellationToken cancellationToken) =>
-        SendOperationalAndCustomerAsync(RestaurantRealtimeEvents.OrderStatusUpdated, order, customerUserId, cancellationToken);
+    public Task OrderStatusUpdatedAsync(OrderResponseDto order, CancellationToken cancellationToken) =>
+        SendOrderAsync(RestaurantRealtimeEvents.OrderStatusUpdated, order, cancellationToken);
 
-    public Task PaymentAddedAsync(CreatePaymentResponseDto payment, int? customerUserId, CancellationToken cancellationToken) =>
-        SendOperationalAndCustomerAsync(RestaurantRealtimeEvents.PaymentAdded, payment, customerUserId, cancellationToken);
+    public Task PaymentAddedAsync(CreatePaymentResponseDto payment, CancellationToken cancellationToken) =>
+        SendOperationalAsync(RestaurantRealtimeEvents.PaymentAdded, payment, cancellationToken);
 
     public Task ReservationCreatedAsync(ReservationResponseDto reservation, CancellationToken cancellationToken) =>
         SendOperationalAsync(RestaurantRealtimeEvents.ReservationCreated, reservation, cancellationToken);
@@ -28,17 +28,6 @@ public sealed class RestaurantRealtimeNotifier(IHubContext<RestaurantHub> hub) :
     private Task SendOperationalAsync(string eventName, object payload, CancellationToken cancellationToken) =>
         hub.Clients.Groups(RestaurantRealtimeGroups.Operational).SendAsync(eventName, payload, cancellationToken);
 
-    private Task SendOperationalAndCustomerAsync(string eventName, object payload, int? customerUserId, CancellationToken cancellationToken)
-    {
-        if (customerUserId is null or <= 0)
-        {
-            return SendOperationalAsync(eventName, payload, cancellationToken);
-        }
-
-        var groups = RestaurantRealtimeGroups.Operational
-            .Append(RestaurantRealtimeGroups.User(customerUserId.Value))
-            .ToArray();
-
-        return hub.Clients.Groups(groups).SendAsync(eventName, payload, cancellationToken);
-    }
+    private Task SendOrderAsync(string eventName, object payload, CancellationToken cancellationToken) =>
+        hub.Clients.Groups(RestaurantRealtimeGroups.OrderObservers).SendAsync(eventName, payload, cancellationToken);
 }

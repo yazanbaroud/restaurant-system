@@ -52,16 +52,6 @@ public sealed class OrderTableAssignmentService(
         await ReconcileLockedTableStatusesAsync(lockedTables, new HashSet<int>(), order.Id, cancellationToken);
     }
 
-    public async Task<IReadOnlyCollection<CustomerTableOptionDto>> GetAvailableTableOptionsAsync(CancellationToken cancellationToken) =>
-        await db.Tables.AsNoTracking()
-            .Where(x =>
-                x.Status == TableStatus.Available &&
-                !x.OrderTables.Any(orderTable =>
-                    orderTable.Order.Status == OrderStatus.Open))
-            .OrderBy(x => x.Name)
-            .Select(x => new CustomerTableOptionDto(x.Id, x.Name, x.Capacity))
-            .ToArrayAsync(cancellationToken);
-
     public async Task<Table> LoadTableForUpdateAsync(int id, CancellationToken cancellationToken) =>
         await TableForUpdate(id)
             .SingleOrDefaultAsync(cancellationToken)

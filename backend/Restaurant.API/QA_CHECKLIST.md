@@ -1,72 +1,75 @@
 # Backend Manual QA Checklist
 
-Use this checklist before demo or release when automated backend tests are not available.
+Use this checklist before demo or release against a temporary/local database with separate Admin, Waiter, Kitchen, and Salad staff accounts.
 
 ## Automated Test Status
 
-- No backend test project is currently configured.
-- Adding integration tests is recommended after deployment hardening, but was deferred here to avoid introducing a new database/test-host architecture during the final stabilization pass.
-- Until automated tests exist, run the critical manual cases below against a temporary/local database with separate Admin, Waiter, and at least two Customer accounts.
+- Backend integration tests are configured in `backend/Restaurant.API.Tests`.
+- Latest local refactor validation should include `dotnet build RestaurantSystem.sln` and `dotnet test RestaurantSystem.sln`.
+- Browser end-to-end checks are still recommended because the automated tests do not cover every UI workflow.
 
 ## Authentication and Authorization
 
-- Guest calls to `/api/customer/orders` return `401`.
-- Guest calls to `/api/customer/reservations` return `401`.
-- Customer calls to admin endpoints return `403`.
-- Customer calls to waiter/admin payment endpoints return `403`.
-- Waiter calls to admin-only endpoints return `403`.
+- `POST /api/Auth/register` returns `404`; public self-registration is removed.
+- `POST /api/Auth/login` works for active Admin, Waiter, Kitchen, and Salad users.
+- Login rejects inactive users.
+- Login rejects any non-staff or unknown role if one exists in the database.
+- `GET /api/Auth/me`, profile update, password change, refresh, and logout work for authenticated staff.
+- Guest calls to staff endpoints return `401`.
+- Waiter, Kitchen, and Salad calls to admin-only endpoints return `403`.
+- Kitchen cannot call waiter/admin order management endpoints that are not part of the kitchen queue.
+- Salad cannot call waiter/admin order management endpoints that are not part of the salad queue.
 - Admin and Waiter can still use their permitted operational endpoints.
 - SignalR `/hubs/restaurant` rejects unauthenticated connections.
-- SignalR events are not broadcast through `Clients.All`; operational events go to Admin/Waiter groups and customer order events go only to `user:{id}`.
+- SignalR operational events are sent to staff role groups, not public/global clients.
 
-## Customer Orders
+## Staff Orders
 
-- Customer can list only their own orders through `GET /api/customer/orders`.
-- Customer gets `404` when requesting another customer's order by id.
-- Customer gets `404` when updating or deleting an item on another customer's order.
-- Customer order creation ignores client-supplied user id, prices, totals, order status, and payment status.
-- Customer order creation calculates totals from current menu prices.
-- Customer cannot order unavailable menu items.
-- Customer cannot order menu items whose category is inactive.
-- Dine-in customer order requires a valid available table.
-- Take-away customer order does not require a table.
+- Admin and Waiter can create takeaway orders.
+- Admin and Waiter can create dine-in orders with valid available tables.
+- Dine-in order creation rejects missing, occupied, or invalid tables.
+- Order creation ignores client-supplied user id, prices, totals, order status, and payment status.
+- Order creation calculates totals from current menu prices.
+- Staff cannot order unavailable menu items.
+- Staff cannot order menu items whose category is inactive.
 - Empty items, missing menu item, and quantity below 1 return validation errors.
-
-## Order Mutation Rules
-
-- Customer cannot edit an order after it is paid.
-- Customer cannot edit an order after it is cancelled.
-- Customer cannot edit an order after it is completed.
-- Customer cannot edit an order after any payment exists.
 - Staff cannot edit items, tables, or details after the order is paid, cancelled, completed, or has any payment.
 - Cancelled orders cannot be reopened.
 - Completed orders cannot be reopened.
 - Orders with any payment cannot be cancelled.
-- Staff cannot add menu items from inactive categories.
+
+## Kitchen and Salad Queues
+
+- Kitchen users can view kitchen queue data.
+- Salad users can view salad queue data.
+- Kitchen status updates are allowed only through the expected production flow.
+- Salad status updates are allowed only through the expected production flow.
+- Kitchen and Salad users cannot create orders or add payments.
+- Admin/Waiter operational screens receive order status changes after kitchen/salad updates.
 
 ## Payments
 
+- Admin and Waiter can create payments.
 - Payment on a cancelled order is blocked.
 - Payment on a completed order is allowed only when the order is not fully paid.
 - Partial payments remain supported.
 - Overpayment is blocked.
 - Payment status is recalculated from server-side payment totals.
 - Payment creation ignores client-side totals.
-- Customer role cannot call staff payment endpoints.
+- Duplicate idempotency keys replay the same payment only when payloads match.
+- Duplicate idempotency keys with changed payloads return conflict.
 
 ## Reservations
 
+- `POST /api/Reservations` works without login.
 - Guest-created reservations remain anonymous with `UserId = null`.
-- Authenticated Customer public reservation creation links the reservation to the JWT user id.
-- Customer can list only reservations owned by their user id.
-- Customer gets `404` for another user's reservation.
-- Customer can cancel only `Pending` or `Approved` reservations.
-- Customer cancel is blocked for `Cancelled`, `Rejected`, `Arrived`, and `NoShow`.
-- Admin/Waiter reservation approval, rejection, arrival, no-show, and cancellation flows remain unchanged.
-- Reservation creation is blocked when the selected date is in the past.
-- Reservation creation is blocked when the selected day is closed in business hours.
-- Reservation creation is blocked when the selected time is before opening or after closing.
-- Reservation creation succeeds when the selected time is inside the configured business hours.
+- Public reservation creation is blocked when the selected date is in the past.
+- Public reservation creation is blocked when the selected day is closed in business hours.
+- Public reservation creation is blocked when the selected time is before opening or after closing.
+- Public reservation creation succeeds when the selected time is inside configured business hours.
+- Admin/Waiter reservation list and filters work.
+- Admin reservation approval, rejection, arrival, no-show, cancellation, and delete-as-cancel flows remain unchanged.
+- Waiter reservation visibility remains available for operational awareness.
 
 ## Business Hours
 
@@ -77,7 +80,6 @@ Use this checklist before demo or release when automated backend tests are not a
 - Open days require both open and close times.
 - Open time must be before close time.
 - Startup seeds all seven days as open from `10:00` to `23:00` when no business-hour rows exist.
-- Business-hours seeding still runs when an admin user already exists.
 - Closing today in Admin business hours immediately causes public reservation creation for today to fail with a clear Hebrew validation message.
 - Restoring today to open hours allows public reservation creation inside the configured range again.
 
@@ -92,81 +94,28 @@ Use this checklist before demo or release when automated backend tests are not a
 
 ## Database and Migrations
 
-- `dotnet build backend\Restaurant.API\Restaurant.API.csproj -c Release` succeeds with all migration files compiled.
+- `dotnet build RestaurantSystem.sln` succeeds with all migration files compiled.
 - `AppDbContextModelSnapshot` includes `BusinessHours` with a unique `DayOfWeek` index and nullable `OpenTime` / `CloseTime` `time` columns.
 - `AppDbContextModelSnapshot` includes nullable table `Location` max length 100 and `Notes` max length 500.
 - `AddBusinessHours.Up()` creates `BusinessHours`, adds the unique day index, and inserts default rows for all seven days.
 - `AddBusinessHours.Down()` drops `BusinessHours`.
-- `AddReservationUserOwnership` preserves existing anonymous reservations by keeping `Reservation.UserId` nullable.
 - Fresh database creation from migrations should be verified against a temporary database before deployment.
-- Existing production data must not be deleted during migration verification.
 
-## Final Migration Readiness Notes
+## Frontend Browser QA
 
-Last local verification pass: 2026-04-29.
-
-Verified:
-
-- Release backend build succeeded, proving all migration files compile.
-- Migration list is linear and ordered:
-  - `20260423220135_InitialCreate`
-  - `20260425183000_MenuCategoriesAndAccountSecurity`
-  - `20260428212500_AddTableLocationAndNotes`
-  - `20260428224500_AddReservationUserOwnership`
-  - `20260429010000_AddBusinessHours`
-- `AppDbContextModelSnapshot` contains:
-  - `BusinessHours` table with unique `DayOfWeek`.
-  - nullable `Reservation.UserId` with `DeleteBehavior.SetNull`.
-  - nullable table `Location` max length 100.
-  - nullable table `Notes` max length 500.
-- Startup seeding code calls business-hours seeding before the early return for an existing admin user.
-
-Not fully verified in this local environment:
-
-- A complete fresh LocalDB migration run could not be confirmed here because `dotnet-ef` is not installed and the local SQL client failed to open the automatic LocalDB instance.
-
-Required before production deployment:
-
-- Run a fresh migration against a disposable staging database.
-- Confirm `__EFMigrationsHistory` contains all migrations above.
-- Confirm `BusinessHours` contains seven default rows after startup.
-- Confirm the seed admin is created only when no admin exists.
-- Run the reservation business-hours checks in this file against the staging database.
-
-## Final Manual QA Results
-
-Last closure pass: 2026-04-29.
-
-Verified in the in-app browser against the local running app:
-
-- Guest menu page loads and renders the current menu.
-- Guest add-to-cart action redirects to login with `returnUrl=/menu`.
-- Guest direct `/cart` access redirects to login with `returnUrl=/cart`.
-- Public reservation form loads with today's date and visible business-hours guidance.
-- Public reservation success flow now works after fixing the frontend service to stop refetching the created reservation through the protected admin reservation endpoint.
-
-Verified through direct local API calls:
-
-- `GET /api/business-hours` returns `200` anonymously with seven seeded days.
-- `GET /api/customer/orders` without a JWT returns `401`.
-- `GET /api/customer/reservations` without a JWT returns `401`.
-- `POST /api/Reservations` outside configured business hours returns `400` with the Hebrew message `המסעדה סגורה בשעה שנבחרה. אנא בחר שעה אחרת.`
-- A valid in-hours `POST /api/Reservations` succeeds locally.
-
-Bug found and fixed during this pass:
-
-- Public reservation creation succeeded on the backend but showed a frontend error because `RestaurantDataService.createReservation` refetched the new reservation from the protected staff endpoint after the public POST. The service now treats the successful POST response as the source of truth and updates local state from it.
-
-Still recommended before production cutover:
-
-- Run full Customer browser QA with a disposable customer account: register/login, account update, password change, cart, floating cart, take-away order, dine-in order, order details, reservation list/details/cancel.
-- Run full Waiter browser QA with a disposable waiter account: active orders, create order, order details, status updates, add payment, waiter reservations, realtime notices.
-- Run full Admin browser QA with a disposable admin account: dashboard, reports, menu/categories, tables/location/notes, users, orders/payments, reservations, business hours, realtime notices.
-- Run a two-session realtime check for order and reservation updates.
-- Run ownership checks with two separate customer accounts for customer orders and reservations.
+- Guest menu page loads and renders the current menu without cart controls.
+- Guest dish detail page loads without cart controls.
+- Guest public reservation form loads and can submit a valid in-hours reservation.
+- `/register`, `/cart`, `/orders`, and account-based `/reservations` routes do not exist as customer flows.
+- Waiter browser QA: active tables/orders, create order, order details, status updates, add payment, waiter reservations, realtime notices.
+- Kitchen browser QA: kitchen queue, allowed status updates, forbidden staff-management/order-payment routes.
+- Salad browser QA: salad queue, allowed status updates, forbidden staff-management/order-payment routes.
+- Admin browser QA: dashboard, reports, menu/categories, tables/location/notes, users, orders/payments, reservations, business hours, realtime notices.
+- Run a two-session realtime check for order, payment, and reservation updates.
 
 ## Build Checks
 
-- Run `dotnet build backend\Restaurant.API\Restaurant.API.csproj -c Release`.
-- Run the frontend production build after frontend/API contract changes.
+- Run `dotnet build RestaurantSystem.sln`.
+- Run `dotnet test RestaurantSystem.sln`.
+- Run `npm.cmd run build` from `frontend`.
 - Verify Swagger starts and protected endpoints still show authorization requirements.

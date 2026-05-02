@@ -11,12 +11,6 @@ namespace Restaurant.API.Controllers;
 [Route("api/[controller]")]
 public sealed class AuthController(IAuthService authService) : ControllerBase
 {
-    [HttpPost("register")]
-    [AllowAnonymous]
-    [EnableRateLimiting(AppRateLimitPolicies.Register)]
-    public async Task<ActionResult<AuthResponseDto>> Register(RegisterDto dto, CancellationToken cancellationToken) =>
-        Ok(await authService.RegisterCustomerAsync(dto, cancellationToken));
-
     [HttpPost("login")]
     [AllowAnonymous]
     [EnableRateLimiting(AppRateLimitPolicies.Login)]

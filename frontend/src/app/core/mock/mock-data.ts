@@ -38,15 +38,6 @@ export const MOCK_USERS: User[] = [
     phoneNumber: '052-710-8877',
     role: UserRole.Waiter,
     isActive: true
-  },
-  {
-    id: 3,
-    firstName: 'דניאל',
-    lastName: 'כהן',
-    email: 'customer@hakeves.test',
-    phoneNumber: '054-333-9281',
-    role: UserRole.Customer,
-    isActive: true
   }
 ];
 

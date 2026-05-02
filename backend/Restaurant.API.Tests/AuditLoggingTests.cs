@@ -14,18 +14,18 @@ namespace Restaurant.API.Tests;
 public sealed class AuditLoggingTests
 {
     [Fact]
-    public async Task AuditLogs_CustomerAndWaiterCannotAccess()
+    public async Task AuditLogs_KitchenAndWaiterCannotAccess()
     {
         using var factory = new TestWebApplicationFactory();
         var seed = await factory.ResetDatabaseAsync();
 
-        using var customer = factory.CreateAuthenticatedClient(seed.CustomerId);
+        using var kitchen = factory.CreateAuthenticatedClient(seed.KitchenId);
         using var waiter = factory.CreateAuthenticatedClient(seed.WaiterId);
 
-        var customerResponse = await customer.GetAsync("/api/audit-logs");
+        var kitchenResponse = await kitchen.GetAsync("/api/audit-logs");
         var waiterResponse = await waiter.GetAsync("/api/audit-logs");
 
-        Assert.Equal(HttpStatusCode.Forbidden, customerResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, kitchenResponse.StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, waiterResponse.StatusCode);
     }
 
@@ -82,25 +82,25 @@ public sealed class AuditLoggingTests
     {
         using var factory = new TestWebApplicationFactory();
         var seed = await factory.ResetDatabaseAsync();
-        using var anonymous = factory.CreateClient();
         using var admin = factory.CreateAuthenticatedClient(seed.AdminId);
         using var waiter = factory.CreateAuthenticatedClient(seed.WaiterId);
 
-        const string registrationPassword = "UltraSecret123!";
+        const string createPassword = "UltraSecret123!";
         const string resetPassword = "RotatedSecret123!";
-        var registerResponse = await anonymous.PostAsJsonAsync("/api/Auth/register", new
+        var createUserResponse = await admin.PostAsJsonAsync("/api/Users", new
         {
             firstName = "Sensitive",
-            lastName = "Customer",
+            lastName = "Staff",
             email = "sensitive-audit@test.local",
             phoneNumber = "0501234567",
-            password = registrationPassword
+            role = UserRole.Waiter,
+            password = createPassword
         });
-        var auth = await registerResponse.Content.ReadFromJsonAsync<AuthResponseDto>();
-        Assert.Equal(HttpStatusCode.OK, registerResponse.StatusCode);
-        Assert.NotNull(auth);
+        var createdUser = await createUserResponse.Content.ReadFromJsonAsync<UserResponseDto>();
+        Assert.Equal(HttpStatusCode.Created, createUserResponse.StatusCode);
+        Assert.NotNull(createdUser);
 
-        var resetResponse = await admin.PutAsJsonAsync($"/api/Users/{auth.User.Id}/password-reset", new
+        var resetResponse = await admin.PutAsJsonAsync($"/api/Users/{createdUser.Id}/password-reset", new
         {
             newPassword = resetPassword
         });
@@ -122,10 +122,8 @@ public sealed class AuditLoggingTests
             .ToArrayAsync();
         var combined = string.Join("\n", payload);
 
-        Assert.DoesNotContain(registrationPassword, combined, StringComparison.Ordinal);
+        Assert.DoesNotContain(createPassword, combined, StringComparison.Ordinal);
         Assert.DoesNotContain(resetPassword, combined, StringComparison.Ordinal);
-        Assert.DoesNotContain(auth.Token, combined, StringComparison.Ordinal);
-        Assert.DoesNotContain(auth.RefreshToken, combined, StringComparison.Ordinal);
         Assert.DoesNotContain(idempotencyKey.ToString(), combined, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("passwordHash", combined, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("refreshToken", combined, StringComparison.OrdinalIgnoreCase);

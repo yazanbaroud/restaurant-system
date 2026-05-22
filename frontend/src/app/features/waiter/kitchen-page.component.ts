@@ -9,7 +9,7 @@ import { RealtimeService } from '../../core/services/realtime.service';
 import { RestaurantDataService } from '../../core/services/restaurant-data.service';
 import { apiErrorMessage } from '../../shared/api-error-message';
 import { PageHeaderComponent } from '../../shared/components/page-header.component';
-import { kitchenStatusLabels } from '../../shared/ui-labels';
+import { kitchenStatusLabels, orderTypeLabels } from '../../shared/ui-labels';
 
 interface KitchenColumn {
   status: KitchenStatus;
@@ -61,12 +61,55 @@ interface KitchenViewModel {
                 <div class="kitchen-order-list">
                   @for (order of column.orders; track order.id) {
                     <article class="kitchen-order-card">
-                      <div class="inline-between">
-                        <strong>#{{ order.orderNumber }}</strong>
-                        <time>{{ order.createdAt | date: 'shortTime' }}</time>
+                      <div class="kitchen-order-fields" aria-label="פרטי הזמנה">
+                        <div class="kitchen-field">
+                          <span>מספר הזמנה</span>
+                          <strong>#{{ order.orderNumber }}</strong>
+                        </div>
+
+                        <div class="kitchen-field">
+                          <span>זמן הזמנה</span>
+                          <strong>{{ order.createdAt | date: 'shortTime' }}</strong>
+                        </div>
+
+                        <div class="kitchen-field">
+                          <span>לקוח</span>
+                          <strong>{{ customerName(order) }}</strong>
+                        </div>
+
+                        <div class="kitchen-field">
+                          <span>שולחן</span>
+                          <strong>{{ tableSummary(order) || 'ללא שולחן' }}</strong>
+                        </div>
+
+                        <div class="kitchen-field">
+                          <span>סוג הזמנה</span>
+                          <strong>{{ orderTypeLabels[order.orderType] }}</strong>
+                        </div>
+
+                        <div class="kitchen-field">
+                          <span>סטטוס</span>
+                          <strong>{{ kitchenStatusLabels[order.kitchenStatus] }}</strong>
+                        </div>
                       </div>
 
-                      <p>{{ customerName(order) }}</p>
+                      @if (order.notes) {
+                        <section class="order-note">
+                          <span>הערות</span>
+                          <p>{{ order.notes }}</p>
+                        </section>
+                      }
+
+                      <div class="kitchen-items-header">
+                        <div>
+                          <span>פריטים</span>
+                          <strong>פירוט מנות להכנה</strong>
+                        </div>
+                        <div>
+                          <span>סה״כ פריטים</span>
+                          <strong>{{ itemCount(order) }}</strong>
+                        </div>
+                      </div>
 
                       <ul>
                         @for (item of order.items; track item.id) {
@@ -78,12 +121,25 @@ interface KitchenViewModel {
                             }
                             @if (canManageKitchenActions()) {
                               <div class="item-actions">
-                              <small>{{ itemStatusLabel(item.status) }}</small>
-                              <button type="button" [disabled]="isUpdating(order.id)" (click)="setItemStatus(order, item, OrderItemStatus.Preparing)">בהכנה</button>
-                              <button type="button" [disabled]="isUpdating(order.id)" (click)="setItemStatus(order, item, OrderItemStatus.Ready)">מוכן</button>
+                                <button
+                                  type="button"
+                                  class="item-action-button item-action-button--preparing"
+                                  [class.is-active]="item.status === OrderItemStatus.Preparing"
+                                  [disabled]="isItemStatusActionDisabled(item, OrderItemStatus.Preparing)"
+                                  (click)="setItemStatus(order, item, OrderItemStatus.Preparing)"
+                                >
+                                  בהכנה
+                                </button>
+                                <button
+                                  type="button"
+                                  class="item-action-button item-action-button--ready"
+                                  [class.is-active]="item.status === OrderItemStatus.Ready"
+                                  [disabled]="isItemStatusActionDisabled(item, OrderItemStatus.Ready)"
+                                  (click)="setItemStatus(order, item, OrderItemStatus.Ready)"
+                                >
+                                  מוכן
+                                </button>
                               </div>
-                            } @else {
-                              <small class="item-status-readonly">{{ itemStatusLabel(item.status) }}</small>
                             }
                           </li>
                         }
@@ -182,11 +238,13 @@ interface KitchenViewModel {
     .kitchen-order-list {
       display: grid;
       gap: 0.75rem;
+      min-width: 0;
     }
 
     .kitchen-order-card {
       display: grid;
       gap: 0.85rem;
+      min-width: 0;
       padding: 1rem;
       border: 1px solid var(--line);
       border-radius: var(--radius);
@@ -199,10 +257,72 @@ interface KitchenViewModel {
       margin: 0;
     }
 
-    .kitchen-order-card time,
-    .kitchen-order-card p {
+    .kitchen-order-fields {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.55rem;
+    }
+
+    .kitchen-field {
+      min-width: 0;
+      padding: 0.55rem 0.65rem;
+      border-radius: var(--radius);
+      background: rgba(31, 21, 17, 0.045);
+    }
+
+    .kitchen-field span,
+    .order-note span,
+    .kitchen-items-header span {
+      display: block;
+      margin-bottom: 0.1rem;
       color: var(--muted);
+      font-size: 0.78rem;
       font-weight: 850;
+      line-height: 1.2;
+    }
+
+    .kitchen-field strong,
+    .kitchen-items-header strong {
+      display: block;
+      min-width: 0;
+      color: var(--brown-950);
+      font-size: 0.98rem;
+      font-weight: 920;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .order-note {
+      display: grid;
+      gap: 0.15rem;
+      padding: 0.6rem 0.7rem;
+      border-radius: var(--radius);
+      background: rgba(199, 154, 59, 0.12);
+    }
+
+    .order-note p {
+      min-width: 0;
+      color: var(--brown-800);
+      font-weight: 850;
+      overflow-wrap: anywhere;
+    }
+
+    .kitchen-items-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 1rem;
+      min-width: 0;
+      padding: 0.2rem 0.1rem 0;
+    }
+
+    .kitchen-items-header > div {
+      min-width: 0;
+    }
+
+    .kitchen-items-header > div:last-child {
+      flex: 0 0 auto;
+      text-align: end;
     }
 
     .kitchen-order-card ul {
@@ -238,6 +358,77 @@ interface KitchenViewModel {
       font-size: 0.86rem;
       font-style: normal;
       font-weight: 750;
+      overflow-wrap: anywhere;
+    }
+
+    .item-actions {
+      grid-column: 2;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.45rem;
+      min-width: 0;
+      padding-top: 0.15rem;
+    }
+
+    .item-action-button {
+      min-height: 40px;
+      min-width: 0;
+      width: 100%;
+      padding: 0.45rem 0.75rem;
+      border: 1px solid rgba(61, 37, 25, 0.16);
+      border-radius: 999px;
+      background: rgba(255, 248, 237, 0.9);
+      color: var(--brown-950);
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.88rem;
+      font-weight: 900;
+      line-height: 1;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+    }
+
+    .item-action-button:hover:not(:disabled),
+    .item-action-button:focus-visible:not(:disabled) {
+      border-color: rgba(61, 37, 25, 0.32);
+      background: rgba(255, 248, 237, 1);
+      transform: translateY(-1px);
+    }
+
+    .item-action-button.is-active {
+      box-shadow: inset 0 0 0 1px rgba(31, 21, 17, 0.16), 0 6px 16px rgba(31, 21, 17, 0.08);
+    }
+
+    .item-action-button--preparing.is-active {
+      border-color: rgba(199, 154, 59, 0.72);
+      background: var(--gold);
+      color: var(--brown-950);
+    }
+
+    .item-action-button--ready.is-active {
+      border-color: rgba(102, 112, 68, 0.72);
+      background: var(--olive);
+      color: var(--ivory);
+    }
+
+    .item-action-button:disabled {
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .item-action-button:disabled:not(.is-active) {
+      border-color: rgba(61, 37, 25, 0.1);
+      background: rgba(31, 21, 17, 0.05);
+      color: rgba(119, 104, 87, 0.72);
+      opacity: 0.68;
+    }
+
+    .item-action-button.is-active:disabled {
+      cursor: default;
+      opacity: 1;
+    }
+
+    .kitchen-order-card .btn {
+      min-height: 52px;
     }
 
     .kitchen-empty {
@@ -256,6 +447,30 @@ interface KitchenViewModel {
         grid-template-columns: 1fr;
       }
     }
+
+    @media (max-width: 640px) {
+      .kitchen-order-fields {
+        grid-template-columns: 1fr;
+      }
+
+      .kitchen-items-header {
+        display: grid;
+        gap: 0.45rem;
+      }
+
+      .kitchen-items-header > div:last-child {
+        text-align: start;
+      }
+
+      .kitchen-order-card {
+        padding: 0.9rem;
+      }
+
+      .item-actions {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.45rem;
+      }
+    }
   `]
 })
 export class KitchenPageComponent {
@@ -265,6 +480,8 @@ export class KitchenPageComponent {
   private readonly feedback = inject(FeedbackService);
 
   readonly OrderItemStatus = OrderItemStatus;
+  readonly kitchenStatusLabels = kitchenStatusLabels;
+  readonly orderTypeLabels = orderTypeLabels;
   readonly statuses = [KitchenStatus.InKitchen, KitchenStatus.Ready];
   readonly vm$ = combineLatest([this.data.getKitchenOrders(), this.realtime.connectionState$]).pipe(
     map(([orders, connectionState]) => ({
@@ -287,24 +504,20 @@ export class KitchenPageComponent {
     return `${order.customerFirstName ?? ''} ${order.customerLastName ?? ''}`.trim() || 'לקוח ללא שם';
   }
 
+  tableSummary(order: Order): string {
+    return order.tables.map((table) => table.name).filter(Boolean).join(', ');
+  }
+
+  itemCount(order: Order): number {
+    return order.items.reduce((sum, item) => sum + item.quantity, 0);
+  }
+
   nextActionLabel(order: Order): string {
     if (order.kitchenStatus === KitchenStatus.InKitchen) {
       return 'סימון מוכן';
     }
 
     return 'סימון הוגש';
-  }
-
-  itemStatusLabel(status?: OrderItemStatus): string {
-    if (status === OrderItemStatus.Ready) {
-      return 'מוכן';
-    }
-
-    if (status === OrderItemStatus.Preparing) {
-      return 'בהכנה';
-    }
-
-    return 'ממתין';
   }
 
   connectionLabel(state: string): string {
@@ -326,6 +539,10 @@ export class KitchenPageComponent {
   canManageKitchenActions(): boolean {
     const role = this.auth.currentUser?.role;
     return role === UserRole.Admin || role === UserRole.Kitchen;
+  }
+
+  isItemStatusActionDisabled(item: OrderItem, status: OrderItemStatus): boolean {
+    return Boolean(this.updatingOrderId) || item.status === status;
   }
 
   advance(order: Order): void {

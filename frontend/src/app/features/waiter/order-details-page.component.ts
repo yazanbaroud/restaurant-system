@@ -79,11 +79,22 @@ interface OrderViewModel {
               <div class="menu-pick-list">
                 @for (item of filteredMenuItems(vm.menuItems); track item.id) {
                   <button type="button" class="menu-pick" [disabled]="!canEditItems(order)" (click)="stageItem(item)">
-                    <span>
+                    <span class="menu-pick__media">
+                      @if (primaryImage(item); as imageUrl) {
+                        <img [src]="imageUrl" [alt]="item.name" loading="lazy" />
+                      } @else {
+                        <span class="menu-placeholder" aria-hidden="true"></span>
+                      }
+                    </span>
+                    <span class="menu-pick__content">
+                      <small class="menu-category">{{ categoryName(item) }}</small>
                       <strong>{{ item.name }}</strong>
                       <small>{{ item.description }}</small>
                     </span>
-                    <em>{{ item.price | currency: 'ILS' : 'symbol' : '1.0-0' }}</em>
+                    <span class="menu-pick__action">
+                      <em>{{ item.price | currency: 'ILS' : 'symbol' : '1.0-0' }}</em>
+                      <span>+</span>
+                    </span>
                   </button>
                 } @empty {
                   <div class="empty-state empty-state--compact">
@@ -231,7 +242,7 @@ interface OrderViewModel {
     .status-row {
       display: flex;
       gap: 0.45rem;
-      overflow-x: auto;
+      flex-wrap: wrap;
       padding-bottom: 0.2rem;
     }
 
@@ -263,6 +274,24 @@ interface OrderViewModel {
     .pending-block {
       display: grid;
       gap: 0.65rem;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 0.1rem;
+      scrollbar-gutter: stable;
+    }
+
+    .menu-pick-list {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+      max-height: min(720px, 58vh);
+    }
+
+    .current-lines {
+      max-height: min(680px, 52vh);
+    }
+
+    .pending-block {
+      max-height: min(460px, 38vh);
     }
 
     .menu-pick,
@@ -276,11 +305,19 @@ interface OrderViewModel {
     }
 
     .menu-pick {
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
+      position: relative;
+      grid-template-columns: 92px minmax(0, 1fr);
+      align-items: stretch;
+      min-height: 132px;
       color: var(--brown-950);
       text-align: start;
       cursor: pointer;
+    }
+
+    .menu-pick:hover:not(:disabled) {
+      border-color: rgba(199, 154, 59, 0.46);
+      box-shadow: 0 12px 28px rgba(31, 21, 17, 0.1);
+      transform: translateY(-1px);
     }
 
     .menu-pick:disabled {
@@ -288,7 +325,88 @@ interface OrderViewModel {
       opacity: 0.58;
     }
 
-    .menu-pick span,
+    .menu-pick__media {
+      overflow: hidden;
+      border-radius: var(--radius);
+      background:
+        linear-gradient(135deg, rgba(199, 154, 59, 0.18), rgba(102, 112, 68, 0.12)),
+        var(--beige);
+    }
+
+    .menu-pick__media img,
+    .menu-placeholder {
+      width: 100%;
+      height: 100%;
+      min-height: 104px;
+      object-fit: cover;
+    }
+
+    .menu-placeholder {
+      position: relative;
+      display: block;
+    }
+
+    .menu-placeholder::before,
+    .menu-placeholder::after {
+      content: "";
+      position: absolute;
+      inset: 50% auto auto 50%;
+      transform: translate(-50%, -50%);
+      border-radius: 999px;
+    }
+
+    .menu-placeholder::before {
+      width: 42px;
+      height: 42px;
+      border: 2px solid rgba(61, 37, 25, 0.18);
+      background: rgba(255, 248, 237, 0.62);
+    }
+
+    .menu-placeholder::after {
+      width: 16px;
+      height: 16px;
+      background: rgba(199, 154, 59, 0.58);
+      box-shadow: 18px 0 0 rgba(102, 112, 68, 0.42), -18px 0 0 rgba(124, 38, 48, 0.28);
+    }
+
+    .menu-pick__content {
+      align-content: start;
+      padding-bottom: 2.2rem;
+    }
+
+    .menu-category {
+      justify-self: start;
+      min-height: 24px;
+      padding: 0.2rem 0.55rem;
+      border-radius: 999px;
+      background: rgba(199, 154, 59, 0.16);
+      color: var(--gold-dark) !important;
+      font-size: 0.78rem;
+    }
+
+    .menu-pick__action {
+      position: absolute;
+      inset-inline: 0.85rem;
+      bottom: 0.85rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+
+    .menu-pick__action > span {
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--brown-950);
+      color: var(--ivory);
+      font-size: 1.2rem;
+      font-weight: 950;
+    }
+
+    .menu-pick__content,
     .current-line > div:first-child {
       display: grid;
       gap: 0.2rem;
@@ -394,7 +512,7 @@ interface OrderViewModel {
       z-index: 2;
     }
 
-    @media (min-width: 980px) {
+    @media (min-width: 1100px) {
       .order-screen-layout {
         grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr);
       }
@@ -403,9 +521,21 @@ interface OrderViewModel {
         grid-column: 1 / -1;
         position: static;
       }
+
+      .menu-pick-list {
+        max-height: min(780px, 64vh);
+      }
+
+      .current-lines {
+        max-height: min(720px, 58vh);
+      }
     }
 
-    @media (min-width: 1220px) {
+    @media (min-width: 1360px) {
+      .order-screen {
+        width: min(1380px, calc(100% - 32px));
+      }
+
       .order-screen-layout {
         grid-template-columns: minmax(0, 1fr) minmax(320px, 0.9fr) 280px;
       }
@@ -424,6 +554,27 @@ interface OrderViewModel {
 
       .section-heading label {
         max-width: none;
+      }
+
+      .menu-pick-list {
+        max-height: min(660px, 58vh);
+      }
+
+      .current-lines {
+        max-height: min(620px, 56vh);
+      }
+
+      .pending-block {
+        max-height: min(460px, 44vh);
+      }
+
+      .menu-pick {
+        grid-template-columns: 82px minmax(0, 1fr);
+        min-height: 124px;
+      }
+
+      .line-controls {
+        grid-template-columns: 44px 44px 44px minmax(68px, 1fr);
       }
     }
   `]
@@ -462,6 +613,7 @@ export class OrderDetailsPageComponent {
   isMutating = false;
   errorMessage = '';
   loadErrorMessage = '';
+  private readonly defaultMenuImageUrl = 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1';
 
   customerName(order: Order): string {
     return `${order.customerFirstName ?? ''} ${order.customerLastName ?? ''}`.trim() || 'לקוח ללא שם';
@@ -480,6 +632,15 @@ export class OrderDetailsPageComponent {
         item.description.toLowerCase().includes(search);
       return matchesCategory && matchesSearch;
     });
+  }
+
+  primaryImage(item: MenuItem): string {
+    const imageUrl = item.imageItems?.find((image) => image.isMainImage)?.imageUrl || item.images?.[0] || '';
+    return imageUrl.startsWith(this.defaultMenuImageUrl) ? '' : imageUrl;
+  }
+
+  categoryName(item: MenuItem): string {
+    return item.categoryName || `קטגוריה ${item.category}`;
   }
 
   canEditItems(order: Order): boolean {

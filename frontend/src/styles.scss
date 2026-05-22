@@ -27,11 +27,13 @@
 html {
   min-height: 100%;
   background: var(--ivory);
+  overflow-x: hidden;
 }
 
 body {
   margin: 0;
   min-height: 100%;
+  overflow-x: hidden;
   background:
     linear-gradient(180deg, rgba(255, 248, 237, 0.96), rgba(234, 220, 199, 0.55)),
     var(--ivory);
@@ -856,6 +858,10 @@ input[type='time']::-webkit-calendar-picker-indicator {
   backdrop-filter: blur(12px);
 }
 
+.staff-topline .actions-inline {
+  justify-content: flex-end;
+}
+
 .user-chip {
   padding: 8px 12px;
   border-radius: 999px;
@@ -1286,10 +1292,17 @@ input[type='time']::-webkit-calendar-picker-indicator {
   .sidebar {
     position: static;
     height: auto;
+    padding: 18px;
   }
 
   .sidebar__nav {
     flex-direction: row;
+  }
+
+  .sidebar__nav a {
+    flex: 1 1 150px;
+    min-height: 44px;
+    text-align: center;
   }
 
   .menu-grid,
@@ -1463,6 +1476,38 @@ input[type='time']::-webkit-calendar-picker-indicator {
   .staff-topline {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .page-surface {
+    width: min(100% - 20px, 1220px);
+    padding-block: 22px 36px;
+  }
+
+  .panel,
+  .menu-card__body,
+  .resource-card,
+  .table-card,
+  .auth-card,
+  .success-panel,
+  .table-management-card {
+    padding: 14px;
+  }
+
+  .staff-topline {
+    padding: 14px 16px;
+  }
+
+  .staff-topline .actions-inline {
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .staff-topline .actions-inline > * {
+    flex: 1 1 130px;
+  }
+
+  .user-chip {
+    text-align: center;
   }
 
   .story-band__content,

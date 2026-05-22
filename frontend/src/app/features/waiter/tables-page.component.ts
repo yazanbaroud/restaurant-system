@@ -121,7 +121,7 @@ interface OrdersViewModel {
 
     .waiter-orders-toolbar {
       display: grid;
-      grid-template-columns: minmax(220px, 1fr) auto;
+      grid-template-columns: minmax(220px, 1fr) minmax(0, auto);
       align-items: end;
       gap: 1rem;
     }
@@ -132,6 +132,7 @@ interface OrdersViewModel {
 
     .waiter-order-filters {
       justify-self: end;
+      margin-bottom: 0;
     }
 
     .waiter-list-header {
@@ -147,10 +148,19 @@ interface OrdersViewModel {
 
     .waiter-orders-list {
       display: grid;
-      gap: 0.75rem;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 310px), 1fr));
+      gap: 0.9rem;
+      max-height: min(880px, 68vh);
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 0.1rem;
+      scrollbar-gutter: stable;
     }
 
     .waiter-order-card {
+      position: relative;
+      overflow: hidden;
       display: grid;
       gap: 0.8rem;
       padding: 1rem;
@@ -158,6 +168,15 @@ interface OrdersViewModel {
       border-radius: var(--radius);
       background: rgba(255, 248, 237, 0.86);
       box-shadow: 0 10px 24px rgba(31, 21, 17, 0.08);
+    }
+
+    .waiter-order-card::before {
+      content: "";
+      position: absolute;
+      inset-inline: 0;
+      top: 0;
+      height: 5px;
+      background: linear-gradient(90deg, var(--gold), var(--olive));
     }
 
     .waiter-order-card h2,
@@ -168,6 +187,7 @@ interface OrdersViewModel {
 
     .waiter-order-card h2 {
       font-size: 1.15rem;
+      overflow-wrap: anywhere;
     }
 
     .waiter-order-card time,
@@ -186,8 +206,23 @@ interface OrdersViewModel {
       font-weight: 900;
     }
 
+    .compact-list {
+      min-height: 74px;
+    }
+
+    .compact-list li {
+      overflow-wrap: anywhere;
+    }
+
     .waiter-order-card__footer {
       align-items: center;
+      margin-top: auto;
+      padding-top: 0.25rem;
+    }
+
+    .waiter-order-card__footer .btn {
+      min-width: 104px;
+      min-height: 44px;
     }
 
     @media (max-width: 760px) {
@@ -197,6 +232,37 @@ interface OrdersViewModel {
 
       .waiter-order-filters {
         justify-self: stretch;
+      }
+
+      .waiter-order-filters button {
+        flex: 1 1 96px;
+      }
+
+      .waiter-list-header {
+        justify-content: flex-start;
+      }
+
+      .waiter-orders-list {
+        max-height: min(680px, 64vh);
+      }
+    }
+
+    @media (max-width: 520px) {
+      .waiter-order-card .inline-between {
+        align-items: flex-start;
+      }
+
+      .waiter-order-card time {
+        width: 100%;
+      }
+
+      .waiter-order-card__footer {
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+
+      .waiter-order-card__footer .btn {
+        width: 100%;
       }
     }
   `]
